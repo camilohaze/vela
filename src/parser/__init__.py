@@ -23,6 +23,14 @@ from .parser import (
     parse_code
 )
 
+# Export Pratt Parser classes  
+from .pratt_parser import (
+    PrattParser,
+    PrattParserError,
+    Precedence,
+    parse_expression_from_tokens
+)
+
 # Export AST node types
 from .ast_nodes import (
     # Base
