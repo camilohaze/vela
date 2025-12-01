@@ -22,6 +22,7 @@ Exports públicos:
 from .graph import ReactiveGraph, ReactiveNode
 from .tracking import TrackingContext, track, untrack
 from .signal import Signal, signal
+from .computed import Computed, computed
 
 __all__ = [
     'ReactiveGraph',
@@ -31,6 +32,8 @@ __all__ = [
     'untrack',
     'Signal',
     'signal',
+    'Computed',
+    'computed',
 ]
 
 # Instancia global del grafo reactivo
