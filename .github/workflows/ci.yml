@@ -1,453 +1,453 @@
 name: CI/CD Pipeline
 
 on:
-  push:
-    branches: [ main, develop, feature/** ]
-  pull_request:
-    branches: [ main, develop ]
-  schedule:
-    # Run daily at 2 AM UTC
-    - cron: '0 2 * * *'
-  workflow_dispatch:
+    push:
+        branches: [main, develop, feature/**]
+    pull_request:
+        branches: [main, develop]
+    schedule:
+        # Run daily at 2 AM UTC
+        - cron: "0 2 * * *"
+    workflow_dispatch:
 
 env:
-  RUST_BACKTRACE: 1
-  CARGO_TERM_COLOR: always
-  RUSTFLAGS: "-D warnings"
-  CARGO_INCREMENTAL: 0
+    RUST_BACKTRACE: 1
+    CARGO_TERM_COLOR: always
+    RUSTFLAGS: "-D warnings"
+    CARGO_INCREMENTAL: 0
 
 jobs:
-  # ==============================================================================
-  # Check job: Fast checks (formatting, linting)
-  # ==============================================================================
-  check:
-    name: Check (${{ matrix.toolchain }})
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        toolchain: [stable, nightly]
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+    # ==============================================================================
+    # Check job: Fast checks (formatting, linting)
+    # ==============================================================================
+    check:
+        name: Check (${{ matrix.toolchain }})
+        runs-on: ubuntu-latest
+        strategy:
+            matrix:
+                toolchain: [stable, nightly]
+        steps:
+            - name: Checkout code
+              uses: actions/checkout@v4
 
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: ${{ matrix.toolchain }}
-          components: rustfmt, clippy
+            - name: Install Rust toolchain
+              uses: dtolnay/rust-toolchain@master
+              with:
+                  toolchain: ${{ matrix.toolchain }}
+                  components: rustfmt, clippy
 
-      - name: Cache Cargo registry
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-          key: cargo-registry-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            cargo-registry-${{ runner.os }}-
+            - name: Cache Cargo registry
+              uses: actions/cache@v4
+              with:
+                  path: |
+                      ~/.cargo/registry/index/
+                      ~/.cargo/registry/cache/
+                      ~/.cargo/git/db/
+                  key: cargo-registry-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
+                  restore-keys: |
+                      cargo-registry-${{ runner.os }}-
 
-      - name: Cache Cargo build
-        uses: actions/cache@v4
-        with:
-          path: target
-          key: cargo-build-${{ runner.os }}-${{ matrix.toolchain }}-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            cargo-build-${{ runner.os }}-${{ matrix.toolchain }}-
+            - name: Cache Cargo build
+              uses: actions/cache@v4
+              with:
+                  path: target
+                  key: cargo-build-${{ runner.os }}-${{ matrix.toolchain }}-${{ hashFiles('**/Cargo.lock') }}
+                  restore-keys: |
+                      cargo-build-${{ runner.os }}-${{ matrix.toolchain }}-
 
-      - name: Check formatting
-        run: cargo fmt --all -- --check
+            - name: Check formatting
+              run: cargo fmt --all -- --check
 
-      - name: Run Clippy
-        run: cargo clippy --all-targets --all-features -- -D warnings
+            - name: Run Clippy
+              run: cargo clippy --all-targets --all-features -- -D warnings
 
-      - name: Check documentation
-        run: cargo doc --no-deps --all-features
-        env:
-          RUSTDOCFLAGS: "-D warnings"
+            - name: Check documentation
+              run: cargo doc --no-deps --all-features
+              env:
+                  RUSTDOCFLAGS: "-D warnings"
 
-  # ==============================================================================
-  # Test job: Build and test on multiple platforms
-  # ==============================================================================
-  test:
-    name: Test (${{ matrix.os }} / ${{ matrix.toolchain }})
-    needs: check
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
-        toolchain: [stable, nightly]
-        include:
-          # Add LLVM setup for native compilation testing
-          - os: ubuntu-latest
-            llvm-version: 17
-          - os: macos-latest
-            llvm-version: 17
-          - os: windows-latest
-            llvm-version: 17
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+    # ==============================================================================
+    # Test job: Build and test on multiple platforms
+    # ==============================================================================
+    test:
+        name: Test (${{ matrix.os }} / ${{ matrix.toolchain }})
+        needs: check
+        runs-on: ${{ matrix.os }}
+        strategy:
+            fail-fast: false
+            matrix:
+                os: [ubuntu-latest, macos-latest, windows-latest]
+                toolchain: [stable, nightly]
+                include:
+                    # Add LLVM setup for native compilation testing
+                    - os: ubuntu-latest
+                      llvm-version: 17
+                    - os: macos-latest
+                      llvm-version: 17
+                    - os: windows-latest
+                      llvm-version: 17
+        steps:
+            - name: Checkout code
+              uses: actions/checkout@v4
 
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: ${{ matrix.toolchain }}
+            - name: Install Rust toolchain
+              uses: dtolnay/rust-toolchain@master
+              with:
+                  toolchain: ${{ matrix.toolchain }}
 
-      # Install LLVM for native compilation
-      - name: Install LLVM (Ubuntu)
-        if: runner.os == 'Linux'
-        run: |
-          wget https://apt.llvm.org/llvm.sh
-          chmod +x llvm.sh
-          sudo ./llvm.sh ${{ matrix.llvm-version }}
-          echo "LLVM_SYS_170_PREFIX=/usr/lib/llvm-${{ matrix.llvm-version }}" >> $GITHUB_ENV
+            # Install LLVM for native compilation
+            - name: Install LLVM (Ubuntu)
+              if: runner.os == 'Linux'
+              run: |
+                  wget https://apt.llvm.org/llvm.sh
+                  chmod +x llvm.sh
+                  sudo ./llvm.sh ${{ matrix.llvm-version }}
+                  echo "LLVM_SYS_170_PREFIX=/usr/lib/llvm-${{ matrix.llvm-version }}" >> $GITHUB_ENV
 
-      - name: Install LLVM (macOS)
-        if: runner.os == 'macOS'
-        run: |
-          brew install llvm@${{ matrix.llvm-version }}
-          echo "LLVM_SYS_170_PREFIX=$(brew --prefix llvm@${{ matrix.llvm-version }})" >> $GITHUB_ENV
+            - name: Install LLVM (macOS)
+              if: runner.os == 'macOS'
+              run: |
+                  brew install llvm@${{ matrix.llvm-version }}
+                  echo "LLVM_SYS_170_PREFIX=$(brew --prefix llvm@${{ matrix.llvm-version }})" >> $GITHUB_ENV
 
-      - name: Install LLVM (Windows)
-        if: runner.os == 'Windows'
-        run: |
-          choco install llvm --version=${{ matrix.llvm-version }}
-          echo "LLVM_SYS_170_PREFIX=C:\Program Files\LLVM" | Out-File -FilePath $env:GITHUB_ENV -Append
+            - name: Install LLVM (Windows)
+              if: runner.os == 'Windows'
+              run: |
+                  choco install llvm --version=${{ matrix.llvm-version }}
+                  echo "LLVM_SYS_170_PREFIX=C:\Program Files\LLVM" | Out-File -FilePath $env:GITHUB_ENV -Append
 
-      # Cache dependencies
-      - name: Cache Cargo registry
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-          key: cargo-registry-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
+            # Cache dependencies
+            - name: Cache Cargo registry
+              uses: actions/cache@v4
+              with:
+                  path: |
+                      ~/.cargo/registry/index/
+                      ~/.cargo/registry/cache/
+                      ~/.cargo/git/db/
+                  key: cargo-registry-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
 
-      - name: Cache Cargo build
-        uses: actions/cache@v4
-        with:
-          path: target
-          key: cargo-build-test-${{ runner.os }}-${{ matrix.toolchain }}-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            cargo-build-test-${{ runner.os }}-${{ matrix.toolchain }}-
+            - name: Cache Cargo build
+              uses: actions/cache@v4
+              with:
+                  path: target
+                  key: cargo-build-test-${{ runner.os }}-${{ matrix.toolchain }}-${{ hashFiles('**/Cargo.lock') }}
+                  restore-keys: |
+                      cargo-build-test-${{ runner.os }}-${{ matrix.toolchain }}-
 
-      # Build
-      - name: Build workspace
-        run: cargo build --workspace --all-features --verbose
+            # Build
+            - name: Build workspace
+              run: cargo build --workspace --all-features --verbose
 
-      # Test
-      - name: Run unit tests
-        run: cargo test --workspace --lib --all-features --verbose
+            # Test
+            - name: Run unit tests
+              run: cargo test --workspace --lib --all-features --verbose
 
-      - name: Run integration tests
-        run: cargo test --workspace --test '*' --all-features --verbose
+            - name: Run integration tests
+              run: cargo test --workspace --test '*' --all-features --verbose
 
-      - name: Run doc tests
-        run: cargo test --workspace --doc --all-features --verbose
+            - name: Run doc tests
+              run: cargo test --workspace --doc --all-features --verbose
 
-  # ==============================================================================
-  # Coverage job: Generate code coverage report
-  # ==============================================================================
-  coverage:
-    name: Coverage
-    needs: check
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+    # ==============================================================================
+    # Coverage job: Generate code coverage report
+    # ==============================================================================
+    coverage:
+        name: Coverage
+        needs: check
+        runs-on: ubuntu-latest
+        steps:
+            - name: Checkout code
+              uses: actions/checkout@v4
 
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+            - name: Install Rust toolchain
+              uses: dtolnay/rust-toolchain@stable
 
-      - name: Install LLVM
-        run: |
-          wget https://apt.llvm.org/llvm.sh
-          chmod +x llvm.sh
-          sudo ./llvm.sh 17
-          echo "LLVM_SYS_170_PREFIX=/usr/lib/llvm-17" >> $GITHUB_ENV
+            - name: Install LLVM
+              run: |
+                  wget https://apt.llvm.org/llvm.sh
+                  chmod +x llvm.sh
+                  sudo ./llvm.sh 17
+                  echo "LLVM_SYS_170_PREFIX=/usr/lib/llvm-17" >> $GITHUB_ENV
 
-      - name: Cache Cargo registry
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-          key: cargo-registry-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
+            - name: Cache Cargo registry
+              uses: actions/cache@v4
+              with:
+                  path: |
+                      ~/.cargo/registry/index/
+                      ~/.cargo/registry/cache/
+                      ~/.cargo/git/db/
+                  key: cargo-registry-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
 
-      - name: Install cargo-tarpaulin
-        run: cargo install cargo-tarpaulin
+            - name: Install cargo-tarpaulin
+              run: cargo install cargo-tarpaulin
 
-      - name: Generate coverage
-        run: cargo tarpaulin --workspace --all-features --timeout 300 --out Xml --output-dir coverage/
+            - name: Generate coverage
+              run: cargo tarpaulin --workspace --all-features --timeout 300 --out Xml --output-dir coverage/
 
-      - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v4
-        with:
-          files: coverage/cobertura.xml
-          fail_ci_if_error: false
-          token: ${{ secrets.CODECOV_TOKEN }}
+            - name: Upload coverage to Codecov
+              uses: codecov/codecov-action@v4
+              with:
+                  files: coverage/cobertura.xml
+                  fail_ci_if_error: false
+                  token: ${{ secrets.CODECOV_TOKEN }}
 
-  # ==============================================================================
-  # Benchmark job: Run performance benchmarks
-  # ==============================================================================
-  benchmark:
-    name: Benchmark
-    needs: test
-    runs-on: ubuntu-latest
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+    # ==============================================================================
+    # Benchmark job: Run performance benchmarks
+    # ==============================================================================
+    benchmark:
+        name: Benchmark
+        needs: test
+        runs-on: ubuntu-latest
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        steps:
+            - name: Checkout code
+              uses: actions/checkout@v4
 
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+            - name: Install Rust toolchain
+              uses: dtolnay/rust-toolchain@stable
 
-      - name: Install LLVM
-        run: |
-          wget https://apt.llvm.org/llvm.sh
-          chmod +x llvm.sh
-          sudo ./llvm.sh 17
-          echo "LLVM_SYS_170_PREFIX=/usr/lib/llvm-17" >> $GITHUB_ENV
+            - name: Install LLVM
+              run: |
+                  wget https://apt.llvm.org/llvm.sh
+                  chmod +x llvm.sh
+                  sudo ./llvm.sh 17
+                  echo "LLVM_SYS_170_PREFIX=/usr/lib/llvm-17" >> $GITHUB_ENV
 
-      - name: Cache Cargo registry
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-          key: cargo-registry-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
+            - name: Cache Cargo registry
+              uses: actions/cache@v4
+              with:
+                  path: |
+                      ~/.cargo/registry/index/
+                      ~/.cargo/registry/cache/
+                      ~/.cargo/git/db/
+                  key: cargo-registry-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
 
-      - name: Run benchmarks
-        run: cargo bench --workspace --all-features
+            - name: Run benchmarks
+              run: cargo bench --workspace --all-features
 
-      - name: Store benchmark results
-        uses: actions/upload-artifact@v4
-        with:
-          name: benchmark-results
-          path: target/criterion/
+            - name: Store benchmark results
+              uses: actions/upload-artifact@v4
+              with:
+                  name: benchmark-results
+                  path: target/criterion/
 
-  # ==============================================================================
-  # Security audit job: Check for security vulnerabilities
-  # ==============================================================================
-  security-audit:
-    name: Security Audit
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+    # ==============================================================================
+    # Security audit job: Check for security vulnerabilities
+    # ==============================================================================
+    security-audit:
+        name: Security Audit
+        runs-on: ubuntu-latest
+        steps:
+            - name: Checkout code
+              uses: actions/checkout@v4
 
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+            - name: Install Rust toolchain
+              uses: dtolnay/rust-toolchain@stable
 
-      - name: Cache Cargo registry
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-          key: cargo-registry-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
+            - name: Cache Cargo registry
+              uses: actions/cache@v4
+              with:
+                  path: |
+                      ~/.cargo/registry/index/
+                      ~/.cargo/registry/cache/
+                      ~/.cargo/git/db/
+                  key: cargo-registry-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
 
-      - name: Install cargo-audit
-        run: cargo install cargo-audit
+            - name: Install cargo-audit
+              run: cargo install cargo-audit
 
-      - name: Run security audit
-        run: cargo audit --deny warnings
+            - name: Run security audit
+              run: cargo audit --deny warnings
 
-  # ==============================================================================
-  # Build release job: Build optimized release binaries
-  # ==============================================================================
-  build-release:
-    name: Build Release (${{ matrix.os }})
-    needs: test
-    runs-on: ${{ matrix.os }}
-    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/'))
-    strategy:
-      matrix:
-        include:
-          - os: ubuntu-latest
-            target: x86_64-unknown-linux-gnu
-            artifact: vela-linux-x64
-          - os: ubuntu-latest
-            target: aarch64-unknown-linux-gnu
-            artifact: vela-linux-arm64
-          - os: macos-latest
-            target: x86_64-apple-darwin
-            artifact: vela-macos-x64
-          - os: macos-latest
-            target: aarch64-apple-darwin
-            artifact: vela-macos-arm64
-          - os: windows-latest
-            target: x86_64-pc-windows-msvc
-            artifact: vela-windows-x64
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+    # ==============================================================================
+    # Build release job: Build optimized release binaries
+    # ==============================================================================
+    build-release:
+        name: Build Release (${{ matrix.os }})
+        needs: test
+        runs-on: ${{ matrix.os }}
+        if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/'))
+        strategy:
+            matrix:
+                include:
+                    - os: ubuntu-latest
+                      target: x86_64-unknown-linux-gnu
+                      artifact: vela-linux-x64
+                    - os: ubuntu-latest
+                      target: aarch64-unknown-linux-gnu
+                      artifact: vela-linux-arm64
+                    - os: macos-latest
+                      target: x86_64-apple-darwin
+                      artifact: vela-macos-x64
+                    - os: macos-latest
+                      target: aarch64-apple-darwin
+                      artifact: vela-macos-arm64
+                    - os: windows-latest
+                      target: x86_64-pc-windows-msvc
+                      artifact: vela-windows-x64
+        steps:
+            - name: Checkout code
+              uses: actions/checkout@v4
 
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: ${{ matrix.target }}
+            - name: Install Rust toolchain
+              uses: dtolnay/rust-toolchain@stable
+              with:
+                  targets: ${{ matrix.target }}
 
-      # Install cross-compilation tools for ARM on Linux
-      - name: Install cross-compilation tools (Linux ARM)
-        if: matrix.os == 'ubuntu-latest' && matrix.target == 'aarch64-unknown-linux-gnu'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y gcc-aarch64-linux-gnu
+            # Install cross-compilation tools for ARM on Linux
+            - name: Install cross-compilation tools (Linux ARM)
+              if: matrix.os == 'ubuntu-latest' && matrix.target == 'aarch64-unknown-linux-gnu'
+              run: |
+                  sudo apt-get update
+                  sudo apt-get install -y gcc-aarch64-linux-gnu
 
-      # Install LLVM
-      - name: Install LLVM (Ubuntu)
-        if: runner.os == 'Linux'
-        run: |
-          wget https://apt.llvm.org/llvm.sh
-          chmod +x llvm.sh
-          sudo ./llvm.sh 17
-          echo "LLVM_SYS_170_PREFIX=/usr/lib/llvm-17" >> $GITHUB_ENV
+            # Install LLVM
+            - name: Install LLVM (Ubuntu)
+              if: runner.os == 'Linux'
+              run: |
+                  wget https://apt.llvm.org/llvm.sh
+                  chmod +x llvm.sh
+                  sudo ./llvm.sh 17
+                  echo "LLVM_SYS_170_PREFIX=/usr/lib/llvm-17" >> $GITHUB_ENV
 
-      - name: Install LLVM (macOS)
-        if: runner.os == 'macOS'
-        run: |
-          brew install llvm@17
-          echo "LLVM_SYS_170_PREFIX=$(brew --prefix llvm@17)" >> $GITHUB_ENV
+            - name: Install LLVM (macOS)
+              if: runner.os == 'macOS'
+              run: |
+                  brew install llvm@17
+                  echo "LLVM_SYS_170_PREFIX=$(brew --prefix llvm@17)" >> $GITHUB_ENV
 
-      - name: Install LLVM (Windows)
-        if: runner.os == 'Windows'
-        run: |
-          choco install llvm --version=17
-          echo "LLVM_SYS_170_PREFIX=C:\Program Files\LLVM" | Out-File -FilePath $env:GITHUB_ENV -Append
+            - name: Install LLVM (Windows)
+              if: runner.os == 'Windows'
+              run: |
+                  choco install llvm --version=17
+                  echo "LLVM_SYS_170_PREFIX=C:\Program Files\LLVM" | Out-File -FilePath $env:GITHUB_ENV -Append
 
-      - name: Cache Cargo registry
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-          key: cargo-registry-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
+            - name: Cache Cargo registry
+              uses: actions/cache@v4
+              with:
+                  path: |
+                      ~/.cargo/registry/index/
+                      ~/.cargo/registry/cache/
+                      ~/.cargo/git/db/
+                  key: cargo-registry-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
 
-      - name: Build release binary
-        run: cargo build --release --target ${{ matrix.target }} --bin vela
+            - name: Build release binary
+              run: cargo build --release --target ${{ matrix.target }} --bin vela
 
-      - name: Prepare artifact (Unix)
-        if: runner.os != 'Windows'
-        run: |
-          mkdir -p artifacts
-          cp target/${{ matrix.target }}/release/vela artifacts/
-          tar -czf ${{ matrix.artifact }}.tar.gz -C artifacts vela
+            - name: Prepare artifact (Unix)
+              if: runner.os != 'Windows'
+              run: |
+                  mkdir -p artifacts
+                  cp target/${{ matrix.target }}/release/vela artifacts/
+                  tar -czf ${{ matrix.artifact }}.tar.gz -C artifacts vela
 
-      - name: Prepare artifact (Windows)
-        if: runner.os == 'Windows'
-        run: |
-          New-Item -ItemType Directory -Path artifacts -Force
-          Copy-Item target/${{ matrix.target }}/release/vela.exe artifacts/
-          Compress-Archive -Path artifacts/vela.exe -DestinationPath ${{ matrix.artifact }}.zip
+            - name: Prepare artifact (Windows)
+              if: runner.os == 'Windows'
+              run: |
+                  New-Item -ItemType Directory -Path artifacts -Force
+                  Copy-Item target/${{ matrix.target }}/release/vela.exe artifacts/
+                  Compress-Archive -Path artifacts/vela.exe -DestinationPath ${{ matrix.artifact }}.zip
 
-      - name: Upload release artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ matrix.artifact }}
-          path: |
-            ${{ matrix.artifact }}.tar.gz
-            ${{ matrix.artifact }}.zip
+            - name: Upload release artifact
+              uses: actions/upload-artifact@v4
+              with:
+                  name: ${{ matrix.artifact }}
+                  path: |
+                      ${{ matrix.artifact }}.tar.gz
+                      ${{ matrix.artifact }}.zip
 
-  # ==============================================================================
-  # Deploy docs job: Build and deploy documentation
-  # ==============================================================================
-  deploy-docs:
-    name: Deploy Documentation
-    needs: [test, coverage]
-    runs-on: ubuntu-latest
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    permissions:
-      contents: write
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+    # ==============================================================================
+    # Deploy docs job: Build and deploy documentation
+    # ==============================================================================
+    deploy-docs:
+        name: Deploy Documentation
+        needs: [test, coverage]
+        runs-on: ubuntu-latest
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        permissions:
+            contents: write
+        steps:
+            - name: Checkout code
+              uses: actions/checkout@v4
 
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+            - name: Install Rust toolchain
+              uses: dtolnay/rust-toolchain@stable
 
-      - name: Install LLVM
-        run: |
-          wget https://apt.llvm.org/llvm.sh
-          chmod +x llvm.sh
-          sudo ./llvm.sh 17
-          echo "LLVM_SYS_170_PREFIX=/usr/lib/llvm-17" >> $GITHUB_ENV
+            - name: Install LLVM
+              run: |
+                  wget https://apt.llvm.org/llvm.sh
+                  chmod +x llvm.sh
+                  sudo ./llvm.sh 17
+                  echo "LLVM_SYS_170_PREFIX=/usr/lib/llvm-17" >> $GITHUB_ENV
 
-      - name: Cache Cargo registry
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-          key: cargo-registry-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
+            - name: Cache Cargo registry
+              uses: actions/cache@v4
+              with:
+                  path: |
+                      ~/.cargo/registry/index/
+                      ~/.cargo/registry/cache/
+                      ~/.cargo/git/db/
+                  key: cargo-registry-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
 
-      - name: Build documentation
-        run: cargo doc --workspace --all-features --no-deps
-        env:
-          RUSTDOCFLAGS: "--cfg docsrs"
+            - name: Build documentation
+              run: cargo doc --workspace --all-features --no-deps
+              env:
+                  RUSTDOCFLAGS: "--cfg docsrs"
 
-      - name: Add index.html redirect
-        run: |
-          echo '<meta http-equiv="refresh" content="0; url=vela_cli/index.html">' > target/doc/index.html
+            - name: Add index.html redirect
+              run: |
+                  echo '<meta http-equiv="refresh" content="0; url=vela_cli/index.html">' > target/doc/index.html
 
-      - name: Deploy to GitHub Pages
-        uses: peaceiris/actions-gh-pages@v4
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: ./target/doc
-          cname: docs.velalang.org
-          force_orphan: true
+            - name: Deploy to GitHub Pages
+              uses: peaceiris/actions-gh-pages@v4
+              with:
+                  github_token: ${{ secrets.GITHUB_TOKEN }}
+                  publish_dir: ./target/doc
+                  cname: docs.velalang.org
+                  force_orphan: true
 
-  # ==============================================================================
-  # Release job: Create GitHub release on tag push
-  # ==============================================================================
-  release:
-    name: Create Release
-    needs: build-release
-    runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/')
-    permissions:
-      contents: write
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+    # ==============================================================================
+    # Release job: Create GitHub release on tag push
+    # ==============================================================================
+    release:
+        name: Create Release
+        needs: build-release
+        runs-on: ubuntu-latest
+        if: startsWith(github.ref, 'refs/tags/')
+        permissions:
+            contents: write
+        steps:
+            - name: Checkout code
+              uses: actions/checkout@v4
 
-      - name: Download all artifacts
-        uses: actions/download-artifact@v4
-        with:
-          path: release-artifacts
+            - name: Download all artifacts
+              uses: actions/download-artifact@v4
+              with:
+                  path: release-artifacts
 
-      - name: Create release
-        uses: softprops/action-gh-release@v2
-        with:
-          files: |
-            release-artifacts/*/*.tar.gz
-            release-artifacts/*/*.zip
-          draft: false
-          prerelease: false
-          generate_release_notes: true
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+            - name: Create release
+              uses: softprops/action-gh-release@v2
+              with:
+                  files: |
+                      release-artifacts/*/*.tar.gz
+                      release-artifacts/*/*.zip
+                  draft: false
+                  prerelease: false
+                  generate_release_notes: true
+              env:
+                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-  # ==============================================================================
-  # Notify job: Send notifications on failure
-  # ==============================================================================
-  notify:
-    name: Notify on Failure
-    needs: [check, test, coverage, security-audit]
-    runs-on: ubuntu-latest
-    if: failure() && github.event_name == 'push' && github.ref == 'refs/heads/main'
-    steps:
-      - name: Send notification
-        run: |
-          echo "CI/CD pipeline failed on main branch!"
-          echo "Please check the workflow logs for details."
-          # Add Slack/Discord/Email notification here if needed
+    # ==============================================================================
+    # Notify job: Send notifications on failure
+    # ==============================================================================
+    notify:
+        name: Notify on Failure
+        needs: [check, test, coverage, security-audit]
+        runs-on: ubuntu-latest
+        if: failure() && github.event_name == 'push' && github.ref == 'refs/heads/main'
+        steps:
+            - name: Send notification
+              run: |
+                  echo "CI/CD pipeline failed on main branch!"
+                  echo "Please check the workflow logs for details."
+                  # Add Slack/Discord/Email notification here if needed

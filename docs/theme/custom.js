@@ -1,12 +1,12 @@
 // Custom JavaScript for Vela documentation
 
-(function() {
+(function () {
     'use strict';
 
     // Add "Copy" button to code blocks
     function addCopyButtons() {
         const codeBlocks = document.querySelectorAll('pre > code');
-        
+
         codeBlocks.forEach((codeBlock) => {
             const pre = codeBlock.parentElement;
             const button = document.createElement('button');
@@ -23,18 +23,18 @@
             button.style.cursor = 'pointer';
             button.style.opacity = '0';
             button.style.transition = 'opacity 0.2s';
-            
+
             pre.style.position = 'relative';
             pre.appendChild(button);
-            
+
             pre.addEventListener('mouseenter', () => {
                 button.style.opacity = '1';
             });
-            
+
             pre.addEventListener('mouseleave', () => {
                 button.style.opacity = '0';
             });
-            
+
             button.addEventListener('click', async () => {
                 try {
                     await navigator.clipboard.writeText(codeBlock.textContent);
@@ -57,7 +57,7 @@
     function highlightCurrentSection() {
         const chapters = document.querySelectorAll('.chapter');
         const currentPath = window.location.pathname;
-        
+
         chapters.forEach((chapter) => {
             const link = chapter.querySelector('a');
             if (link && link.getAttribute('href') === currentPath) {
@@ -69,7 +69,7 @@
     // Add external link icon
     function addExternalLinkIcons() {
         const links = document.querySelectorAll('.content a');
-        
+
         links.forEach((link) => {
             if (link.hostname && link.hostname !== window.location.hostname) {
                 link.setAttribute('target', '_blank');
@@ -83,13 +83,13 @@
     function addVersionSelector() {
         const menuBar = document.querySelector('.menu-bar');
         if (!menuBar) return;
-        
+
         const versionDiv = document.createElement('div');
         versionDiv.className = 'version-selector';
         versionDiv.style.display = 'inline-block';
         versionDiv.style.marginLeft = '1rem';
         versionDiv.innerHTML = '<span style="color: #666;">v0.1.0 (Pre-Alpha)</span>';
-        
+
         const rightButtons = menuBar.querySelector('.right-buttons');
         if (rightButtons) {
             rightButtons.insertBefore(versionDiv, rightButtons.firstChild);
@@ -99,7 +99,7 @@
     // Smooth scroll for anchor links
     function enableSmoothScroll() {
         document.querySelectorAll('a[href^="#"]').forEach((anchor) => {
-            anchor.addEventListener('click', function(e) {
+            anchor.addEventListener('click', function (e) {
                 e.preventDefault();
                 const target = document.querySelector(this.getAttribute('href'));
                 if (target) {

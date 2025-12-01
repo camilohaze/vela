@@ -103,7 +103,8 @@ table {
     margin: 1rem 0;
 }
 
-th, td {
+th,
+td {
     border: 1px solid var(--vela-gray-200);
     padding: 0.75rem;
     text-align: left;
@@ -118,12 +119,18 @@ th {
     background-color: var(--vela-gray-800);
 }
 
-.navy th, .navy td {
+.navy th,
+.navy td {
     border-color: var(--vela-gray-700);
 }
 
 /* Headings */
-h1, h2, h3, h4, h5, h6 {
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
     margin-top: 1.5rem;
     margin-bottom: 0.75rem;
     font-weight: 600;
@@ -175,12 +182,12 @@ blockquote {
     background-color: var(--vela-gray-900);
 }
 
-.chapter.expanded > a {
+.chapter.expanded>a {
     color: var(--vela-primary) !important;
     font-weight: 600;
 }
 
-.navy .chapter.expanded > a {
+.navy .chapter.expanded>a {
     color: var(--vela-secondary) !important;
 }
 
@@ -197,12 +204,13 @@ blockquote {
 
 /* Print styles */
 @media print {
+
     .sidebar,
     .nav-wrapper,
     .menu-bar {
         display: none;
     }
-    
+
     .content {
         max-width: 100%;
         margin: 0;

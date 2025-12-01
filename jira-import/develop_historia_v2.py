@@ -33,9 +33,9 @@ JIRA_URL = "https://velalang.atlassian.net"
 JIRA_EMAIL = "cristian.naranjo@seti-tech.com"
 JIRA_API_TOKEN = "ATATT3xFfGF0nydWU_c25rO-AqAOswg0nJn29xQ25aVKCl_GG3VViwFoF0vWdNq0KYJLLaIxTzwGwSuX3v05vjv-KNKlwCNrD1uYZvHQVDwGv5YaAA6vXY5sOzl0Q8Z-aEnwx-nkJbEQHwG5qU60cHgPCG1HhTfwbsDgN_h1BH1f9aB8L5lhKI0=5A92DD9C"
 
-# Historia a desarrollar
-HISTORIA_KEY = "VELA-561"  # US-00B
-SPRINT_ID = 175  # Sprint 1
+# Historia a desarrollar (puede ser sobreescrita por argumento)
+HISTORIA_KEY = sys.argv[1] if len(sys.argv) > 1 else "VELA-561"  # US-00B por defecto
+SPRINT_ID = 176  # Sprint 3 (será actualizado según la historia)
 
 # Rutas del proyecto
 PROJECT_ROOT = Path(__file__).parent.parent
