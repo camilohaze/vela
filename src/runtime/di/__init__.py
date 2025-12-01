@@ -1,7 +1,7 @@
 """
 Sistema de Dependency Injection para Vela
 
-Implementación de: TASK-035B, TASK-035C, TASK-035D
+Implementación de: TASK-035B, TASK-035C, TASK-035D, TASK-035D2
 Historia: VELA-575
 Sprint: 13
 
@@ -46,6 +46,21 @@ from .module import (
     find_module_by_provider,
     find_module_by_controller
 )
+from .controller import (
+    controller,
+    ControllerMetadata,
+    is_controller,
+    get_controller_metadata,
+    get_controller_base_path,
+    get_controller_full_path,
+    get_controller_tags,
+    register_controller,
+    get_controller,
+    get_all_controllers,
+    clear_controller_registry,
+    find_controller_by_path,
+    get_controllers_by_tag
+)
 
 __all__ = [
     # Scopes
@@ -56,6 +71,7 @@ __all__ = [
     'injectable',
     'inject',
     'module',
+    'controller',
     
     # Metadata - @injectable
     'InjectableMetadata',
@@ -82,6 +98,14 @@ __all__ = [
     'get_module_imports',
     'get_module_exports',
     
+    # Metadata - @controller
+    'ControllerMetadata',
+    'is_controller',
+    'get_controller_metadata',
+    'get_controller_base_path',
+    'get_controller_full_path',
+    'get_controller_tags',
+    
     # Registry - @injectable
     'register_provider',
     'get_provider',
@@ -94,7 +118,15 @@ __all__ = [
     'clear_module_registry',
     'find_module_by_provider',
     'find_module_by_controller',
+    
+    # Registry - @controller
+    'register_controller',
+    'get_controller',
+    'get_all_controllers',
+    'clear_controller_registry',
+    'find_controller_by_path',
+    'get_controllers_by_tag',
 ]
 
-__version__ = '0.3.0'
+__version__ = '0.4.0'
 __author__ = 'GitHub Copilot Agent'
