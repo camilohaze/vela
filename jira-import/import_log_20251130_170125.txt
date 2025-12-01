@@ -1,0 +1,6 @@
+2025-11-30 17:01:25 - 
+🔍 Verificando conexión con Jira...
+2025-11-30 17:01:26 - ✅ Conectado a Jira como: Cristian Camilo Naranjo Valencia (cristian.naranjo@outlook.es)
+2025-11-30 17:01:26 - 
+🔍 Verificando proyecto: VELA
+2025-11-30 17:01:27 - ✅ Proyecto encontrado: Vela Lang

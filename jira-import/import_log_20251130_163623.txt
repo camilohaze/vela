@@ -1,0 +1,6 @@
+2025-11-30 16:36:23 - 
+🔍 Verificando conexión con Jira...
+2025-11-30 16:36:24 - ✅ Conectado a Jira como: Cristian Camilo Naranjo Valencia (cristian.naranjo@outlook.es)
+2025-11-30 16:36:24 - 
+🔍 Verificando proyecto: VELALANG
+2025-11-30 16:36:24 - ❌ Proyecto 'VELALANG' no encontrado

@@ -1,0 +1,524 @@
+2025-11-30 17:48:33 - 
+🔍 Verificando conexión con Jira...
+2025-11-30 17:48:34 - ✅ Conectado a Jira como: Cristian Camilo Naranjo Valencia
+2025-11-30 17:48:34 - 
+🔍 Verificando proyecto: VELA
+2025-11-30 17:48:35 - ✅ Proyecto encontrado: Vela Lang
+2025-11-30 17:48:35 - ✅ Board encontrado: SCRUM board (ID: 1, Type: simple)
+2025-11-30 17:48:42 - 
+======================================================================
+2025-11-30 17:48:42 - 🚀 INICIANDO IMPORTACIÓN DE VELA BACKLOG A JIRA
+2025-11-30 17:48:42 - ======================================================================
+
+2025-11-30 17:48:42 - 📄 Leídas 354 filas del CSV
+
+2025-11-30 17:48:42 - 📘 FASE 1: Creando Epics...
+2025-11-30 17:48:42 -    Total Epics únicos: 47
+
+2025-11-30 17:48:44 - ✅ Epic: VELA-184 - EPIC-00A: Critical Decisions (Phase 0)
+2025-11-30 17:48:45 - ✅ Epic: VELA-185 - EPIC-00B: Formal Specifications (Phase 0)
+2025-11-30 17:48:47 - ✅ Epic: VELA-186 - EPIC-00C: Tooling Architecture (Phase 0)
+2025-11-30 17:48:48 - ✅ Epic: VELA-187 - EPIC-00D: Infrastructure Setup (Phase 0)
+2025-11-30 17:48:50 - ✅ Epic: VELA-188 - EPIC-00E: Project Governance (Phase 0)
+2025-11-30 17:48:52 - ✅ Epic: VELA-189 - EPIC-00F: Prototype & Validation (Phase 0)
+2025-11-30 17:48:54 - ✅ Epic: VELA-190 - EPIC-01: Language Core
+2025-11-30 17:48:56 - ✅ Epic: VELA-191 - EPIC-02: Type System
+2025-11-30 17:48:57 - ✅ Epic: VELA-192 - EPIC-03: Reactive System
+2025-11-30 17:48:59 - ✅ Epic: VELA-193 - EPIC-03B: Dependency Injection
+2025-11-30 17:49:01 - ✅ Epic: VELA-194 - EPIC-03C: Event System
+2025-11-30 17:49:03 - ✅ Epic: VELA-195 - EPIC-03D: State Management
+2025-11-30 17:49:05 - ✅ Epic: VELA-196 - EPIC-04: Concurrency (Actors)
+2025-11-30 17:49:07 - ✅ Epic: VELA-197 - EPIC-05: UI Framework
+2025-11-30 17:49:08 - ✅ Epic: VELA-198 - EPIC-06: Compiler Backend (VelaVM)
+2025-11-30 17:49:10 - ✅ Epic: VELA-199 - EPIC-07: Standard Library
+2025-11-30 17:49:12 - ✅ Epic: VELA-200 - EPIC-08: Tooling (CLI)
+2025-11-30 17:49:14 - ✅ Epic: VELA-201 - EPIC-09: Tooling (LSP)
+2025-11-30 17:49:16 - ✅ Epic: VELA-202 - EPIC-09A: Event System
+2025-11-30 17:49:18 - ✅ Epic: VELA-203 - EPIC-09B: Validation System
+2025-11-30 17:49:19 - ✅ Epic: VELA-204 - EPIC-09C: Logging System
+2025-11-30 17:49:21 - ✅ Epic: VELA-205 - EPIC-09D: i18n System
+2025-11-30 17:49:23 - ✅ Epic: VELA-206 - EPIC-09E: Microservices - Service Discovery
+2025-11-30 17:49:24 - ✅ Epic: VELA-207 - EPIC-09F: Microservices - Message Brokers
+2025-11-30 17:49:26 - ✅ Epic: VELA-208 - EPIC-09G: Microservices - Resilience
+2025-11-30 17:49:28 - ✅ Epic: VELA-209 - EPIC-09H: Microservices - Observability
+2025-11-30 17:49:30 - ✅ Epic: VELA-210 - EPIC-09I: Database & ORM
+2025-11-30 17:49:31 - ✅ Epic: VELA-211 - EPIC-09J: Cryptography
+2025-11-30 17:49:33 - ✅ Epic: VELA-212 - EPIC-09K: Serialization
+2025-11-30 17:49:35 - ✅ Epic: VELA-213 - EPIC-09L: Config Management
+2025-11-30 17:49:37 - ✅ Epic: VELA-214 - EPIC-09M: API Gateway
+2025-11-30 17:49:39 - ✅ Epic: VELA-215 - EPIC-09N: gRPC Support
+2025-11-30 17:49:41 - ✅ Epic: VELA-216 - EPIC-09O: Advanced Testing
+2025-11-30 17:49:43 - ✅ Epic: VELA-217 - EPIC-10: Backend Web (JS/WASM)
+2025-11-30 17:49:45 - ✅ Epic: VELA-218 - EPIC-10A: Pattern Matching Avanzado
+2025-11-30 17:49:46 - ✅ Epic: VELA-219 - EPIC-10B: Async Iterators & Streams
+2025-11-30 17:49:48 - ✅ Epic: VELA-220 - EPIC-10C: Worker Pools
+2025-11-30 17:49:50 - ✅ Epic: VELA-221 - EPIC-11: Backend Native (LLVM)
+2025-11-30 17:49:52 - ✅ Epic: VELA-222 - EPIC-12: Testing Framework
+2025-11-30 17:49:54 - ✅ Epic: VELA-223 - EPIC-13: Documentation
+2025-11-30 17:49:56 - ✅ Epic: VELA-224 - EPIC-14: DevTools & Debugging
+2025-11-30 17:49:58 - ✅ Epic: VELA-225 - EPIC-15: Advanced UI
+2025-11-30 17:49:59 - ✅ Epic: VELA-226 - EPIC-16: Mobile Runtimes
+2025-11-30 17:50:01 - ✅ Epic: VELA-227 - EPIC-17: Desktop Runtimes
+2025-11-30 17:50:03 - ✅ Epic: VELA-228 - EPIC-18: FFI & Interop
+2025-11-30 17:50:05 - ✅ Epic: VELA-229 - EPIC-19: Optimizations
+2025-11-30 17:50:07 - ✅ Epic: VELA-230 - EPIC-20: Cloud & Deployment
+2025-11-30 17:50:07 - 
+📗 FASE 2: Creando Historias (User Stories)...
+2025-11-30 17:50:07 -    Total Historias únicas: 68
+
+2025-11-30 17:50:09 -   ✅ Historia: VELA-231 - US-00A: Como líder técnico, necesito tomar decisiones arquitectónicas críticas antes de escribir código
+2025-11-30 17:50:11 -   ✅ Historia: VELA-232 - US-00B: Como desarrollador del compilador, necesito especificaciones formales completas para implementación correcta
+2025-11-30 17:50:13 -   ✅ Historia: VELA-233 - US-00C: Como desarrollador de tooling, necesito arquitecturas diseñadas antes de implementar herramientas
+2025-11-30 17:50:15 -   ✅ Historia: VELA-234 - US-00D: Como desarrollador, necesito infraestructura base configurada antes de comenzar desarrollo
+2025-11-30 17:50:17 -   ✅ Historia: VELA-235 - US-00E: Como miembro de la comunidad, necesito documentación de gobernanza y procesos de contribución
+2025-11-30 17:50:18 -   ✅ Historia: VELA-236 - US-00F: Como líder técnico, necesito validar decisiones arquitectónicas con prototipos
+2025-11-30 17:50:19 -   ✅ Historia: VELA-237 - US-01: Como desarrollador, quiero definir la gramática completa de Vela para poder escribir código válido
+2025-11-30 17:50:21 -   ✅ Historia: VELA-238 - US-02: Como desarrollador, quiero un lexer funcional para tokenizar código fuente
+2025-11-30 17:50:22 -   ✅ Historia: VELA-239 - US-03: Como desarrollador, quiero un parser que genere AST válido
+2025-11-30 17:50:24 -   ✅ Historia: VELA-240 - US-03B: Como desarrollador, quiero keywords específicos por tipo para código más semántico
+2025-11-30 17:50:25 -   ✅ Historia: VELA-241 - US-04: Como desarrollador, quiero un type checker robusto para validar tipos
+2025-11-30 17:50:27 -   ✅ Historia: VELA-242 - US-04B: Como desarrollador, quiero validación estricta de keywords específicos
+2025-11-30 17:50:28 -   ✅ Historia: VELA-243 - US-05: Como desarrollador, quiero un semantic analyzer para validar scopes
+2025-11-30 17:50:30 -   ✅ Historia: VELA-244 - US-06: Como desarrollador, quiero usar signals para estado reactivo
+2025-11-30 17:50:31 -   ✅ Historia: VELA-245 - US-07: Como desarrollador, quiero un scheduler reactivo eficiente
+2025-11-30 17:50:33 -   ✅ Historia: VELA-246 - US-07B: Como desarrollador, quiero inyección de dependencias automática para arquitectura limpia
+2025-11-30 17:50:34 -   ✅ Historia: VELA-247 - US-07C: Como desarrollador, quiero un sistema de eventos genérico para comunicación desacoplada
+2025-11-30 17:50:36 -   ✅ Historia: VELA-248 - US-07D: Como desarrollador, quiero state management global para apps complejas
+2025-11-30 17:50:37 -   ✅ Historia: VELA-249 - US-08: Como desarrollador, quiero crear y usar actors para concurrencia segura
+2025-11-30 17:50:39 -   ✅ Historia: VELA-250 - US-09: Como desarrollador, quiero supervision hierarchy para manejo de errores
+2025-11-30 17:50:40 -   ✅ Historia: VELA-251 - US-10: Como desarrollador, quiero usar async/await para código asíncrono
+2025-11-30 17:50:41 -   ✅ Historia: VELA-252 - US-11: Como desarrollador, quiero workers para computación paralela
+2025-11-30 17:50:43 -   ✅ Historia: VELA-253 - US-12: Como desarrollador, quiero crear interfaces con widgets declarativos
+2025-11-30 17:50:45 -   ✅ Historia: VELA-254 - US-13: Como desarrollador, quiero un sistema reactivo integrado en UI
+2025-11-30 17:50:46 -   ✅ Historia: VELA-255 - US-14: Como desarrollador, quiero sistema de estilos y theming
+2025-11-30 17:50:48 -   ✅ Historia: VELA-256 - US-15: Como desarrollador, quiero navegación y routing
+2025-11-30 17:50:49 -   ✅ Historia: VELA-257 - US-16: Como desarrollador, quiero un intérprete de bytecode funcional
+2025-11-30 17:50:51 -   ✅ Historia: VELA-258 - US-17: Como desarrollador, quiero memory management automático
+2025-11-30 17:50:52 -   ✅ Historia: VELA-259 - US-18: Como desarrollador, quiero un module loader funcional
+2025-11-30 17:50:53 -   ✅ Historia: VELA-260 - US-19: Como desarrollador, quiero colecciones estándar (List, Set, Dict)
+2025-11-30 17:50:55 -   ✅ Historia: VELA-261 - US-20: Como desarrollador, quiero APIs de I/O y networking
+2025-11-30 17:50:57 -   ✅ Historia: VELA-262 - US-21: Como desarrollador, quiero serialización JSON
+2025-11-30 17:50:58 -   ✅ Historia: VELA-263 - US-22: Como desarrollador, quiero un CLI para gestionar proyectos
+2025-11-30 17:50:59 -   ✅ Historia: VELA-264 - US-23: Como desarrollador, quiero un package manager
+2025-11-30 17:51:01 -   ✅ Historia: VELA-265 - US-24: Como desarrollador, quiero autocompletado y diagnósticos en mi editor
+2025-11-30 17:51:03 -   ✅ Historia: VELA-266 - US-24A: Como desarrollador, quiero un sistema de eventos genérico para comunicación desacoplada
+2025-11-30 17:51:04 -   ✅ Historia: VELA-267 - US-24B: Como desarrollador, quiero validación de datos integrada para seguridad
+2025-11-30 17:51:06 -   ✅ Historia: VELA-268 - US-24C: Como desarrollador, quiero logging estructurado para debugging y observabilidad
+2025-11-30 17:51:07 -   ✅ Historia: VELA-269 - US-24D: Como desarrollador, quiero internacionalización para apps globales
+2025-11-30 17:51:08 -   ✅ Historia: VELA-270 - US-24E: Como desarrollador, quiero service discovery para microservicios
+2025-11-30 17:51:10 -   ✅ Historia: VELA-271 - US-24F: Como desarrollador, quiero message brokers para event-driven microservices
+2025-11-30 17:51:11 -   ✅ Historia: VELA-272 - US-24G: Como desarrollador, quiero resilience patterns para microservicios confiables
+2025-11-30 17:51:13 -   ✅ Historia: VELA-273 - US-24H: Como desarrollador, quiero observability para monitorear microservicios
+2025-11-30 17:51:14 -   ✅ Historia: VELA-274 - US-24I: Como desarrollador, quiero ORM type-safe para acceso a base de datos
+2025-11-30 17:51:16 -   ✅ Historia: VELA-275 - US-24J: Como desarrollador, quiero criptografía estándar para seguridad
+2025-11-30 17:51:17 -   ✅ Historia: VELA-276 - US-24K: Como desarrollador, quiero serialización avanzada para APIs
+2025-11-30 17:51:19 -   ✅ Historia: VELA-277 - US-24L: Como desarrollador, quiero config management para microservicios
+2025-11-30 17:51:20 -   ✅ Historia: VELA-278 - US-24M: Como desarrollador, quiero API Gateway para routing y load balancing
+2025-11-30 17:51:22 -   ✅ Historia: VELA-279 - US-24N: Como desarrollador, quiero gRPC para comunicación eficiente entre servicios
+2025-11-30 17:51:24 -   ✅ Historia: VELA-280 - US-24O: Como desarrollador, quiero testing avanzado para calidad de código
+2025-11-30 17:51:26 -   ✅ Historia: VELA-281 - US-25: Como desarrollador, quiero compilar a JavaScript para web
+2025-11-30 17:51:28 -   ✅ Historia: VELA-282 - US-25A: Como desarrollador, quiero pattern matching avanzado para código expresivo
+2025-11-30 17:51:30 -   ✅ Historia: VELA-283 - US-25B: Como desarrollador, quiero async iterators para procesamiento de datos infinitos
+2025-11-30 17:51:32 -   ✅ Historia: VELA-284 - US-25C: Como desarrollador, quiero worker pools para procesamiento paralelo
+2025-11-30 17:51:34 -   ✅ Historia: VELA-285 - US-26: Como desarrollador, quiero compilar a WebAssembly para performance
+2025-11-30 17:51:36 -   ✅ Historia: VELA-286 - US-27: Como desarrollador, quiero compilación nativa para máximo rendimiento
+2025-11-30 17:51:38 -   ✅ Historia: VELA-287 - US-28: Como desarrollador, quiero escribir y ejecutar tests unitarios
+2025-11-30 17:51:40 -   ✅ Historia: VELA-288 - US-29: Como desarrollador, quiero documentación completa del lenguaje
+2025-11-30 17:51:42 -   ✅ Historia: VELA-289 - US-30: Como desarrollador, quiero debugger para inspeccionar ejecución
+2025-11-30 17:51:44 -   ✅ Historia: VELA-290 - US-31: Como desarrollador, quiero animaciones fluidas en UI
+2025-11-30 17:51:46 -   ✅ Historia: VELA-291 - US-32: Como desarrollador, quiero gestures avanzados
+2025-11-30 17:51:48 -   ✅ Historia: VELA-292 - US-33: Como desarrollador, quiero listas virtualizadas eficientes
+2025-11-30 17:51:50 -   ✅ Historia: VELA-293 - US-34: Como desarrollador, quiero desplegar apps en iOS
+2025-11-30 17:51:52 -   ✅ Historia: VELA-294 - US-35: Como desarrollador, quiero desplegar apps en Android
+2025-11-30 17:51:53 -   ✅ Historia: VELA-295 - US-36: Como desarrollador, quiero apps desktop nativas
+2025-11-30 17:51:55 -   ✅ Historia: VELA-296 - US-37: Como desarrollador, quiero llamar código C desde Vela
+2025-11-30 17:51:57 -   ✅ Historia: VELA-297 - US-38: Como desarrollador, quiero código optimizado para mejor performance
+2025-11-30 17:51:59 -   ✅ Historia: VELA-298 - US-39: Como desarrollador, quiero desplegar apps en cloud (serverless)
+2025-11-30 17:52:00 - 
+📙 FASE 3: Creando Tareas...
+2025-11-30 17:52:00 -    Total Tareas: 354
+
+2025-11-30 17:52:03 -     ❌ Error creando Tarea TASK-000A: Decidir lenguaje de implementación: 400
+2025-11-30 17:52:04 -     ❌ Error creando Tarea TASK-000B: Definir arquitectura del build system: 400
+2025-11-30 17:52:05 -     ❌ Error creando Tarea TASK-000C: Elegir licencia open source: 400
+2025-11-30 17:52:07 -     ❌ Error creando Tarea TASK-000D: Seleccionar plataforma CI/CD: 400
+2025-11-30 17:52:08 -     ❌ Error creando Tarea TASK-000E: Elegir plataforma de documentación: 400
+2025-11-30 17:52:09 -     ❌ Error creando Tarea TASK-000F: Escribir especificación formal del lenguaje: 400
+2025-11-30 17:52:11 -     ❌ Error creando Tarea TASK-000G: Especificar modelo de memoria formal: 400
+2025-11-30 17:52:12 -     ❌ Error creando Tarea TASK-000H: Especificar modelo de concurrencia formal: 400
+2025-11-30 17:52:13 -     ❌ Error creando Tarea TASK-000I: Escribir contratos formales de stdlib: 400
+2025-11-30 17:52:14 -     ❌ Error creando Tarea TASK-000J: Diseñar arquitectura del Vela CLI: 400
+2025-11-30 17:52:15 -     ❌ Error creando Tarea TASK-000K: Diseñar arquitectura del package manager: 400
+2025-11-30 17:52:17 -     ❌ Error creando Tarea TASK-000L: Diseñar arquitectura del LSP: 400
+2025-11-30 17:52:18 -     ❌ Error creando Tarea TASK-000M: Diseñar arquitectura de DevTools: 400
+2025-11-30 17:52:19 -     ❌ Error creando Tarea TASK-000N: Configurar estructura de repositorio: 400
+2025-11-30 17:52:20 -     ❌ Error creando Tarea TASK-000O: Configurar pipeline CI/CD: 400
+2025-11-30 17:52:21 -     ❌ Error creando Tarea TASK-000P: Configurar website de documentación: 400
+2025-11-30 17:52:22 -     ❌ Error creando Tarea TASK-000Q: Configurar infraestructura de testing: 400
+2025-11-30 17:52:24 -     ❌ Error creando Tarea TASK-000R: Escribir CONTRIBUTING.md: 400
+2025-11-30 17:52:25 -     ❌ Error creando Tarea TASK-000S: Escribir CODE_OF_CONDUCT.md: 400
+2025-11-30 17:52:26 -     ❌ Error creando Tarea TASK-000T: Escribir GOVERNANCE.md: 400
+2025-11-30 17:52:28 -     ❌ Error creando Tarea TASK-000U: Establecer proceso RFC: 400
+2025-11-30 17:52:29 -     ❌ Error creando Tarea TASK-000V: Implementar prototipo de lexer: 400
+2025-11-30 17:52:30 -     ❌ Error creando Tarea TASK-000W: Implementar prototipo de parser: 400
+2025-11-30 17:52:32 -     ❌ Error creando Tarea TASK-000X: Validar toolchain choices: 400
+2025-11-30 17:52:33 -     ❌ Error creando Tarea TASK-000Y: Crear framework de benchmarking: 400
+2025-11-30 17:52:36 -     ❌ Error creando Tarea TASK-001: Definir gramática EBNF completa: 400
+2025-11-30 17:52:37 -     ❌ Error creando Tarea TASK-002: Documentar precedencia de operadores: 400
+2025-11-30 17:52:39 -     ❌ Error creando Tarea TASK-003: Definir palabras reservadas: 400
+2025-11-30 17:52:42 -     ❌ Error creando Tarea TASK-004: Implementar lexer con state machine: 400
+2025-11-30 17:52:43 -     ❌ Error creando Tarea TASK-005: Implementar string interpolation en lexer: 400
+2025-11-30 17:52:45 -     ❌ Error creando Tarea TASK-006: Implementar tracking de posiciones: 400
+2025-11-30 17:52:46 -     ❌ Error creando Tarea TASK-007: Tests unitarios de lexer: 400
+2025-11-30 17:52:49 -     ❌ Error creando Tarea TASK-008: Implementar parser recursive descent: 400
+2025-11-30 17:52:50 -     ❌ Error creando Tarea TASK-009: Implementar Pratt parsing para expresiones: 400
+2025-11-30 17:52:51 -     ❌ Error creando Tarea TASK-010: Definir estructura completa de AST: 400
+2025-11-30 17:52:54 -     ❌ Error creando Tarea TASK-011: Implementar error recovery en parser: 400
+2025-11-30 17:52:56 -     ❌ Error creando Tarea TASK-012: Tests de parser con casos edge: 400
+2025-11-30 17:52:57 -     ❌ Error creando Tarea TASK-012A: Implementar sistema de imports con prefijos: 400
+2025-11-30 17:52:58 -     ❌ Error creando Tarea TASK-012B: Implementar parser para 30 keywords específicos: 400
+2025-11-30 17:53:00 -     ❌ Error creando Tarea TASK-012C: Implementar AST nodes para keywords específicos: 400
+2025-11-30 17:53:01 -     ❌ Error creando Tarea TASK-013: Diseñar representación interna de tipos: 400
+2025-11-30 17:53:04 -     ❌ Error creando Tarea TASK-014: Implementar algoritmo de inferencia Hindley-Milner: 400
+2025-11-30 17:53:05 -     ❌ Error creando Tarea TASK-015: Implementar type checking de expresiones: 400
+2025-11-30 17:53:09 -     ❌ Error creando Tarea TASK-016: Implementar type checking de statements: 400
+2025-11-30 17:53:10 -     ❌ Error creando Tarea TASK-016A: Implementar validación de widget/component: 400
+2025-11-30 17:53:11 -     ❌ Error creando Tarea TASK-016B: Implementar validación de service/repository: 400
+2025-11-30 17:53:12 -     ❌ Error creando Tarea TASK-016C: Implementar validación de entity/dto/valueObject: 400
+2025-11-30 17:53:16 -     ❌ Error creando Tarea TASK-016D: Implementar validación de patrones (factory, builder, strategy, etc): 400
+2025-11-30 17:53:17 -     ❌ Error creando Tarea TASK-016E: Implementar validación de controller/middleware/guard: 400
+2025-11-30 17:53:18 -     ❌ Error creando Tarea TASK-016F: Tests de validación de keywords: 400
+2025-11-30 17:53:19 -     ❌ Error creando Tarea TASK-017: Implementar soporte para generics: 400
+2025-11-30 17:53:21 -     ❌ Error creando Tarea TASK-018: Implementar null-safety checking: 400
+2025-11-30 17:53:22 -     ❌ Error creando Tarea TASK-019: Implementar type narrowing: 400
+2025-11-30 17:53:22 -     ❌ Error creando Tarea TASK-020: Tests de type system: 400
+2025-11-30 17:53:24 -     ❌ Error creando Tarea TASK-021: Implementar symbol table: 400
+2025-11-30 17:53:25 -     ❌ Error creando Tarea TASK-021A: Implementar resolución de imports con prefijos: 400
+2025-11-30 17:53:26 -     ❌ Error creando Tarea TASK-021B: Validar reglas de imports por keyword: 400
+2025-11-30 17:53:27 -     ❌ Error creando Tarea TASK-022: Implementar name resolution: 400
+2025-11-30 17:53:28 -     ❌ Error creando Tarea TASK-023: Validar visibilidad (public/private): 400
+2025-11-30 17:53:30 -     ❌ Error creando Tarea TASK-024: Tests de semantic analysis: 400
+2025-11-30 17:53:31 -     ❌ Error creando Tarea TASK-025: Diseñar arquitectura del grafo reactivo: 400
+2025-11-30 17:53:32 -     ❌ Error creando Tarea TASK-026: Implementar Signal<T> core: 400
+2025-11-30 17:53:34 -     ❌ Error creando Tarea TASK-027: Implementar dependency tracking: 400
+2025-11-30 17:53:35 -     ❌ Error creando Tarea TASK-028: Implementar Computed<T>: 400
+2025-11-30 17:53:35 -     ❌ Error creando Tarea TASK-029: Implementar Effect: 400
+2025-11-30 17:53:37 -     ❌ Error creando Tarea TASK-030: Implementar Watch: 400
+2025-11-30 17:53:38 -     ❌ Error creando Tarea TASK-031: Implementar reactive scheduler: 400
+2025-11-30 17:53:39 -     ❌ Error creando Tarea TASK-032: Implementar batch() API: 400
+2025-11-30 17:53:41 -     ❌ Error creando Tarea TASK-033: Optimizar propagación con memoization: 400
+2025-11-30 17:53:42 -     ❌ Error creando Tarea TASK-034: Implementar garbage collection de signals: 400
+2025-11-30 17:53:43 -     ❌ Error creando Tarea TASK-035: Tests de sistema reactivo: 400
+2025-11-30 17:53:45 -     ❌ Error creando Tarea TASK-035A: Diseñar arquitectura del sistema DI: 400
+2025-11-30 17:53:46 -     ❌ Error creando Tarea TASK-035B: Implementar @injectable decorator: 400
+2025-11-30 17:53:47 -     ❌ Error creando Tarea TASK-035C: Implementar @inject decorator: 400
+2025-11-30 17:53:48 -     ❌ Error creando Tarea TASK-035D: Implementar @container decorator: 400
+2025-11-30 17:53:49 -     ❌ Error creando Tarea TASK-035D2: Implementar @controller decorator: 400
+2025-11-30 17:53:50 -     ❌ Error creando Tarea TASK-035D3: Implementar decoradores HTTP (@get @post @put @delete @patch): 400
+2025-11-30 17:53:51 -     ❌ Error creando Tarea TASK-035E: Implementar @provides decorator: 400
+2025-11-30 17:53:53 -     ❌ Error creando Tarea TASK-035E2: Implementar @middleware y @guard decorators: 400
+2025-11-30 17:53:54 -     ❌ Error creando Tarea TASK-035F: Implementar Injector core: 400
+2025-11-30 17:53:55 -     ❌ Error creando Tarea TASK-035G: Implementar Scopes (Singleton, Transient, Scoped): 400
+2025-11-30 17:53:56 -     ❌ Error creando Tarea TASK-035G2: Implementar Router HTTP: 400
+2025-11-30 17:53:57 -     ❌ Error creando Tarea TASK-035G3: Implementar Request/Response types: 400
+2025-11-30 17:53:58 -     ❌ Error creando Tarea TASK-035H: Implementar circular dependency detection: 400
+2025-11-30 17:53:59 -     ❌ Error creando Tarea TASK-035I: Integrar DI con testing framework: 400
+2025-11-30 17:54:01 -     ❌ Error creando Tarea TASK-035J: Tests de sistema DI y REST: 400
+2025-11-30 17:54:02 -     ❌ Error creando Tarea TASK-035K: Diseñar arquitectura del Event Bus: 400
+2025-11-30 17:54:03 -     ❌ Error creando Tarea TASK-035L: Implementar EventBus<T> core: 400
+2025-11-30 17:54:05 -     ❌ Error creando Tarea TASK-035M: Implementar on/emit/off keywords: 400
+2025-11-30 17:54:06 -     ❌ Error creando Tarea TASK-035N: Implementar EventEmitter interface: 400
+2025-11-30 17:54:07 -     ❌ Error creando Tarea TASK-035O: Implementar event propagation: 400
+2025-11-30 17:54:08 -     ❌ Error creando Tarea TASK-035P: Implementar event filtering: 400
+2025-11-30 17:54:09 -     ❌ Error creando Tarea TASK-035Q: Tests de Event System: 400
+2025-11-30 17:54:10 -     ❌ Error creando Tarea TASK-035R: Diseñar arquitectura de Store: 400
+2025-11-30 17:54:11 -     ❌ Error creando Tarea TASK-035S: Implementar Store<T> base class: 400
+2025-11-30 17:54:13 -     ❌ Error creando Tarea TASK-035T: Implementar Action y Reducer types: 400
+2025-11-30 17:54:14 -     ❌ Error creando Tarea TASK-035U: Implementar dispatch keyword: 400
+2025-11-30 17:54:15 -     ❌ Error creando Tarea TASK-035V: Implementar @connect decorator: 400
+2025-11-30 17:54:17 -     ❌ Error creando Tarea TASK-035W: Implementar @select decorator: 400
+2025-11-30 17:54:17 -     ❌ Error creando Tarea TASK-035X: Implementar @persistent decorator: 400
+2025-11-30 17:54:18 -     ❌ Error creando Tarea TASK-035Y: Implementar middleware system: 400
+2025-11-30 17:54:20 -     ❌ Error creando Tarea TASK-035Z: Implementar DevTools integration: 400
+2025-11-30 17:54:21 -     ❌ Error creando Tarea TASK-035AA: Tests de State Management: 400
+2025-11-30 17:54:23 -     ❌ Error creando Tarea TASK-036: Diseñar actor system architecture: 400
+2025-11-30 17:54:24 -     ❌ Error creando Tarea TASK-037: Implementar actor instances: 400
+2025-11-30 17:54:25 -     ❌ Error creando Tarea TASK-038: Implementar mailbox system: 400
+2025-11-30 17:54:27 -     ❌ Error creando Tarea TASK-039: Implementar message processing loop: 400
+2025-11-30 17:54:28 -     ❌ Error creando Tarea TASK-040: Implementar thread pool executor: 400
+2025-11-30 17:54:29 -     ❌ Error creando Tarea TASK-041: Implementar actor scheduling: 400
+2025-11-30 17:54:31 -     ❌ Error creando Tarea TASK-042: Implementar supervision strategies: 400
+2025-11-30 17:54:31 -     ❌ Error creando Tarea TASK-043: Implementar restart logic: 400
+2025-11-30 17:54:32 -     ❌ Error creando Tarea TASK-044: Tests de actor system: 400
+2025-11-30 17:54:34 -     ❌ Error creando Tarea TASK-045: Diseñar async/await semantics: 400
+2025-11-30 17:54:35 -     ❌ Error creando Tarea TASK-046: Implementar async transform (CPS): 400
+2025-11-30 17:54:37 -     ❌ Error creando Tarea TASK-047: Implementar Future<T> y Promise<T>: 400
+2025-11-30 17:54:38 -     ❌ Error creando Tarea TASK-048: Implementar executor para futures: 400
+2025-11-30 17:54:39 -     ❌ Error creando Tarea TASK-049: Tests de async/await: 400
+2025-11-30 17:54:41 -     ❌ Error creando Tarea TASK-050: Implementar Worker API: 400
+2025-11-30 17:54:42 -     ❌ Error creando Tarea TASK-051: Implementar Channel<T>: 400
+2025-11-30 17:54:43 -     ❌ Error creando Tarea TASK-052: Tests de workers y channels: 400
+2025-11-30 17:54:43 -     ❌ Error creando Tarea TASK-053: Diseñar arquitectura de widgets: 400
+2025-11-30 17:54:44 -     ❌ Error creando Tarea TASK-054: Implementar Widget base class: 400
+2025-11-30 17:54:45 -     ❌ Error creando Tarea TASK-055: Implementar widgets de layout (Container, Row, Column, Stack): 400
+2025-11-30 17:54:46 -     ❌ Error creando Tarea TASK-056: Implementar widgets de input (Button, TextField, Checkbox): 400
+2025-11-30 17:54:47 -     ❌ Error creando Tarea TASK-057: Implementar widgets de display (Text, Image, Icon): 400
+2025-11-30 17:54:48 -     ❌ Error creando Tarea TASK-058: Integrar signals con widgets: 400
+2025-11-30 17:54:49 -     ❌ Error creando Tarea TASK-059: Implementar Virtual DOM: 400
+2025-11-30 17:54:50 -     ❌ Error creando Tarea TASK-060: Implementar diffing algorithm: 400
+2025-11-30 17:54:51 -     ❌ Error creando Tarea TASK-061: Implementar patching system: 400
+2025-11-30 17:54:52 -     ❌ Error creando Tarea TASK-062: Tests de reconciliación reactiva: 400
+2025-11-30 17:54:53 -     ❌ Error creando Tarea TASK-063: Implementar TextStyle y styling APIs: 400
+2025-11-30 17:54:54 -     ❌ Error creando Tarea TASK-064: Implementar Color y EdgeInsets: 400
+2025-11-30 17:54:55 -     ❌ Error creando Tarea TASK-065: Implementar Theme system: 400
+2025-11-30 17:54:56 -     ❌ Error creando Tarea TASK-066: Implementar Router widget: 400
+2025-11-30 17:54:57 -     ❌ Error creando Tarea TASK-067: Implementar Navigation API: 400
+2025-11-30 17:54:58 -     ❌ Error creando Tarea TASK-068: Tests de navegación: 400
+2025-11-30 17:54:59 -     ❌ Error creando Tarea TASK-069: Diseñar bytecode instruction set: 400
+2025-11-30 17:55:00 -     ❌ Error creando Tarea TASK-070: Implementar bytecode generator desde IR: 400
+2025-11-30 17:55:00 -     ❌ Error creando Tarea TASK-071: Implementar VelaVM core (stack machine): 400
+2025-11-30 17:55:01 -     ❌ Error creando Tarea TASK-072: Implementar heap allocation: 400
+2025-11-30 17:55:02 -     ❌ Error creando Tarea TASK-073: Implementar call stack: 400
+2025-11-30 17:55:03 -     ❌ Error creando Tarea TASK-074: Tests de VelaVM: 400
+2025-11-30 17:55:04 -     ❌ Error creando Tarea TASK-075: Implementar ARC (Automatic Reference Counting): 400
+2025-11-30 17:55:05 -     ❌ Error creando Tarea TASK-076: Implementar cycle detection: 400
+2025-11-30 17:55:06 -     ❌ Error creando Tarea TASK-077: Integrar ARC con sistema reactivo: 400
+2025-11-30 17:55:07 -     ❌ Error creando Tarea TASK-078: Tests de memory management: 400
+2025-11-30 17:55:08 -     ❌ Error creando Tarea TASK-079: Implementar module resolution: 400
+2025-11-30 17:55:10 -     ❌ Error creando Tarea TASK-080: Implementar bytecode loader: 400
+2025-11-30 17:55:11 -     ❌ Error creando Tarea TASK-081: Tests de module system: 400
+2025-11-30 17:55:12 -     ❌ Error creando Tarea TASK-082: Implementar List<T>: 400
+2025-11-30 17:55:14 -     ❌ Error creando Tarea TASK-083: Implementar Set<T>: 400
+2025-11-30 17:55:15 -     ❌ Error creando Tarea TASK-084: Implementar Dict<K,V>: 400
+2025-11-30 17:55:16 -     ❌ Error creando Tarea TASK-085: Implementar Queue y Stack: 400
+2025-11-30 17:55:18 -     ❌ Error creando Tarea TASK-086: Tests de colecciones: 400
+2025-11-30 17:55:19 -     ❌ Error creando Tarea TASK-087: Implementar File API: 400
+2025-11-30 17:55:20 -     ❌ Error creando Tarea TASK-088: Implementar Directory API: 400
+2025-11-30 17:55:21 -     ❌ Error creando Tarea TASK-089: Implementar HttpClient: 400
+2025-11-30 17:55:22 -     ❌ Error creando Tarea TASK-090: Implementar WebSocket: 400
+2025-11-30 17:55:24 -     ❌ Error creando Tarea TASK-091: Tests de I/O y networking: 400
+2025-11-30 17:55:25 -     ❌ Error creando Tarea TASK-092: Implementar JSON parser: 400
+2025-11-30 17:55:26 -     ❌ Error creando Tarea TASK-093: Implementar JSON encoder: 400
+2025-11-30 17:55:28 -     ❌ Error creando Tarea TASK-094: Implementar JSON decorators para types: 400
+2025-11-30 17:55:29 -     ❌ Error creando Tarea TASK-095: Tests de JSON: 400
+2025-11-30 17:55:29 -     ❌ Error creando Tarea TASK-096: Implementar vela create: 400
+2025-11-30 17:55:31 -     ❌ Error creando Tarea TASK-097: Implementar vela build: 400
+2025-11-30 17:55:32 -     ❌ Error creando Tarea TASK-098: Implementar vela run: 400
+2025-11-30 17:55:33 -     ❌ Error creando Tarea TASK-099: Implementar vela test: 400
+2025-11-30 17:55:36 -     ❌ Error creando Tarea TASK-100: Implementar vela fmt: 400
+2025-11-30 17:55:36 -     ❌ Error creando Tarea TASK-101: Implementar vela doctor: 400
+2025-11-30 17:55:37 -     ❌ Error creando Tarea TASK-102: Diseñar manifest format (vela.yaml): 400
+2025-11-30 17:55:39 -     ❌ Error creando Tarea TASK-103: Implementar vela install: 400
+2025-11-30 17:55:40 -     ❌ Error creando Tarea TASK-104: Implementar dependency resolution: 400
+2025-11-30 17:55:42 -     ❌ Error creando Tarea TASK-105: Implementar vela publish: 400
+2025-11-30 17:55:43 -     ❌ Error creando Tarea TASK-106: Tests de package manager: 400
+2025-11-30 17:55:44 -     ❌ Error creando Tarea TASK-107: Implementar LSP server base: 400
+2025-11-30 17:55:46 -     ❌ Error creando Tarea TASK-108: Implementar textDocument/completion: 400
+2025-11-30 17:55:47 -     ❌ Error creando Tarea TASK-109: Implementar textDocument/hover: 400
+2025-11-30 17:55:47 -     ❌ Error creando Tarea TASK-110: Implementar textDocument/definition: 400
+2025-11-30 17:55:49 -     ❌ Error creando Tarea TASK-111: Implementar textDocument/publishDiagnostics: 400
+2025-11-30 17:55:50 -     ❌ Error creando Tarea TASK-112: Implementar textDocument/rename: 400
+2025-11-30 17:55:51 -     ❌ Error creando Tarea TASK-113: Tests de LSP: 400
+2025-11-30 17:55:52 -     ❌ Error creando Tarea TASK-113A: Diseñar arquitectura del Event Bus: 400
+2025-11-30 17:55:53 -     ❌ Error creando Tarea TASK-113B: Implementar EventBus<T> core: 400
+2025-11-30 17:55:54 -     ❌ Error creando Tarea TASK-113C: Implementar EventEmitter interface: 400
+2025-11-30 17:55:55 -     ❌ Error creando Tarea TASK-113D: Implementar Subscription type: 400
+2025-11-30 17:55:56 -     ❌ Error creando Tarea TASK-113E: Tests de Event System: 400
+2025-11-30 17:55:56 -     ❌ Error creando Tarea TASK-113F: Diseñar arquitectura de validación: 400
+2025-11-30 17:55:57 -     ❌ Error creando Tarea TASK-113G: Implementar decoradores de validación: 400
+2025-11-30 17:55:58 -     ❌ Error creando Tarea TASK-113H: Implementar Schema builder API: 400
+2025-11-30 17:55:59 -     ❌ Error creando Tarea TASK-113I: Implementar ValidationErrors type: 400
+2025-11-30 17:56:00 -     ❌ Error creando Tarea TASK-113J: Integrar validación con DTOs y formularios: 400
+2025-11-30 17:56:01 -     ❌ Error creando Tarea TASK-113K: Tests de validación: 400
+2025-11-30 17:56:02 -     ❌ Error creando Tarea TASK-113L: Diseñar arquitectura de logging: 400
+2025-11-30 17:56:03 -     ❌ Error creando Tarea TASK-113M: Implementar Logger class: 400
+2025-11-30 17:56:04 -     ❌ Error creando Tarea TASK-113N: Implementar structured logging (JSON): 400
+2025-11-30 17:56:05 -     ❌ Error creando Tarea TASK-113O: Implementar log transports: 400
+2025-11-30 17:56:05 -     ❌ Error creando Tarea TASK-113P: Implementar log filtering y sampling: 400
+2025-11-30 17:56:07 -     ❌ Error creando Tarea TASK-113Q: Tests de logging system: 400
+2025-11-30 17:56:08 -     ❌ Error creando Tarea TASK-113R: Diseñar arquitectura de i18n: 400
+2025-11-30 17:56:08 -     ❌ Error creando Tarea TASK-113S: Implementar translation loader: 400
+2025-11-30 17:56:09 -     ❌ Error creando Tarea TASK-113T: Implementar string interpolation en traducciones: 400
+2025-11-30 17:56:10 -     ❌ Error creando Tarea TASK-113U: Implementar date/number formatting por locale: 400
+2025-11-30 17:56:11 -     ❌ Error creando Tarea TASK-113V: Implementar @i18n decorator y hot reload: 400
+2025-11-30 17:56:12 -     ❌ Error creando Tarea TASK-113W: Tests de i18n system: 400
+2025-11-30 17:56:13 -     ❌ Error creando Tarea TASK-113X: Diseñar arquitectura de service registry: 400
+2025-11-30 17:56:14 -     ❌ Error creando Tarea TASK-113Y: Implementar ServiceRegistry interface: 400
+2025-11-30 17:56:15 -     ❌ Error creando Tarea TASK-113Z: Implementar Consul integration: 400
+2025-11-30 17:56:15 -     ❌ Error creando Tarea TASK-113AA: Implementar service discovery client: 400
+2025-11-30 17:56:16 -     ❌ Error creando Tarea TASK-113AB: Implementar health check endpoints: 400
+2025-11-30 17:56:17 -     ❌ Error creando Tarea TASK-113AC: Tests de service discovery: 400
+2025-11-30 17:56:18 -     ❌ Error creando Tarea TASK-113AD: Diseñar arquitectura de message brokers: 400
+2025-11-30 17:56:19 -     ❌ Error creando Tarea TASK-113AE: Implementar MessageBroker interface: 400
+2025-11-30 17:56:20 -     ❌ Error creando Tarea TASK-113AF: Implementar RabbitMQ integration: 400
+2025-11-30 17:56:21 -     ❌ Error creando Tarea TASK-113AG: Implementar decoradores @consumer y @subscribe: 400
+2025-11-30 17:56:22 -     ❌ Error creando Tarea TASK-113AH: Implementar retry y dead letter queues: 400
+2025-11-30 17:56:23 -     ❌ Error creando Tarea TASK-113AI: Tests de message brokers: 400
+2025-11-30 17:56:23 -     ❌ Error creando Tarea TASK-113AJ: Diseñar resilience patterns: 400
+2025-11-30 17:56:24 -     ❌ Error creando Tarea TASK-113AK: Implementar @circuitBreaker decorator: 400
+2025-11-30 17:56:25 -     ❌ Error creando Tarea TASK-113AL: Implementar @retry decorator: 400
+2025-11-30 17:56:26 -     ❌ Error creando Tarea TASK-113AM: Implementar @timeout decorator: 400
+2025-11-30 17:56:27 -     ❌ Error creando Tarea TASK-113AN: Implementar @bulkhead decorator: 400
+2025-11-30 17:56:28 -     ❌ Error creando Tarea TASK-113AO: Implementar @fallback decorator: 400
+2025-11-30 17:56:29 -     ❌ Error creando Tarea TASK-113AP: Tests de resilience patterns: 400
+2025-11-30 17:56:30 -     ❌ Error creando Tarea TASK-113AQ: Diseñar arquitectura de observability: 400
+2025-11-30 17:56:31 -     ❌ Error creando Tarea TASK-113AR: Implementar OpenTelemetry integration: 400
+2025-11-30 17:56:32 -     ❌ Error creando Tarea TASK-113AS: Implementar Prometheus metrics: 400
+2025-11-30 17:56:33 -     ❌ Error creando Tarea TASK-113AT: Implementar @traced decorator: 400
+2025-11-30 17:56:33 -     ❌ Error creando Tarea TASK-113AU: Implementar metrics exporters: 400
+2025-11-30 17:56:34 -     ❌ Error creando Tarea TASK-113AV: Tests de observability: 400
+2025-11-30 17:56:35 -     ❌ Error creando Tarea TASK-113AW: Diseñar arquitectura de ORM: 400
+2025-11-30 17:56:36 -     ❌ Error creando Tarea TASK-113AX: Implementar decoradores @entity, @id, @column: 400
+2025-11-30 17:56:37 -     ❌ Error creando Tarea TASK-113AY: Implementar query builder type-safe: 400
+2025-11-30 17:56:38 -     ❌ Error creando Tarea TASK-113AZ: Implementar relations (@oneToMany, @manyToOne): 400
+2025-11-30 17:56:39 -     ❌ Error creando Tarea TASK-113BA: Implementar migrations system: 400
+2025-11-30 17:56:39 -     ❌ Error creando Tarea TASK-113BB: Implementar connection pooling: 400
+2025-11-30 17:56:40 -     ❌ Error creando Tarea TASK-113BC: Tests de ORM: 400
+2025-11-30 17:56:41 -     ❌ Error creando Tarea TASK-113BD: Diseñar Crypto API: 400
+2025-11-30 17:56:42 -     ❌ Error creando Tarea TASK-113BE: Implementar hashing (SHA256, bcrypt, argon2): 400
+2025-11-30 17:56:43 -     ❌ Error creando Tarea TASK-113BF: Implementar encryption (AES-256-GCM): 400
+2025-11-30 17:56:44 -     ❌ Error creando Tarea TASK-113BG: Implementar JWT support: 400
+2025-11-30 17:56:45 -     ❌ Error creando Tarea TASK-113BH: Implementar digital signatures (RSA, ECDSA): 400
+2025-11-30 17:56:46 -     ❌ Error creando Tarea TASK-113BI: Tests de cryptography: 400
+2025-11-30 17:56:47 -     ❌ Error creando Tarea TASK-113BJ: Diseñar sistema de serialización: 400
+2025-11-30 17:56:47 -     ❌ Error creando Tarea TASK-113BK: Implementar @serializable decorator: 400
+2025-11-30 17:56:48 -     ❌ Error creando Tarea TASK-113BL: Implementar field mapping (@serialize name): 400
+2025-11-30 17:56:49 -     ❌ Error creando Tarea TASK-113BM: Implementar custom serializers: 400
+2025-11-30 17:56:50 -     ❌ Error creando Tarea TASK-113BN: Implementar @ignore decorator: 400
+2025-11-30 17:56:51 -     ❌ Error creando Tarea TASK-113BO: Tests de serialization: 400
+2025-11-30 17:56:52 -     ❌ Error creando Tarea TASK-113BP: Diseñar arquitectura de config: 400
+2025-11-30 17:56:53 -     ❌ Error creando Tarea TASK-113BQ: Implementar config loader: 400
+2025-11-30 17:56:54 -     ❌ Error creando Tarea TASK-113BR: Implementar @config decorator: 400
+2025-11-30 17:56:55 -     ❌ Error creando Tarea TASK-113BS: Implementar hot reload de config: 400
+2025-11-30 17:56:56 -     ❌ Error creando Tarea TASK-113BT: Tests de config management: 400
+2025-11-30 17:56:56 -     ❌ Error creando Tarea TASK-113BU: Diseñar arquitectura de API Gateway: 400
+2025-11-30 17:56:57 -     ❌ Error creando Tarea TASK-113BV: Implementar @gateway decorator: 400
+2025-11-30 17:56:58 -     ❌ Error creando Tarea TASK-113BW: Implementar routing dinámico: 400
+2025-11-30 17:56:59 -     ❌ Error creando Tarea TASK-113BX: Implementar load balancing strategies: 400
+2025-11-30 17:57:00 -     ❌ Error creando Tarea TASK-113BY: Implementar rate limiting: 400
+2025-11-30 17:57:01 -     ❌ Error creando Tarea TASK-113BZ: Tests de API Gateway: 400
+2025-11-30 17:57:02 -     ❌ Error creando Tarea TASK-113CA: Diseñar gRPC integration: 400
+2025-11-30 17:57:03 -     ❌ Error creando Tarea TASK-113CB: Implementar @grpc.service decorator: 400
+2025-11-30 17:57:04 -     ❌ Error creando Tarea TASK-113CC: Implementar @grpc.method decorator: 400
+2025-11-30 17:57:04 -     ❌ Error creando Tarea TASK-113CD: Implementar server y client streaming: 400
+2025-11-30 17:57:05 -     ❌ Error creando Tarea TASK-113CE: Implementar code generation desde .proto: 400
+2025-11-30 17:57:06 -     ❌ Error creando Tarea TASK-113CF: Tests de gRPC: 400
+2025-11-30 17:57:07 -     ❌ Error creando Tarea TASK-113CG: Implementar widget testing: 400
+2025-11-30 17:57:08 -     ❌ Error creando Tarea TASK-113CH: Implementar snapshot testing: 400
+2025-11-30 17:57:09 -     ❌ Error creando Tarea TASK-113CI: Implementar mocking framework: 400
+2025-11-30 17:57:10 -     ❌ Error creando Tarea TASK-113CJ: Implementar property-based testing: 400
+2025-11-30 17:57:11 -     ❌ Error creando Tarea TASK-113CK: Implementar integration testing helpers: 400
+2025-11-30 17:57:12 -     ❌ Error creando Tarea TASK-113CL: Tests del testing framework avanzado: 400
+2025-11-30 17:57:14 -     ❌ Error creando Tarea TASK-114: Implementar JS code generator: 400
+2025-11-30 17:57:14 -     ❌ Error creando Tarea TASK-115: Implementar signals runtime en JS: 400
+2025-11-30 17:57:16 -     ❌ Error creando Tarea TASK-116: Implementar UI renderer para DOM: 400
+2025-11-30 17:57:17 -     ❌ Error creando Tarea TASK-117: Tests de backend JS: 400
+2025-11-30 17:57:18 -     ❌ Error creando Tarea TASK-117A: Implementar destructuring avanzado: 400
+2025-11-30 17:57:19 -     ❌ Error creando Tarea TASK-117B: Implementar guards complejos: 400
+2025-11-30 17:57:21 -     ❌ Error creando Tarea TASK-117C: Implementar or patterns: 400
+2025-11-30 17:57:22 -     ❌ Error creando Tarea TASK-117D: Implementar range patterns: 400
+2025-11-30 17:57:23 -     ❌ Error creando Tarea TASK-117E: Implementar pattern en lambdas: 400
+2025-11-30 17:57:23 -     ❌ Error creando Tarea TASK-117F: Tests de pattern matching avanzado: 400
+2025-11-30 17:57:25 -     ❌ Error creando Tarea TASK-117G: Diseñar arquitectura de async iterators: 400
+2025-11-30 17:57:26 -     ❌ Error creando Tarea TASK-117H: Implementar async function* syntax: 400
+2025-11-30 17:57:27 -     ❌ Error creando Tarea TASK-117I: Implementar AsyncIterator<T> type: 400
+2025-11-30 17:57:28 -     ❌ Error creando Tarea TASK-117J: Implementar Stream API: 400
+2025-11-30 17:57:30 -     ❌ Error creando Tarea TASK-117K: Implementar backpressure: 400
+2025-11-30 17:57:31 -     ❌ Error creando Tarea TASK-117L: Tests de async iterators: 400
+2025-11-30 17:57:32 -     ❌ Error creando Tarea TASK-117M: Diseñar arquitectura de worker pools: 400
+2025-11-30 17:57:33 -     ❌ Error creando Tarea TASK-117N: Implementar WorkerPool class: 400
+2025-11-30 17:57:35 -     ❌ Error creando Tarea TASK-117O: Implementar parallel map/reduce: 400
+2025-11-30 17:57:36 -     ❌ Error creando Tarea TASK-117P: Implementar task scheduling: 400
+2025-11-30 17:57:36 -     ❌ Error creando Tarea TASK-117Q: Tests de worker pools: 400
+2025-11-30 17:57:37 -     ❌ Error creando Tarea TASK-118: Implementar WASM code generator: 400
+2025-11-30 17:57:38 -     ❌ Error creando Tarea TASK-119: Implementar JS-WASM glue code: 400
+2025-11-30 17:57:39 -     ❌ Error creando Tarea TASK-120: Tests de backend WASM: 400
+2025-11-30 17:57:40 -     ❌ Error creando Tarea TASK-121: Integrar LLVM como dependencia: 400
+2025-11-30 17:57:41 -     ❌ Error creando Tarea TASK-122: Implementar LLVM IR generator: 400
+2025-11-30 17:57:42 -     ❌ Error creando Tarea TASK-123: Implementar runtime library en C: 400
+2025-11-30 17:57:43 -     ❌ Error creando Tarea TASK-124: Implementar linking pipeline: 400
+2025-11-30 17:57:44 -     ❌ Error creando Tarea TASK-125: Implementar optimizaciones LLVM: 400
+2025-11-30 17:57:45 -     ❌ Error creando Tarea TASK-126: Tests de backend nativo: 400
+2025-11-30 17:57:47 -     ❌ Error creando Tarea TASK-127: Implementar test API (describe, it, expect): 400
+2025-11-30 17:57:47 -     ❌ Error creando Tarea TASK-128: Implementar test runner: 400
+2025-11-30 17:57:48 -     ❌ Error creando Tarea TASK-129: Implementar assertions library: 400
+2025-11-30 17:57:50 -     ❌ Error creando Tarea TASK-130: Implementar code coverage: 400
+2025-11-30 17:57:51 -     ❌ Error creando Tarea TASK-131: Tests del testing framework: 400
+2025-11-30 17:57:52 -     ❌ Error creando Tarea TASK-132: Escribir Language Specification completa: 400
+2025-11-30 17:57:54 -     ❌ Error creando Tarea TASK-133: Escribir Getting Started Guide: 400
+2025-11-30 17:57:55 -     ❌ Error creando Tarea TASK-134: Escribir API Reference completa: 400
+2025-11-30 17:57:56 -     ❌ Error creando Tarea TASK-135: Escribir guías de conceptos (signals, actors, UI): 400
+2025-11-30 17:57:57 -     ❌ Error creando Tarea TASK-136: Crear tutoriales completos (Todo App, Chat App): 400
+2025-11-30 17:57:59 -     ❌ Error creando Tarea TASK-137: Setup documentation website: 400
+2025-11-30 17:58:00 -     ❌ Error creando Tarea TASK-138: Implementar debug info generation: 400
+2025-11-30 17:58:01 -     ❌ Error creando Tarea TASK-139: Implementar breakpoint support en VelaVM: 400
+2025-11-30 17:58:04 -     ❌ Error creando Tarea TASK-140: Implementar DAP (Debug Adapter Protocol): 400
+2025-11-30 17:58:05 -     ❌ Error creando Tarea TASK-141: Implementar signal inspector: 400
+2025-11-30 17:58:06 -     ❌ Error creando Tarea TASK-142: Tests de debugging tools: 400
+2025-11-30 17:58:07 -     ❌ Error creando Tarea TASK-143: Implementar Animated widget: 400
+2025-11-30 17:58:08 -     ❌ Error creando Tarea TASK-144: Implementar AnimationController: 400
+2025-11-30 17:58:09 -     ❌ Error creando Tarea TASK-145: Implementar curves y easing: 400
+2025-11-30 17:58:11 -     ❌ Error creando Tarea TASK-146: Tests de animaciones: 400
+2025-11-30 17:58:12 -     ❌ Error creando Tarea TASK-147: Implementar GestureDetector completo: 400
+2025-11-30 17:58:13 -     ❌ Error creando Tarea TASK-148: Tests de gestures: 400
+2025-11-30 17:58:15 -     ❌ Error creando Tarea TASK-149: Implementar ListView virtualizado: 400
+2025-11-30 17:58:16 -     ❌ Error creando Tarea TASK-150: Implementar GridView virtualizado: 400
+2025-11-30 17:58:17 -     ❌ Error creando Tarea TASK-151: Tests de virtualización: 400
+2025-11-30 17:58:19 -     ❌ Error creando Tarea TASK-152: Diseñar iOS render engine: 400
+2025-11-30 17:58:20 -     ❌ Error creando Tarea TASK-153: Implementar bridging Swift/Vela: 400
+2025-11-30 17:58:22 -     ❌ Error creando Tarea TASK-154: Implementar iOS renderer: 400
+2025-11-30 17:58:23 -     ❌ Error creando Tarea TASK-155: Implementar vela build --target=ios: 400
+2025-11-30 17:58:24 -     ❌ Error creando Tarea TASK-156: Tests en iOS: 400
+2025-11-30 17:58:25 -     ❌ Error creando Tarea TASK-157: Diseñar Android render engine: 400
+2025-11-30 17:58:27 -     ❌ Error creando Tarea TASK-158: Implementar bridging Java/Kotlin/Vela: 400
+2025-11-30 17:58:28 -     ❌ Error creando Tarea TASK-159: Implementar Android renderer: 400
+2025-11-30 17:58:30 -     ❌ Error creando Tarea TASK-160: Implementar vela build --target=android: 400
+2025-11-30 17:58:31 -     ❌ Error creando Tarea TASK-161: Tests en Android: 400
+2025-11-30 17:58:32 -     ❌ Error creando Tarea TASK-162: Diseñar desktop runtime (C++): 400
+2025-11-30 17:58:34 -     ❌ Error creando Tarea TASK-163: Implementar desktop renderer (Skia): 400
+2025-11-30 17:58:36 -     ❌ Error creando Tarea TASK-164: Implementar system APIs (file, process, etc.): 400
+2025-11-30 17:58:37 -     ❌ Error creando Tarea TASK-165: Implementar vela build --target=desktop: 400
+2025-11-30 17:58:39 -     ❌ Error creando Tarea TASK-166: Tests en desktop: 400
+2025-11-30 17:58:40 -     ❌ Error creando Tarea TASK-167: Diseñar FFI system: 400
+2025-11-30 17:58:40 -     ❌ Error creando Tarea TASK-168: Implementar extern declarations: 400
+2025-11-30 17:58:42 -     ❌ Error creando Tarea TASK-169: Implementar C FFI bridge: 400
+2025-11-30 17:58:43 -     ❌ Error creando Tarea TASK-170: Tests de FFI: 400
+2025-11-30 17:58:44 -     ❌ Error creando Tarea TASK-171: Implementar constant folding: 400
+2025-11-30 17:58:46 -     ❌ Error creando Tarea TASK-172: Implementar dead code elimination: 400
+2025-11-30 17:58:47 -     ❌ Error creando Tarea TASK-173: Implementar function inlining: 400
+2025-11-30 17:58:48 -     ❌ Error creando Tarea TASK-174: Implementar signal graph optimization: 400
+2025-11-30 17:58:50 -     ❌ Error creando Tarea TASK-175: Implementar JIT compilation (experimental): 400
+2025-11-30 17:58:51 -     ❌ Error creando Tarea TASK-176: Implementar vela deploy: 400
+2025-11-30 17:58:52 -     ❌ Error creando Tarea TASK-177: Integración con AWS Lambda: 400
+2025-11-30 17:58:53 -     ❌ Error creando Tarea TASK-178: Integración con Vercel/Netlify: 400
+2025-11-30 17:58:54 -     ❌ Error creando Tarea TASK-179: Tests de deployment: 400
+2025-11-30 17:58:54 - 
+🔗 FASE 4: Creando Dependencies...
+2025-11-30 17:58:54 - 
+======================================================================
+2025-11-30 17:58:54 - ✅ IMPORTACIÓN COMPLETADA
+2025-11-30 17:58:54 - ======================================================================
+2025-11-30 17:58:54 - 
+📊 Resumen:
+2025-11-30 17:58:54 -    - Epics creados: 47
+2025-11-30 17:58:54 -    - Historias creadas: 68
+2025-11-30 17:58:54 -    - Tareas creadas: 0
+2025-11-30 17:58:54 -    - Sprints creados: 68
+2025-11-30 17:58:54 -    - Links creados: 0
+2025-11-30 17:58:54 -    - Errores: 354
+2025-11-30 17:58:54 - 
+⚠️  Se encontraron 354 errores:
+2025-11-30 17:58:54 -    - Error creando Tarea TASK-000A: Decidir lenguaje de implementación: 400
+2025-11-30 17:58:54 -    - Error creando Tarea TASK-000B: Definir arquitectura del build system: 400
+2025-11-30 17:58:54 -    - Error creando Tarea TASK-000C: Elegir licencia open source: 400
+2025-11-30 17:58:54 -    - Error creando Tarea TASK-000D: Seleccionar plataforma CI/CD: 400
+2025-11-30 17:58:54 -    - Error creando Tarea TASK-000E: Elegir plataforma de documentación: 400
+2025-11-30 17:58:54 -    - Error creando Tarea TASK-000F: Escribir especificación formal del lenguaje: 400
+2025-11-30 17:58:54 -    - Error creando Tarea TASK-000G: Especificar modelo de memoria formal: 400
+2025-11-30 17:58:54 -    - Error creando Tarea TASK-000H: Especificar modelo de concurrencia formal: 400
+2025-11-30 17:58:54 -    - Error creando Tarea TASK-000I: Escribir contratos formales de stdlib: 400
+2025-11-30 17:58:54 -    - Error creando Tarea TASK-000J: Diseñar arquitectura del Vela CLI: 400
+2025-11-30 17:58:54 - 
+🎯 Tu backlog está listo en: https://velalang.atlassian.net/projects/VELA
+2025-11-30 17:58:54 - 
+📝 Log completo guardado en: import_log_20251130_174833.txt
