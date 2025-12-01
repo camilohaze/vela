@@ -24,6 +24,7 @@ from .tracking import TrackingContext, track, untrack
 from .signal import Signal, signal
 from .computed import Computed, computed
 from .effect import Effect, effect
+from .watch import Watch, watch
 
 __all__ = [
     'ReactiveGraph',
@@ -37,6 +38,8 @@ __all__ = [
     'computed',
     'Effect',
     'effect',
+    'Watch',
+    'watch',
 ]
 
 # Instancia global del grafo reactivo
