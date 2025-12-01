@@ -605,7 +605,592 @@ Si algo no está claro:
 
 ---
 
+## 🔥 ESPECIFICACIÓN COMPLETA DEL LENGUAJE VELA
+
+### ⚠️ PARADIGMA: PROGRAMACIÓN FUNCIONAL PURA
+
+**Vela es un lenguaje FUNCIONAL PURO con reactividad y UI declarativa.**
+
+---
+
+### ❌ PALABRAS RESERVADAS QUE **NO EXISTEN** EN VELA
+
+**NUNCA USES ESTAS KEYWORDS (NO ESTÁN EN EL LENGUAJE):**
+
+#### Loops Imperativos (PROHIBIDOS):
+- ❌ `for` - NO EXISTE (usar métodos funcionales: `.map()`, `.forEach()`, `.filter()`)
+- ❌ `while` - NO EXISTE (usar recursión o métodos funcionales)
+- ❌ `loop` - NO EXISTE (usar recursión tail-call optimizada)
+- ❌ `break` - NO EXISTE (no hay loops)
+- ❌ `continue` - NO EXISTE (no hay loops)
+- ❌ `do` - NO EXISTE (no hay do-while)
+
+#### Mutabilidad por Defecto (PROHIBIDO):
+- ❌ `let` - NO EXISTE (variables son inmutables por defecto)
+- ❌ `const` - NO EXISTE (inmutabilidad es por defecto, NO necesita keyword)
+- ❌ `var` - NO EXISTE (jamás)
+- ❌ `mut` - NO EXISTE (usar `state` para mutabilidad reactiva)
+
+#### Valores Especiales (PROHIBIDOS):
+- ❌ `null` - NO EXISTE (usar `None` en `Option<T>`)
+- ❌ `undefined` - NO EXISTE (usar `Option<T>`)
+- ❌ `nil` - NO EXISTE (usar `None`)
+
+#### Exports Explícitos (PROHIBIDO):
+- ❌ `export` - NO EXISTE (usar modificador `public` en lugar)
+- ❌ `module` - NO EXISTE (usar estructura de carpetas)
+
+#### Otros (PROHIBIDOS):
+- ❌ `switch` - NO EXISTE (usar `match` con pattern matching)
+- ❌ `case` - NO EXISTE (usar `match`)
+- ❌ `default` - NO EXISTE (usar `_` en match)
+- ❌ `goto` - NO EXISTE (jamás)
+- ❌ `with` - NO EXISTE
+- ❌ `in` - NO EXISTE como keyword standalone
+
+---
+
+### ✅ PALABRAS RESERVADAS QUE **SÍ EXISTEN** EN VELA
+
+#### 1. Declaración de Variables
+
+| Keyword | Propósito | Ejemplo |
+|---------|-----------|---------|
+| `state` | Variable **mutable y reactiva** (ÚNICA forma de mutabilidad) | `state count: Number = 0` |
+| *(sin keyword)* | Inmutable por defecto (NO necesita `const` ni `let`) | `name: String = "Vela"` |
+
+**Regla de Oro**: 
+- ✅ Variables sin keyword → **Inmutables** (99% de los casos)
+- ✅ `state` → **Mutable y reactiva** (solo para estado UI)
+
+---
+
+#### 2. Tipos de Datos Primitivos
+
+| Keyword | Descripción | Ejemplo |
+|---------|-------------|---------|
+| `Number` | Entero (64-bit) | `age: Number = 37` |
+| `Float` | Punto flotante (64-bit) | `price: Float = 19.99` |
+| `String` | Cadena de texto | `name: String = "Vela"` |
+| `Bool` | Booleano | `isActive: Bool = true` |
+| `void` | Sin retorno | `fn log() -> void { }` |
+| `never` | Nunca retorna (throw o loop infinito) | `fn panic() -> never { throw Error() }` |
+
+**Valores Especiales**:
+- ✅ `true` / `false` (booleanos)
+- ✅ `None` (en lugar de null/undefined/nil)
+- ✅ `Option<T>` (manejo de valores opcionales: `Some(value)` o `None`)
+
+---
+
+#### 3. Estructuras de Datos
+
+| Keyword | Propósito | Ejemplo |
+|---------|-----------|---------|
+| `type` | Alias de tipo o union type | `type UserId = Number` o `type Status = "active" \| "inactive"` |
+| `enum` | Enumeración (con o sin datos asociados) | `enum Color { Red, Green, Blue, Custom(r, g, b) }` |
+| `struct` | Estructura de datos (record/producto) | `struct User { id: Number, name: String }` |
+
+---
+
+#### 4. POO (Programación Orientada a Objetos)
+
+| Keyword | Propósito | Ejemplo |
+|---------|-----------|---------|
+| `class` | Define una clase | `class Person { ... }` |
+| `abstract` | Clase abstracta (no instanciable) | `abstract class Shape { abstract fn area() -> Float }` |
+| `interface` | Contrato de tipo | `interface Drawable { fn draw() -> void }` |
+| `extends` | Herencia | `class Dog extends Animal { }` |
+| `implements` | Implementa interfaz | `class Button implements Clickable { }` |
+| `override` | Sobrescribe método padre | `override fn toString() -> String { }` |
+| `overload` | Sobrecarga de métodos | `overload fn add(a: Number, b: Number) -> Number { }` |
+| `this` | Instancia actual | `this.name` |
+| `super` | Clase padre | `super.greet()` |
+| `constructor` | Constructor de clase | `constructor(name: String) { this.name = name }` |
+
+---
+
+#### 5. Funciones
+
+| Keyword | Propósito | Ejemplo |
+|---------|-----------|---------|
+| `fn` | Define función | `fn add(a: Number, b: Number) -> Number { return a + b }` |
+| `async` | Función asíncrona | `async fn fetchData() -> Result<String> { }` |
+| `await` | Espera resultado async | `data = await fetchData()` |
+| `return` | Retorna valor | `return result` |
+| `yield` | Generador (produce valor) | `yield nextValue` |
+
+**Arrow Functions**:
+```vela
+# ✅ Función anónima
+callback = (x: Number) => x * 2
+
+# ✅ Con bloque
+process = (data: String) => {
+  cleaned = data.trim()
+  return cleaned.toUpperCase()
+}
+```
+
+---
+
+#### 6. Control de Flujo (FUNCIONAL)
+
+| Keyword | Propósito | Ejemplo |
+|---------|-----------|---------|
+| `if` | Condicional (también expression) | `if age >= 18 { "adult" } else { "minor" }` |
+| `else` | Rama alternativa | `if x > 0 { ... } else { ... }` |
+| `match` | Pattern matching (exhaustivo) | `match result { Ok(val) => ..., Err(e) => ... }` |
+
+**⚠️ NO HAY LOOPS IMPERATIVOS**:
+```vela
+# ❌ PROHIBIDO: for loop
+# for i in 0..10 { print(i) }
+
+# ✅ CORRECTO: métodos funcionales
+(0..10).forEach(i => print(i))
+
+# ❌ PROHIBIDO: while loop
+# while condition { doSomething() }
+
+# ✅ CORRECTO: recursión
+fn repeatUntil(condition: () -> Bool, action: () -> void) -> void {
+  if !condition() {
+    action()
+    repeatUntil(condition, action)  # tail-call optimizado
+  }
+}
+
+# ❌ PROHIBIDO: loop infinito
+# loop { process() }
+
+# ✅ CORRECTO: recursión infinita (tail-call)
+fn processForever() -> never {
+  process()
+  processForever()
+}
+```
+
+---
+
+#### 7. Métodos Funcionales de Listas (OBLIGATORIO USAR)
+
+**En lugar de loops, usar estos métodos funcionales:**
+
+| Método | Propósito | Ejemplo |
+|--------|-----------|---------|
+| `.map()` | Transformar elementos | `[1, 2, 3].map(x => x * 2)` → `[2, 4, 6]` |
+| `.filter()` | Filtrar elementos | `[1, 2, 3, 4].filter(x => x % 2 == 0)` → `[2, 4]` |
+| `.reduce()` | Reducir a un valor | `[1, 2, 3].reduce((acc, x) => acc + x, 0)` → `6` |
+| `.forEach()` | Ejecutar acción por elemento | `list.forEach(x => print(x))` |
+| `.flatMap()` | Mapear y aplanar | `[[1, 2], [3]].flatMap(x => x)` → `[1, 2, 3]` |
+| `.find()` | Encontrar primer match | `list.find(x => x > 5)` → `Some(6)` o `None` |
+| `.findIndex()` | Índice del primer match | `list.findIndex(x => x > 5)` → `Some(3)` o `None` |
+| `.every()` | Todos cumplen condición | `[2, 4, 6].every(x => x % 2 == 0)` → `true` |
+| `.some()` | Al menos uno cumple | `[1, 2, 3].some(x => x % 2 == 0)` → `true` |
+| `.take()` | Primeros N elementos | `[1, 2, 3, 4].take(2)` → `[1, 2]` |
+| `.drop()` | Saltar primeros N | `[1, 2, 3, 4].drop(2)` → `[3, 4]` |
+| `.takeWhile()` | Tomar mientras condición | `[1, 2, 3, 4].takeWhile(x => x < 3)` → `[1, 2]` |
+| `.dropWhile()` | Saltar mientras condición | `[1, 2, 3, 4].dropWhile(x => x < 3)` → `[3, 4]` |
+| `.partition()` | Dividir en dos listas | `[1, 2, 3, 4].partition(x => x % 2 == 0)` → `([2, 4], [1, 3])` |
+| `.groupBy()` | Agrupar por clave | `["a", "ab", "abc"].groupBy(s => s.length)` |
+| `.sortBy()` | Ordenar por criterio | `list.sortBy(x => x.age)` |
+| `.chunk()` | Dividir en grupos | `[1, 2, 3, 4, 5].chunk(2)` → `[[1, 2], [3, 4], [5]]` |
+| `.zip()` | Combinar dos listas | `[1, 2].zip(["a", "b"])` → `[(1, "a"), (2, "b")]` |
+| `.scan()` | Reduce con pasos intermedios | `[1, 2, 3].scan((a, b) => a + b, 0)` → `[0, 1, 3, 6]` |
+| `.distinct()` | Eliminar duplicados | `[1, 2, 2, 3].distinct()` → `[1, 2, 3]` |
+| `.reverse()` | Invertir orden | `[1, 2, 3].reverse()` → `[3, 2, 1]` |
+
+---
+
+#### 8. Manejo de Errores
+
+| Keyword | Propósito | Ejemplo |
+|---------|-----------|---------|
+| `try` | Bloque try-catch | `try { riskyOp() } catch (e) { handle(e) }` |
+| `catch` | Captura excepción | `catch (e: MyError) { ... }` |
+| `throw` | Lanza excepción | `throw Error("failed")` |
+| `finally` | Siempre se ejecuta | `finally { cleanup() }` |
+
+**Tipo `Result<T, E>`** (preferido sobre excepciones):
+```vela
+fn divide(a: Number, b: Number) -> Result<Float, Error> {
+  if b == 0 {
+    return Err(Error("division by zero"))
+  }
+  return Ok(a / b)
+}
+
+# Uso con match
+match divide(10, 2) {
+  Ok(value) => print("Result: ${value}")
+  Err(error) => print("Error: ${error}")
+}
+```
+
+---
+
+#### 9. Imports y Módulos
+
+| Keyword | Propósito | Ejemplo |
+|---------|-----------|---------|
+| `import` | Importar módulo/paquete | `import 'package:http'` |
+| `show` | Importar elementos específicos | `import 'lib:utils' show { sort, filter }` |
+| `hide` | Importar todo excepto | `import 'lib:math' hide { deprecated_fn }` |
+| `as` | Alias para import | `import 'package:long_name' as ln` |
+
+**⚠️ NO EXISTE `export`**:
+```vela
+# ❌ PROHIBIDO: export keyword
+# export fn myFunction() { }
+
+# ✅ CORRECTO: modificador public
+public fn myFunction() -> void {
+  # accesible desde otros módulos
+}
+
+# Privado por defecto (sin modificador)
+fn privateHelper() -> void {
+  # solo accesible dentro del módulo
+}
+```
+
+---
+
+#### 10. Modificadores de Acceso
+
+| Keyword | Propósito | Ejemplo |
+|---------|-----------|---------|
+| `public` | Accesible públicamente | `public class MyClass { }` |
+| `private` | Solo dentro de clase/módulo | `private fn helper() -> void { }` |
+| `protected` | Clase y subclases | `protected fn method() -> void { }` |
+
+---
+
+#### 11. Reactividad (Sistema Reactivo Integrado)
+
+| Keyword | Propósito | Ejemplo |
+|---------|-----------|---------|
+| `computed` | Valor derivado reactivo | `computed doubled: Number { return this.count * 2 }` |
+| `memo` | Computed con caché agresivo | `memo expensive: Number { /* cálculo costoso */ }` |
+| `effect` | Side effect reactivo | `effect { print("Count: ${this.count}") }` |
+| `watch` | Observar cambios específicos | `watch(this.name) { print("Name changed") }` |
+
+---
+
+#### 12. Ciclo de Vida de Componentes UI
+
+| Keyword | Propósito | Ejemplo |
+|---------|-----------|---------|
+| `mount` | Hook al montar componente | `mount() { this.fetchData() }` |
+| `update` | Hook después de actualización | `update() { print("Updated") }` |
+| `destroy` | Hook al desmontar | `destroy() { this.cleanup() }` |
+| `beforeUpdate` | Antes de actualizar DOM | `beforeUpdate() { /* ... */ }` |
+| `afterUpdate` | Después de actualizar DOM | `afterUpdate() { /* ... */ }` |
+
+---
+
+#### 13. UI - Widgets (Inspirado en Flutter)
+
+| Keyword | Propósito | Ejemplo |
+|---------|-----------|---------|
+| `StatefulWidget` | Widget con estado mutable | `class Counter extends StatefulWidget { state count: Number = 0 }` |
+| `StatelessWidget` | Widget sin estado (puro) | `class Label extends StatelessWidget { text: String }` |
+| `component` | Componente UI (alias de StatefulWidget) | `component MyButton { /* ... */ }` |
+| `widget` | Define un widget genérico | `widget CustomBox { /* ... */ }` |
+
+---
+
+#### 14. Arquitectura / Domain-Driven Design
+
+| Keyword | Propósito | Ejemplo |
+|---------|-----------|---------|
+| `service` | Capa de servicio (lógica de negocio) | `service UserService { fn createUser() { } }` |
+| `repository` | Capa de acceso a datos | `repository UserRepository { fn findById() { } }` |
+| `controller` | Controlador (HTTP, etc.) | `controller UserController { fn handleRequest() { } }` |
+| `usecase` | Caso de uso / interactor | `usecase CreateUser { fn execute() { } }` |
+| `entity` | Entidad de dominio | `entity User { id: UserId, name: String }` |
+| `dto` | Data Transfer Object | `dto CreateUserDTO { name: String, email: String }` |
+| `valueObject` | Value Object (inmutable) | `valueObject Email { value: String }` |
+| `model` | Modelo genérico | `model Product { /* ... */ }` |
+
+---
+
+#### 15. Patrones de Diseño (Keywords First-Class)
+
+| Keyword | Propósito | Ejemplo |
+|---------|-----------|---------|
+| `factory` | Factory pattern | `factory UserFactory { fn create() -> User { } }` |
+| `builder` | Builder pattern | `builder QueryBuilder { fn where() -> Self { } }` |
+| `strategy` | Strategy pattern | `strategy PaymentStrategy { fn pay() { } }` |
+| `observer` | Observer pattern | `observer EventObserver { fn notify() { } }` |
+| `singleton` | Singleton pattern | `singleton Database { /* instancia única */ }` |
+| `adapter` | Adapter pattern | `adapter LegacyAdapter { fn adapt() { } }` |
+| `decorator` | Decorator pattern | `decorator LogDecorator { fn wrap() { } }` |
+
+---
+
+#### 16. Web / API (Middleware, Guards, etc.)
+
+| Keyword | Propósito | Ejemplo |
+|---------|-----------|---------|
+| `guard` | Route guard (autorización) | `guard AuthGuard { fn canActivate() -> Bool { } }` |
+| `middleware` | HTTP middleware | `middleware Logger { fn handle() { } }` |
+| `interceptor` | Request/response interceptor | `interceptor AuthInterceptor { fn intercept() { } }` |
+| `validator` | Validador de input | `validator EmailValidator { fn validate() -> Bool { } }` |
+| `pipe` | Pipeline de transformación | `pipe TransformPipe { fn transform() { } }` |
+
+---
+
+#### 17. Utilidades
+
+| Keyword | Propósito | Ejemplo |
+|---------|-----------|---------|
+| `task` | Tarea asíncrona/job | `task EmailTask { async fn run() { } }` |
+| `helper` | Helper/utilidad | `helper DateHelper { fn format() -> String { } }` |
+| `mapper` | Object mapper | `mapper UserMapper { fn toDTO() -> UserDTO { } }` |
+| `serializer` | Serializador de datos | `serializer JsonSerializer { fn serialize() { } }` |
+| `provider` | Proveedor de dependencias | `provider ServiceProvider { fn provide() { } }` |
+| `store` | Store global (estado) | `store AppStore { state count: Number = 0 }` |
+
+---
+
+### 🎨 DECORADORES / ANNOTATIONS
+
+**Decoradores para DI (Dependency Injection)**:
+- `@injectable` - Marca clase como inyectable
+- `@inject` - Inyecta dependencia
+- `@singleton` - Instancia única
+- `@provides` - Proveedor de dependencia
+- `@container` - Contenedor de DI
+
+**Decoradores para HTTP**:
+- `@get(path)` - HTTP GET endpoint
+- `@post(path)` - HTTP POST endpoint
+- `@put(path)` - HTTP PUT endpoint
+- `@patch(path)` - HTTP PATCH endpoint
+- `@delete(path)` - HTTP DELETE endpoint
+
+**Decoradores para Validación**:
+- `@validate` - Validar input
+- `@required` - Campo requerido
+- `@min(n)` - Valor mínimo
+- `@max(n)` - Valor máximo
+- `@email` - Validar email
+- `@url` - Validar URL
+
+**Ejemplo de uso**:
+```vela
+@injectable
+service UserService {
+  repository: UserRepository = inject(UserRepository)
+  
+  @validate
+  fn createUser(@required name: String, @email email: String) -> Result<User> {
+    # ...
+  }
+}
+
+@injectable
+@singleton
+class DatabaseConnection {
+  # solo una instancia en toda la app
+}
+
+controller UserController {
+  @get("/users/:id")
+  async fn getUser(id: Number) -> Result<User> {
+    # ...
+  }
+  
+  @post("/users")
+  @validate
+  async fn createUser(dto: CreateUserDTO) -> Result<User> {
+    # ...
+  }
+}
+```
+
+---
+
+### 🔄 OPCIONALIDAD: `Option<T>` en lugar de null
+
+**Vela usa `Option<T>` para valores opcionales:**
+
+```vela
+# ✅ CORRECTO: usar Option<T>
+fn findUser(id: Number) -> Option<User> {
+  user = database.query(id)
+  if user.exists() {
+    return Some(user)
+  }
+  return None
+}
+
+# Usar con match (exhaustivo)
+match findUser(123) {
+  Some(user) => print("Found: ${user.name}")
+  None => print("User not found")
+}
+
+# Usar con if-let
+if let Some(user) = findUser(123) {
+  print("Found: ${user.name}")
+}
+
+# Unwrap con default
+user = findUser(123).unwrapOr(defaultUser)
+
+# Chaining con map
+userName = findUser(123).map(u => u.name).unwrapOr("Unknown")
+```
+
+**❌ PROHIBIDO usar `null`, `undefined`, `nil`**:
+```vela
+# ❌ ERROR: null no existe
+# user: User? = null
+
+# ✅ CORRECTO: usar Option<T>
+user: Option<User> = None
+```
+
+---
+
+### 📝 SINTAXIS ESPECÍFICA DE VELA
+
+#### Interpolación de Strings
+```vela
+# ✅ CORRECTO: usar ${}
+name: String = "Vela"
+message: String = "Hello, ${name}!"
+complex: String = "Result: ${calculate(x, y)}"
+
+# ❌ PROHIBIDO: backticks o +
+# message = `Hello, ${name}`  // ERROR
+# message = "Hello, " + name  // Poco idiomático
+```
+
+#### Rangos
+```vela
+# Rango exclusivo: 0..10 → [0, 1, 2, ..., 9]
+(0..10).forEach(i => print(i))
+
+# Rango inclusivo: 0..=10 → [0, 1, 2, ..., 10]
+(0..=10).forEach(i => print(i))
+```
+
+#### Pattern Matching Exhaustivo
+```vela
+# match DEBE cubrir todos los casos
+match value {
+  1 => "one"
+  2 => "two"
+  _ => "other"  # catch-all obligatorio
+}
+
+# Destructuring
+match point {
+  { x: 0, y: 0 } => "origin"
+  { x, y } => "point at (${x}, ${y})"
+}
+
+# Guards
+match number {
+  n if n < 0 => "negative"
+  n if n == 0 => "zero"
+  n => "positive"
+}
+```
+
+#### Inmutabilidad por Defecto
+```vela
+# ✅ CORRECTO: inmutable sin keyword
+PI: Float = 3.14159
+name: String = "Vela"
+
+# ❌ ERROR: intentar mutar inmutable
+# name = "Otro"  // ERROR de compilación
+
+# ✅ CORRECTO: usar state para mutabilidad
+state counter: Number = 0
+counter = counter + 1  # OK
+
+# ✅ CORRECTO: crear nueva variable (shadowing)
+x: Number = 5
+x: Number = x + 1  # Nueva variable x (shadow), NO mutación
+```
+
+---
+
+### 🧪 TESTING
+
+```vela
+# Tests con decorador @test
+@test
+fn testAddition() -> void {
+  result = add(2, 3)
+  assert(result == 5, "2 + 3 should equal 5")
+}
+
+@test
+async fn testAsyncOperation() -> void {
+  result = await fetchData()
+  assert(result.isOk(), "Fetch should succeed")
+}
+
+# Test con setup/teardown
+@beforeEach
+fn setup() -> void {
+  database.connect()
+}
+
+@afterEach
+fn teardown() -> void {
+  database.disconnect()
+}
+```
+
+---
+
+### 📋 RESUMEN DE DECISIONES CLAVE
+
+| Decisión | Razón | Alternativa Prohibida |
+|----------|-------|----------------------|
+| **Inmutabilidad por defecto** | Seguridad, funcional puro | ❌ `let`, `const`, `var` |
+| **`state` para mutabilidad** | Reactividad integrada | ❌ `mut`, mutabilidad implícita |
+| **`Option<T>` en lugar de null** | Seguridad de tipos, no NPE | ❌ `null`, `undefined`, `nil` |
+| **Métodos funcionales en lugar de loops** | Funcional puro, composición | ❌ `for`, `while`, `loop` |
+| **`match` en lugar de switch** | Pattern matching exhaustivo | ❌ `switch`, `case` |
+| **`public` en lugar de export** | Consistencia con modificadores | ❌ `export` keyword |
+| **`Result<T, E>` sobre excepciones** | Control explícito de errores | ⚠️ `throw` permitido pero no idiomático |
+| **Decoradores para metadata** | Declarativo, menos boilerplate | ❌ Configuración manual |
+
+---
+
+### ✅ CHECKLIST AL ESCRIBIR CÓDIGO VELA
+
+Antes de generar código, VERIFICA:
+
+- [ ] ❌ NO usar `for`, `while`, `loop`, `break`, `continue`
+- [ ] ✅ Usar métodos funcionales (`.map()`, `.filter()`, `.forEach()`, etc.)
+- [ ] ❌ NO usar `null`, `undefined`, `nil`
+- [ ] ✅ Usar `Option<T>` con `Some()` y `None`
+- [ ] ❌ NO usar `let`, `const`, `var`
+- [ ] ✅ Variables inmutables por defecto (sin keyword)
+- [ ] ✅ Usar `state` SOLO para estado reactivo mutable
+- [ ] ❌ NO usar `export` keyword
+- [ ] ✅ Usar modificador `public` para exports
+- [ ] ❌ NO usar `switch` / `case`
+- [ ] ✅ Usar `match` con pattern matching
+- [ ] ✅ Interpolación de strings con `${}`
+- [ ] ✅ `Result<T, E>` para manejo de errores
+- [ ] ✅ Funciones puras sin side effects (salvo `effect` explícito)
+- [ ] ✅ Decoradores (`@injectable`, `@get`, `@validate`, etc.)
+
+---
+
 **ÚLTIMA ACTUALIZACIÓN:** 2025-11-30  
-**VERSIÓN:** 1.0.0
+**VERSIÓN:** 2.0.0  
+**CAMBIOS:** Agregada especificación completa del lenguaje Vela (paradigma funcional, palabras prohibidas, sintaxis específica)
 
 **RECUERDA: Este archivo contiene TUS INSTRUCCIONES. Léelo SIEMPRE antes de desarrollar una Historia.**
