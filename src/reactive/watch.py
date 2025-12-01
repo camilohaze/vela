@@ -178,9 +178,17 @@ class Watch:
         Resume un watcher pausado.
         
         No ejecuta callback inmediatamente, solo reactiva el watching.
+        Actualiza valores actuales sin ejecutar callback.
         """
         if self._stopped:
             self._stopped = False
+            # Actualizar valores actuales SIN ejecutar callback
+            # Esto evita que resume() dispare el callback inmediatamente
+            for i, source in enumerate(self._sources):
+                if isinstance(source, (Signal, Computed)):
+                    self._old_values[i] = source.peek()
+                else:
+                    self._old_values[i] = source
             # Re-establecer tracking
             self._setup_tracking()
     

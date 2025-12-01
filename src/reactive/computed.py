@@ -15,6 +15,7 @@ from typing import Callable, Generic, Optional, TypeVar
 
 from .graph import ReactiveGraph, ReactiveNode
 from .types import NodeType, NodeState, DisposedNodeError
+from .memoization import get_memo_manager, compute_cache_key
 
 T = TypeVar('T')
 
@@ -56,6 +57,9 @@ class Computed(Generic[T]):
         *,
         graph: Optional[ReactiveGraph] = None,
         computed_id: Optional[str] = None,
+        memoize: bool = False,
+        memo_max_size: int = 1000,
+        memo_ttl: Optional[float] = None,
     ):
         """
         Crea un nuevo Computed.
@@ -64,9 +68,13 @@ class Computed(Generic[T]):
             compute_fn: Función de computación () => T
             graph: Grafo reactivo (usa el global si no se provee)
             computed_id: ID personalizado (opcional)
+            memoize: Habilitar memoization (default: False)
+            memo_max_size: Tamaño máximo del cache (default: 1000)
+            memo_ttl: Time to live del cache en segundos (None = sin expiración)
         """
         self._graph = graph or get_global_graph()
         self._compute_fn = compute_fn
+        self._memoize_enabled = memoize
         
         # Crear nodo reactivo
         self._node = ReactiveNode(
@@ -77,6 +85,15 @@ class Computed(Generic[T]):
         
         # Registrar en el grafo
         self._graph.register_node(self._node)
+        
+        # Configurar memoization si está habilitado
+        if self._memoize_enabled:
+            from .memoization import MemoCache
+            memo_manager = get_memo_manager()
+            cache = memo_manager.get_cache(self, create=True)
+            if cache:
+                cache.max_size = memo_max_size
+                cache.ttl = memo_ttl
         
         # Computación inicial (lazy - se hace en primer get)
         self._initialized = False
@@ -94,6 +111,46 @@ class Computed(Generic[T]):
         """
         return self.get()
     
+    def _try_get_from_memo_cache(self) -> Optional[T]:
+        """
+        Intenta obtener valor del memo cache.
+        
+        Returns:
+            Optional[T]: Valor cacheado o None si no existe
+        """
+        if not self._memoize_enabled:
+            return None
+        
+        memo_manager = get_memo_manager()
+        if not memo_manager.is_enabled():
+            return None
+        
+        cache = memo_manager.get_cache(self, create=False)
+        if not cache:
+            return None
+        
+        cache_key = compute_cache_key(self)
+        return cache.get(cache_key)
+    
+    def _save_to_memo_cache(self, value: T) -> None:
+        """
+        Guarda valor en el memo cache.
+        
+        Args:
+            value: Valor a cachear
+        """
+        if not self._memoize_enabled:
+            return
+        
+        memo_manager = get_memo_manager()
+        if not memo_manager.is_enabled():
+            return
+        
+        cache = memo_manager.get_cache(self, create=True)
+        if cache:
+            cache_key = compute_cache_key(self)
+            cache.set(cache_key, value)
+    
     def get(self) -> T:
         """
         Obtiene el valor actual del computed.
@@ -101,6 +158,9 @@ class Computed(Generic[T]):
         Si es la primera vez o está dirty, ejecuta la función de
         computación con auto-tracking. Si está clean, retorna el
         valor cacheado.
+        
+        Con memoization habilitado, también verifica el memo cache
+        antes de recomputar.
         
         Returns:
             T: Valor computado
@@ -113,11 +173,28 @@ class Computed(Generic[T]):
         
         # Si no está inicializado o está dirty, recompute
         if not self._initialized or self._node.state == NodeState.DIRTY:
+            # Intentar obtener del memo cache si está habilitado
+            cached_value = self._try_get_from_memo_cache()
+            
+            if cached_value is not None:
+                # Cache hit: usar valor cacheado
+                self._node._value = cached_value
+                self._node._state = NodeState.CLEAN
+                self._initialized = True
+                
+                # Registrar dependencia en computación activa
+                self._graph.record_dependency(self._node)
+                return cached_value
+            
+            # Cache miss o memoization deshabilitado: recompute
             # Track dependencies y compute
             result = self._graph.track(self._node, self._compute)
             self._node._value = result
             self._node._state = NodeState.CLEAN
             self._initialized = True
+            
+            # Guardar en memo cache si está habilitado
+            self._save_to_memo_cache(result)
         
         # Registrar dependencia en computación activa (nested computed/effects)
         self._graph.record_dependency(self._node)
@@ -153,8 +230,14 @@ class Computed(Generic[T]):
     
     @property
     def is_dirty(self) -> bool:
-        """Si necesita recalcularse."""
-        return self._node.state == NodeState.DIRTY
+        """
+        Si necesita recalcularse.
+        
+        Un Computed se considera dirty si:
+        - No ha sido inicializado aún
+        - Está marcado como DIRTY por cambios en dependencies
+        """
+        return not self._initialized or self._node.state == NodeState.DIRTY
     
     def __repr__(self) -> str:
         """Representación string del computed."""

@@ -5,17 +5,22 @@ Implementación de: US-06 - TASK-025
 Historia: Sistema Reactivo
 Fecha: 2025-12-01
 
+Actualizado: VELA-574 - US-07 - TASK-031
+Historia: Scheduler Reactivo Avanzado
+Fecha: 2025-12-01
+
 Descripción:
 Implementa el grafo de dependencias reactivo con:
 - Auto-tracking de dependencias
 - Propagación eficiente de cambios (push-based)
 - Detección de ciclos
-- Batching de actualizaciones
+- Batching avanzado con scheduler priorizado
 - Garbage collection automático
 """
 
 from typing import Any, Callable, Dict, List, Optional, Set
 from collections import deque
+from contextlib import contextmanager
 import uuid
 
 from .types import (
@@ -26,6 +31,7 @@ from .types import (
     DisposedNodeError,
     InvalidStateError,
 )
+from .scheduler import ReactiveScheduler, SchedulerPriority
 
 
 class ReactiveNode:
@@ -65,6 +71,7 @@ class ReactiveNode:
         # Metadata
         self._cleanup_fn: Optional[Callable[[], None]] = None
         self._last_error: Optional[Exception] = None
+        self._graph: Optional['ReactiveGraph'] = None  # Inyectado por register_node
     
     @property
     def id(self) -> str:
@@ -163,8 +170,13 @@ class ReactiveNode:
                 self._cleanup_fn()
                 self._cleanup_fn = None
             
-            # Computar nuevo valor
-            new_value = self._compute_fn()
+            # Computar nuevo valor con re-tracking dinámico de dependencies
+            # Si tenemos referencia al grafo, usar track() para re-registrar dependencies
+            if self._graph:
+                new_value = self._graph.track(self, self._compute_fn)
+            else:
+                # Fallback si no hay grafo (edge case)
+                new_value = self._compute_fn()
             
             # Guardar cleanup (para effects)
             if callable(new_value) and self._node_type == NodeType.EFFECT:
@@ -229,12 +241,20 @@ class ReactiveGraph:
     - Batching de actualizaciones
     """
     
-    def __init__(self):
-        """Inicializa un grafo reactivo vacío."""
+    def __init__(self, scheduler: Optional[ReactiveScheduler] = None):
+        """
+        Inicializa un grafo reactivo vacío.
+        
+        Args:
+            scheduler: Scheduler opcional (si no se provee, usa uno nuevo)
+        """
         self._nodes: Dict[str, ReactiveNode] = {}
         self._active_computations: List[ReactiveNode] = []
         self._batch_queue: Set[ReactiveNode] = set()
         self._is_batching: bool = False
+        
+        # Scheduler avanzado (VELA-574 - TASK-031)
+        self._scheduler: ReactiveScheduler = scheduler or ReactiveScheduler()
     
     @property
     def node_count(self) -> int:
@@ -259,6 +279,8 @@ class ReactiveGraph:
             node: Nodo a registrar
         """
         self._nodes[node.id] = node
+        # Inyectar referencia al grafo para re-tracking dinámico
+        node._graph = self
     
     def unregister_node(self, node: ReactiveNode) -> None:
         """
@@ -301,6 +323,11 @@ class ReactiveGraph:
         try:
             # Ejecutar computación (auto-tracking)
             result = compute_fn()
+            
+            # Guardar el resultado en el nodo
+            node._value = result
+            node._state = NodeState.CLEAN
+            
             return result
         finally:
             # Pop del stack
@@ -329,7 +356,35 @@ class ReactiveGraph:
     
     def propagate_change(self, changed_node: ReactiveNode) -> None:
         """
-        Propaga un cambio desde un nodo modificado.
+        Propaga un cambio desde un nodo modificado usando el scheduler.
+        
+        El scheduler maneja:
+        - Batching automático
+        - Priorización por tipo de nodo
+        - Coalescing de updates múltiples
+        
+        Args:
+            changed_node: Nodo que cambió
+        """
+        # Marcar el nodo como dirty
+        changed_node.mark_dirty()
+        
+        # Marcar todos los dependientes como dirty usando BFS
+        to_update = self._mark_dirty_dependents(changed_node)
+        
+        # Programar cada nodo para actualización en el scheduler
+        # El scheduler maneja batching internamente
+        for node in to_update:
+            self._scheduler.schedule_update(node)
+        
+        # Flush solo si NO estamos en batch
+        # Si estamos en batch, el flush se hará al final
+        if not (self._is_batching or self._scheduler._is_batching):
+            self._scheduler.flush()
+    
+    def _propagate_immediate(self, changed_node: ReactiveNode) -> None:
+        """
+        Propagación inmediata sin scheduler (para testing).
         
         Usa BFS para marcar todos los dependientes como dirty,
         luego recalcula en orden topológico.
@@ -337,11 +392,6 @@ class ReactiveGraph:
         Args:
             changed_node: Nodo que cambió
         """
-        if self._is_batching:
-            # En modo batch, solo acumular
-            self._batch_queue.add(changed_node)
-            return
-        
         # Marcar como dirty
         changed_node.mark_dirty()
         
@@ -461,25 +511,44 @@ class ReactiveGraph:
             if node not in visited:
                 dfs(node, [])
     
-    def batch(self, fn: Callable[[], None]) -> None:
+    def batch(self, fn: Callable[[], Any]) -> Any:
         """
-        Ejecuta una función en modo batch.
+        Ejecuta una función en modo batch con scheduler avanzado.
         
-        Acumula todos los cambios y los propaga al final.
+        Acumula todos los cambios y los propaga al final usando el scheduler.
+        Soporta batches anidados.
         
         Args:
             fn: Función a ejecutar
+            
+        Returns:
+            Any: Resultado de la función
+            
+        Example:
+            >>> graph.batch(lambda: (
+            ...     signal1.set(10),
+            ...     signal2.set(20),
+            ...     signal3.set(30)
+            ... ))
+            # Solo 1 propagación al final
         """
-        if self._is_batching:
-            # Ya estamos en batch, ejecutar directamente
-            fn()
-            return
+        # Usar el scheduler para manejar batching
+        return self._scheduler.batch(fn)
+    
+    @contextmanager
+    def batching(self):
+        """
+        Context manager para batching.
         
+        Example:
+            >>> with graph.batching():
+            ...     signal1.set(10)
+            ...     signal2.set(20)
+            # Propagación al salir del with
+        """
         self._is_batching = True
-        self._batch_queue.clear()
-        
         try:
-            fn()
+            yield
         finally:
             self._is_batching = False
             self._flush_batch()
