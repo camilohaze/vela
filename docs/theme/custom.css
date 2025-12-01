@@ -1,0 +1,210 @@
+/* Custom styles for Vela documentation */
+
+:root {
+    --vela-primary: #4f46e5;
+    --vela-primary-dark: #4338ca;
+    --vela-secondary: #06b6d4;
+    --vela-accent: #f59e0b;
+    --vela-success: #10b981;
+    --vela-warning: #f59e0b;
+    --vela-error: #ef4444;
+    --vela-gray-50: #f9fafb;
+    --vela-gray-100: #f3f4f6;
+    --vela-gray-200: #e5e7eb;
+    --vela-gray-300: #d1d5db;
+    --vela-gray-400: #9ca3af;
+    --vela-gray-500: #6b7280;
+    --vela-gray-600: #4b5563;
+    --vela-gray-700: #374151;
+    --vela-gray-800: #1f2937;
+    --vela-gray-900: #111827;
+}
+
+/* Code blocks */
+.hljs {
+    background-color: var(--vela-gray-50);
+    border: 1px solid var(--vela-gray-200);
+    border-radius: 8px;
+    padding: 1rem;
+}
+
+.navy .hljs {
+    background-color: var(--vela-gray-900);
+    border-color: var(--vela-gray-700);
+}
+
+/* Inline code */
+code:not(.hljs) {
+    background-color: var(--vela-gray-100);
+    color: var(--vela-primary);
+    padding: 0.2em 0.4em;
+    border-radius: 4px;
+    font-size: 0.9em;
+}
+
+.navy code:not(.hljs) {
+    background-color: var(--vela-gray-800);
+    color: var(--vela-secondary);
+}
+
+/* Links */
+a {
+    color: var(--vela-primary);
+    text-decoration: none;
+    border-bottom: 1px solid transparent;
+    transition: border-bottom 0.2s;
+}
+
+a:hover {
+    border-bottom: 1px solid var(--vela-primary);
+}
+
+.navy a {
+    color: var(--vela-secondary);
+}
+
+.navy a:hover {
+    border-bottom: 1px solid var(--vela-secondary);
+}
+
+/* Admonitions */
+.admonition {
+    padding: 1rem;
+    margin: 1rem 0;
+    border-left: 4px solid var(--vela-gray-300);
+    border-radius: 4px;
+    background-color: var(--vela-gray-50);
+}
+
+.admonition.note {
+    border-left-color: var(--vela-primary);
+    background-color: #eef2ff;
+}
+
+.admonition.tip {
+    border-left-color: var(--vela-success);
+    background-color: #f0fdf4;
+}
+
+.admonition.warning {
+    border-left-color: var(--vela-warning);
+    background-color: #fffbeb;
+}
+
+.admonition.danger {
+    border-left-color: var(--vela-error);
+    background-color: #fef2f2;
+}
+
+/* Tables */
+table {
+    border-collapse: collapse;
+    width: 100%;
+    margin: 1rem 0;
+}
+
+th, td {
+    border: 1px solid var(--vela-gray-200);
+    padding: 0.75rem;
+    text-align: left;
+}
+
+th {
+    background-color: var(--vela-gray-100);
+    font-weight: 600;
+}
+
+.navy th {
+    background-color: var(--vela-gray-800);
+}
+
+.navy th, .navy td {
+    border-color: var(--vela-gray-700);
+}
+
+/* Headings */
+h1, h2, h3, h4, h5, h6 {
+    margin-top: 1.5rem;
+    margin-bottom: 0.75rem;
+    font-weight: 600;
+}
+
+h1 {
+    color: var(--vela-primary);
+    border-bottom: 2px solid var(--vela-primary);
+    padding-bottom: 0.5rem;
+}
+
+h2 {
+    color: var(--vela-primary-dark);
+}
+
+/* Blockquotes */
+blockquote {
+    border-left: 4px solid var(--vela-gray-300);
+    padding-left: 1rem;
+    margin-left: 0;
+    font-style: italic;
+    color: var(--vela-gray-600);
+}
+
+.navy blockquote {
+    border-left-color: var(--vela-gray-600);
+    color: var(--vela-gray-400);
+}
+
+/* Search */
+#searchbar {
+    background-color: var(--vela-gray-50);
+    border: 1px solid var(--vela-gray-200);
+    border-radius: 8px;
+    padding: 0.5rem 1rem;
+}
+
+.navy #searchbar {
+    background-color: var(--vela-gray-800);
+    border-color: var(--vela-gray-700);
+}
+
+/* Sidebar */
+.sidebar {
+    background-color: var(--vela-gray-50);
+}
+
+.navy .sidebar {
+    background-color: var(--vela-gray-900);
+}
+
+.chapter.expanded > a {
+    color: var(--vela-primary) !important;
+    font-weight: 600;
+}
+
+.navy .chapter.expanded > a {
+    color: var(--vela-secondary) !important;
+}
+
+/* Page navigation */
+.nav-chapters {
+    margin-top: 2rem;
+    padding-top: 2rem;
+    border-top: 1px solid var(--vela-gray-200);
+}
+
+.navy .nav-chapters {
+    border-top-color: var(--vela-gray-700);
+}
+
+/* Print styles */
+@media print {
+    .sidebar,
+    .nav-wrapper,
+    .menu-bar {
+        display: none;
+    }
+    
+    .content {
+        max-width: 100%;
+        margin: 0;
+    }
+}
