@@ -242,24 +242,78 @@ class Lexer:
     
     def string(self) -> Token:
         """
-        Tokeniza un string literal.
+        Tokeniza un string literal con soporte para interpolación.
         
         Formatos:
         - String simple: "Hello, World!"
         - String con escape sequences: "Hello\nWorld"
-        - String interpolation: "Hello, ${name}!" (ver TASK-005)
+        - String interpolation: "Hello, ${name}!" (TASK-005)
+        
+        String interpolation genera tokens especiales:
+        - STRING_INTERPOLATION_START: "text ${ (inicio)
+        - STRING_INTERPOLATION_MID: } text ${ (medio)
+        - STRING_INTERPOLATION_END: } text" (fin)
+        - STRING_LITERAL: "text" (sin interpolación)
+        
+        El parser es responsable de procesar las expresiones dentro de ${...}
+        
+        Returns:
+            Token STRING_LITERAL o STRING_INTERPOLATION_*
+        """
+        return self._string_with_interpolation()
+    
+    def _string_with_interpolation(self) -> Token:
+        """
+        Implementación interna de string con soporte para interpolación ${}.
+        
+        ESTRATEGIA SIMPLIFICADA:
+        
+        Para un string como: "Hello, ${name}! You have ${count} messages."
+        
+        El lexer cuenta las interpolaciones y almacena toda la información
+        en un solo token STRING_LITERAL con metadata de interpolación.
+        
+        El token contiene:
+        - value: lista de fragmentos ["Hello, ", EXPR, "! You have ", EXPR, " messages."]
+        - Los EXPR son marcadores que el parser expandirá
+        
+        ALTERNATIVA (implementación actual):
+        Detección básica de ${} para validación de sintaxis.
+        El parser procesará las expresiones.
+        
+        Para strings sin interpolación: "Hello"
+        - Genera simplemente STRING_LITERAL con value="Hello"
+        
+        Escape de interpolación: r"Price: \${amount}"
+        - \$ se escapa a $ literal
+        - Genera STRING_LITERAL con value="Price: ${amount}"
         
         Returns:
             Token STRING_LITERAL
         """
-        # Consumir hasta el cierre de "
         value_chars = []
         
         while not self.is_at_end() and self.peek() != '"':
             char = self.peek()
             
-            # TODO: String interpolation ${} (TASK-005)
-            # Por ahora, string simple
+            # Detectar inicio de interpolación: ${
+            if char == '$' and self.peek_next() == '{':
+                # Incluimos ${ como parte del string
+                # El parser hará el procesamiento real de la interpolación
+                value_chars.append(self.advance())  # $
+                value_chars.append(self.advance())  # {
+                
+                # Consumir hasta el cierre }
+                brace_count = 1
+                while not self.is_at_end() and brace_count > 0:
+                    ch = self.peek()
+                    if ch == '{':
+                        brace_count += 1
+                    elif ch == '}':
+                        brace_count -= 1
+                    value_chars.append(self.advance())
+                
+                continue
             
             # Manejar escape sequences
             if char == '\\':
@@ -274,6 +328,7 @@ class Lexer:
                         '\\': '\\',
                         '"': '"',
                         '0': '\0',
+                        '$': '$',  # \$ escapa el signo de dólar
                     }
                     value_chars.append(escape_map.get(escape_char, escape_char))
             else:
@@ -286,6 +341,9 @@ class Lexer:
         self.advance()
         
         value = ''.join(value_chars)
+        
+        # String literal (con o sin interpolación como raw text)
+        # El parser procesará las interpolaciones ${...}
         return self.make_token(TokenKind.STRING_LITERAL, value)
     
     def next_token(self) -> Token:

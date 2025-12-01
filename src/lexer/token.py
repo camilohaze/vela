@@ -96,7 +96,7 @@ class TokenKind(Enum):
     VALIDATOR = auto()
     
     # Utilities
-    PIPE = auto()
+    PIPE_KEYWORD = auto()  # pipe keyword (transformation pipeline)
     TASK = auto()
     HELPER = auto()
     MAPPER = auto()
@@ -239,6 +239,11 @@ class TokenKind(Enum):
     FLOAT_LITERAL = auto()
     STRING_LITERAL = auto()
     
+    # String Interpolation (TASK-005)
+    STRING_INTERPOLATION_START = auto()   # "text ${ (inicio de interpolación)
+    STRING_INTERPOLATION_MID = auto()     # } text ${ (medio de interpolación)
+    STRING_INTERPOLATION_END = auto()     # } text" (fin de interpolación)
+    
     # ============================================================
     # SPECIAL
     # ============================================================
@@ -362,7 +367,7 @@ KEYWORDS = {
     "middleware": TokenKind.MIDDLEWARE,
     "interceptor": TokenKind.INTERCEPTOR,
     "validator": TokenKind.VALIDATOR,
-    "pipe": TokenKind.PIPE,
+    "pipe": TokenKind.PIPE_KEYWORD,
     "task": TokenKind.TASK,
     "helper": TokenKind.HELPER,
     "mapper": TokenKind.MAPPER,
