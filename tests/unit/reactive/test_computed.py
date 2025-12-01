@@ -1,7 +1,7 @@
 """
 Tests unitarios para Computed<T>
 
-Jira: US-06 - TASK-028
+Jira: VELA-573 - TASK-028
 Historia: Sistema Reactivo
 """
 

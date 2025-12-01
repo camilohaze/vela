@@ -1,7 +1,7 @@
 # TASK-025: Diseñar Arquitectura del Grafo Reactivo
 
 ## 📋 Información General
-- **Historia:** US-06 - Sistema Reactivo (Signals)
+- **Historia:** VELA-573 - Sistema Reactivo (Signals)
 - **Epic:** EPIC-03: Reactive System
 - **Sprint:** 11
 - **Estimación:** 32 horas
@@ -257,7 +257,7 @@ def flush_batch():
    - Referencias a sistemas similares (Vue 3, SolidJS, Svelte 5)
    - Tabla comparativa de sistemas reactivos
 
-7. **`docs/features/US-06/TASK-025.md`** (Este archivo)
+7. **`docs/features/VELA-573/TASK-025.md`** (Este archivo)
    - Información completa de la subtask
    - Arquitectura y algoritmos
    - Implementación detallada
@@ -464,7 +464,7 @@ except CyclicDependencyError as e:
 
 ## 🔗 Referencias
 
-- **Jira**: [US-06](https://velalang.atlassian.net/browse/US-06)
+- **Jira**: [VELA-573](https://velalang.atlassian.net/browse/VELA-573)
 - **ADR**: [ADR-025](../../architecture/ADR-025-arquitectura-grafo-reactivo.md)
 - **Epic**: EPIC-03 - Reactive System
 - **Sprint**: 11

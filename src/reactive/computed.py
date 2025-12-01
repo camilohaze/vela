@@ -1,7 +1,7 @@
 """
 Computed<T> - Valor Derivado Reactivo
 
-Implementación de: US-06 - TASK-028
+Implementación de: VELA-573 - TASK-028
 Historia: Sistema Reactivo
 Fecha: 2025-12-01
 

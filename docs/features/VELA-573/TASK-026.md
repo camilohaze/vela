@@ -1,7 +1,7 @@
 # TASK-026: Implementar Signal<T> Core
 
 ## 📋 Información General
-- **Historia:** US-06 - Sistema Reactivo (Signals)
+- **Historia:** VELA-573 - Sistema Reactivo (Signals)
 - **Epic:** EPIC-03: Reactive System
 - **Sprint:** 11
 - **Estimación:** 40 horas
@@ -255,7 +255,7 @@ name.set("alice")
 
 ## 🔗 Referencias
 
-- **Jira**: [US-06](https://velalang.atlassian.net/browse/US-06)
+- **Jira**: [VELA-573](https://velalang.atlassian.net/browse/VELA-573)
 - **Sprint**: 11
 - **Código**: `src/reactive/signal.py`
 - **Tests**: `tests/unit/reactive/test_signal.py`

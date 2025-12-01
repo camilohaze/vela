@@ -1,7 +1,7 @@
 # TASK-028: Computed<T>
 
 ## 📋 Información General
-- **Historia:** US-06 - Sistema Reactivo
+- **Historia:** VELA-573 - Sistema Reactivo
 - **Sprint:** Sprint 11
 - **Estimación:** 48 horas
 - **Prioridad:** Alta
@@ -225,7 +225,7 @@ value = doubled.peek()  # 10 (pero sin tracking)
 
 ## 🔗 Referencias
 
-- **Jira**: [US-06](https://velalang.atlassian.net/browse/US-06)
+- **Jira**: [VELA-573](https://velalang.atlassian.net/browse/VELA-573)
 - **Sprint**: Sprint 11 - Sistema Reactivo
 - **Código fuente**: `src/reactive/computed.py`
 - **Tests**: `tests/unit/reactive/test_computed.py`
