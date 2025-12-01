@@ -1,7 +1,7 @@
 """
 Symbol Table con Scopes Anidados
 
-Implementación de: TASK-016K
+Implementación de: TASK-021
 Historia: VELA-572
 Fecha: 2025-01-22
 
