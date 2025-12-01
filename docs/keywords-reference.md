@@ -2625,6 +2625,7 @@ validator EmailValidator {
 @module({
   controllers: [UserController],  # REST endpoints
   providers: [UserService, UserRepository],  # Business logic
+  imports: [DatabaseModule, HttpModule],  # Otros módulos
   exports: [UserService]
 })
 module UserModule { }
@@ -2635,6 +2636,7 @@ module UserModule { }
 @module({
   declarations: [LoginWidget, HeaderWidget],  # UI components
   providers: [AuthService],  # Shared services
+  imports: [UiModule, FormsModule],  # Otros módulos UI
   exports: [AuthService, LoginWidget]
 })
 module AuthModule { }
