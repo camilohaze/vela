@@ -498,6 +498,7 @@ class Lexer:
             case '.': return self.make_token(TokenKind.DOT)
             case '^': return self.make_token(TokenKind.CARET)
             case '~': return self.make_token(TokenKind.TILDE)
+            case '@': return self.make_token(TokenKind.AT)  # Decorators/annotations
             
             case _:
                 return self.error_token(f"Unexpected character: '{c}'")

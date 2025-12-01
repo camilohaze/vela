@@ -249,6 +249,7 @@ class TokenKind(Enum):
     DOT = auto()                   # .
     ARROW = auto()                 # ->
     FAT_ARROW = auto()             # =>
+    AT = auto()                    # @ (decorators/annotations)
     
     # ============================================================
     # DELIMITERS

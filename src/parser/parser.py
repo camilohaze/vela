@@ -324,6 +324,58 @@ class Parser:
     # DECLARATIONS
     # ===============================================================
     
+    def parse_decorators(self) -> List[Decorator]:
+        """
+        Parsea decoradores/annotations.
+        
+        Grammar:
+        ```
+        decorators = decorator+
+        decorator = '@' IDENTIFIER ('(' arguments? ')')?
+        ```
+        
+        Ejemplos en Vela:
+        ```vela
+        @injectable
+        @controller("/api/users")
+        @get("/profile")
+        @module({
+          declarations: [UserService],
+          exports: [UserService]
+        })
+        ```
+        """
+        decorators = []
+        
+        while self.check(TokenType.AT):
+            start = self.advance()  # Consume '@'
+            
+            # Expect identifier (decorator name)
+            name_token = self.expect(TokenType.IDENTIFIER, "decorator name")
+            name = name_token.value
+            
+            # Parse arguments if present
+            arguments = []
+            if self.match(TokenType.LPAREN):
+                # Parse arguments (expressions)
+                if not self.check(TokenType.RPAREN):
+                    arguments.append(self.parse_expression())
+                    
+                    while self.match(TokenType.COMMA):
+                        arguments.append(self.parse_expression())
+                
+                self.expect(TokenType.RPAREN, "')'")
+            
+            end = self.peek(-1)
+            decorator = Decorator(
+                name=name,
+                arguments=arguments,
+                range=self.create_range_from_tokens(start, end)
+            )
+            decorators.append(decorator)
+        
+        return decorators
+    
     def parse_declaration(self) -> Optional[Declaration]:
         """
         Parsea una declaración de nivel superior.
@@ -331,6 +383,9 @@ class Parser:
         Puede ser: function, struct, enum, class, interface, type alias,
         o keywords específicos (service, repository, controller, etc.)
         """
+        # Parse decorators if present
+        decorators = self.parse_decorators()
+        
         # Check for 'public' modifier
         is_public = self.match(TokenType.PUBLIC)
         
@@ -452,6 +507,10 @@ class Parser:
         
         if self.check(TokenType.SERIALIZER):
             return self.parse_serializer_declaration(is_public)
+        
+        # Module System (Angular-style)
+        if self.check(TokenType.MODULE):
+            return self.parse_module_declaration(is_public, decorators)
         
         # Unknown
         token = self.peek()
@@ -1584,6 +1643,74 @@ class Parser:
             is_public=is_public,
             name=name,
             methods=methods
+        )
+    
+    def parse_module_declaration(self, is_public: bool = False, decorators: List[Decorator] = None) -> ModuleDeclaration:
+        """
+        Parsea module declaration (Angular-style).
+        
+        Grammar:
+        ```
+        module = decorator* 'module' IDENTIFIER '{' declaration* '}'
+        decorator = '@module' '(' metadata_object ')'
+        ```
+        
+        Ejemplo en Vela:
+        ```vela
+        @module({
+          declarations: [AuthService, LoginWidget],
+          exports: [AuthService],
+          providers: [AuthService, TokenService],
+          imports: [HttpModule, CryptoModule]
+        })
+        module AuthModule {
+          # Módulo NO instanciable (NO constructor, NO new AuthModule())
+        }
+        ```
+        
+        Reglas de Validación (se validan en semantic analysis):
+        1. DEBE tener decorador @module({ ... })
+        2. exports ⊆ declarations (exports debe ser subconjunto de declarations)
+        3. providers ⊆ declarations
+        4. NO instanciable (NO constructor, NO new)
+        """
+        start = self.expect(TokenType.MODULE)
+        name = self.expect(TokenType.IDENTIFIER).value
+        
+        # Parse body (declarations dentro del módulo)
+        self.expect(TokenType.LBRACE)
+        body = []
+        while not self.check(TokenType.RBRACE) and not self.is_at_end():
+            decl = self.parse_declaration()
+            if decl:
+                body.append(decl)
+        end = self.expect(TokenType.RBRACE)
+        
+        # Extraer metadata del decorador @module (si existe)
+        # Esto se hace de forma básica aquí, la validación completa es en semantic analysis
+        declarations_list = []
+        exports_list = []
+        providers_list = []
+        imports_list = []
+        
+        if decorators:
+            for decorator in decorators:
+                if decorator.name == "module" and len(decorator.arguments) > 0:
+                    # TODO: Parsear object literal del decorador @module para extraer metadata
+                    # Por ahora, solo marcamos que existe el decorador
+                    # La extracción completa se hará en TASK-016I
+                    pass
+        
+        return ModuleDeclaration(
+            range=self.create_range_from_tokens(start, end),
+            is_public=is_public,
+            name=name,
+            decorators=decorators or [],
+            body=body,
+            declarations=declarations_list,
+            exports=exports_list,
+            providers=providers_list,
+            imports=imports_list
         )
     
     # ===============================================================
