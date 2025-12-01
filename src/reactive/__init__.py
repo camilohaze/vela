@@ -39,6 +39,13 @@ from .batch import (
     set_global_graph,
     get_global_graph as get_batch_global_graph,
 )
+from .memoization import (
+    MemoCache,
+    MemoizationManager,
+    get_memo_manager,
+    compute_cache_key,
+    memoize,
+)
 
 __all__ = [
     # Core
@@ -73,6 +80,13 @@ __all__ = [
     'batch_fn',
     'BatchScope',
     'set_global_graph',
+    
+    # Memoization (VELA-574 - TASK-033)
+    'MemoCache',
+    'MemoizationManager',
+    'get_memo_manager',
+    'compute_cache_key',
+    'memoize',
 ]
 
 # Instancia global del grafo reactivo

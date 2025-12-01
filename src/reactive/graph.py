@@ -71,6 +71,7 @@ class ReactiveNode:
         # Metadata
         self._cleanup_fn: Optional[Callable[[], None]] = None
         self._last_error: Optional[Exception] = None
+        self._graph: Optional['ReactiveGraph'] = None  # Inyectado por register_node
     
     @property
     def id(self) -> str:
@@ -169,8 +170,13 @@ class ReactiveNode:
                 self._cleanup_fn()
                 self._cleanup_fn = None
             
-            # Computar nuevo valor
-            new_value = self._compute_fn()
+            # Computar nuevo valor con re-tracking dinámico de dependencies
+            # Si tenemos referencia al grafo, usar track() para re-registrar dependencies
+            if self._graph:
+                new_value = self._graph.track(self, self._compute_fn)
+            else:
+                # Fallback si no hay grafo (edge case)
+                new_value = self._compute_fn()
             
             # Guardar cleanup (para effects)
             if callable(new_value) and self._node_type == NodeType.EFFECT:
@@ -273,6 +279,8 @@ class ReactiveGraph:
             node: Nodo a registrar
         """
         self._nodes[node.id] = node
+        # Inyectar referencia al grafo para re-tracking dinámico
+        node._graph = self
     
     def unregister_node(self, node: ReactiveNode) -> None:
         """
@@ -315,6 +323,11 @@ class ReactiveGraph:
         try:
             # Ejecutar computación (auto-tracking)
             result = compute_fn()
+            
+            # Guardar el resultado en el nodo
+            node._value = result
+            node._state = NodeState.CLEAN
+            
             return result
         finally:
             # Pop del stack
@@ -353,14 +366,21 @@ class ReactiveGraph:
         Args:
             changed_node: Nodo que cambió
         """
-        if self._is_batching:
-            # En modo batch, solo acumular
-            self._batch_queue.add(changed_node)
-            return
+        # Marcar el nodo como dirty
+        changed_node.mark_dirty()
         
-        # Usar scheduler para programar update
-        # El scheduler inferirá la prioridad según el tipo de nodo
-        self._scheduler.schedule_update(changed_node)
+        # Marcar todos los dependientes como dirty usando BFS
+        to_update = self._mark_dirty_dependents(changed_node)
+        
+        # Programar cada nodo para actualización en el scheduler
+        # El scheduler maneja batching internamente
+        for node in to_update:
+            self._scheduler.schedule_update(node)
+        
+        # Flush solo si NO estamos en batch
+        # Si estamos en batch, el flush se hará al final
+        if not (self._is_batching or self._scheduler._is_batching):
+            self._scheduler.flush()
     
     def _propagate_immediate(self, changed_node: ReactiveNode) -> None:
         """

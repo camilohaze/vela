@@ -292,10 +292,10 @@ class ReactiveScheduler:
     
     def _flush_queue(self, queue: deque) -> None:
         """
-        Flush de una queue específica con propagación.
+        Flush de una queue específica con ordenamiento topológico.
         
-        Este método debe propagar cambios correctamente usando BFS + topo sort.
-        Lo delega al grafo reactivo que contiene los nodos.
+        Los nodos se procesan en orden topológico para garantizar
+        que las dependencies se calculen antes que sus dependientes.
         
         Args:
             queue: Queue a procesar
@@ -307,20 +307,48 @@ class ReactiveScheduler:
             if node.state != NodeState.CLEAN:
                 nodes_to_process.append(node)
         
-        # Procesar en batch si hay múltiples
-        if nodes_to_process:
-            # Marcar todos como dirty
-            for node in nodes_to_process:
-                node.mark_dirty()
+        if not nodes_to_process:
+            return
+        
+        # Ordenar topológicamente usando in-degree
+        # Esto garantiza que dependencies se procesen antes que dependientes
+        in_degree = {}
+        for node in nodes_to_process:
+            # Contar cuántas dependencies del nodo están en nodes_to_process
+            in_degree[node] = sum(
+                1 for dep in node._dependencies 
+                if dep in nodes_to_process and dep.state != NodeState.CLEAN
+            )
+        
+        # Kahn's algorithm: empezar con nodos sin dependencies
+        ready = deque([node for node in nodes_to_process if in_degree[node] == 0])
+        sorted_nodes = []
+        
+        while ready:
+            node = ready.popleft()
+            sorted_nodes.append(node)
             
-            # Recomputar cada uno (el grafo ya los ordenó)
-            for node in nodes_to_process:
-                try:
-                    if node.state == NodeState.DIRTY:
-                        node.recompute()
-                except Exception as e:
-                    print(f"Error updating {node.id}: {e}")
-                    node._last_error = e
+            # Decrementar in-degree de dependientes
+            for dependent in node._dependents:
+                if dependent in in_degree:
+                    in_degree[dependent] -= 1
+                    if in_degree[dependent] == 0:
+                        ready.append(dependent)
+        
+        # Si no se procesaron todos, hay ciclo (usar orden original)
+        if len(sorted_nodes) < len(nodes_to_process):
+            sorted_nodes = nodes_to_process
+        
+        # Procesar en orden topológico
+        for node in sorted_nodes:
+            node.mark_dirty()
+            
+            try:
+                if node.state == NodeState.DIRTY:
+                    node.recompute()
+            except Exception as e:
+                print(f"Error updating {node.id}: {e}")
+                node._last_error = e
     
     def clear(self) -> None:
         """Limpia todas las queues."""
