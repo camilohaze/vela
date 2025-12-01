@@ -35,16 +35,16 @@ VELA-565 validó la arquitectura mediante prototipos. VELA-566 **formaliza** el 
 - **Notación EBNF:** Reglas y símbolos utilizados
 - **Gramática Léxica:** Tokens, keywords (60+), identificadores, literales, operadores (30+), delimitadores
 - **Gramática Sintáctica:** 
-  - Estructura de programa (módulos, imports, exports)
+  - Estructura de programa (módulos, imports, public exports)
   - Declaraciones (funciones, structs, enums, traits, impl)
-  - Statements (let, expression, blocks)
+  - Statements (inmutables, state, expression, blocks)
   - Expressions (15 niveles de precedencia)
-  - Control flow (if, match, loops, async/await, try/catch)
+  - Control flow (if, match, métodos funcionales, async/await, try/catch)
   - Patterns (literal, identifier, tuple, struct, enum, or, range)
   - Types (primitives, arrays, tuples, functions, generics, references)
 - **Keywords Domain-Specific:** widget, component, service, repository, entity, dto, factory, builder, strategy, observer, singleton, adapter, decorator, controller, middleware, guard, interceptor, validator, pipe, task, helper, mapper, serializer, store, provider, actor
 - **Sistema Reactivo:** Signal, Computed, Effect, Watch, @injectable, @inject, @container, @provides, @get, @post, @put, @delete, @patch, store, dispatch
-- **Features Modernos:** String interpolation `${}`, optional chaining `?.`, null coalescing `??`, exponentiation `**`, async/await, pattern matching, generics, error handling
+- **Features Modernos:** String interpolation `${}`, optional chaining `?.`, Option<T> coalescing `??`, exponentiation `**`, async/await, pattern matching, generics, error handling
 - **Tabla de Precedencia:** 15 niveles (assignment → logical → equality → comparison → bitwise → arithmetic → unary → postfix)
 
 **Decisiones Clave:**
@@ -52,7 +52,7 @@ VELA-565 validó la arquitectura mediante prototipos. VELA-566 **formaliza** el 
 2. 60+ keywords (balance entre expresividad y simplicidad)
 3. 15 niveles de precedencia (similar a Rust)
 4. String interpolation con `${}` (más seguro que templates)
-5. Optional chaining `?.` y null coalescing `??` (ergonomía)
+5. Optional chaining `?.` y Option<T> coalescing `??` (ergonomía)
 6. Pattern matching exhaustivo (seguridad)
 
 ---
@@ -65,7 +65,7 @@ VELA-565 validó la arquitectura mediante prototipos. VELA-566 **formaliza** el 
   1. Assignment (`=`, `+=`, etc.) - Right
   2. Logical OR (`||`) - Left
   3. Logical AND (`&&`) - Left
-  4. Null Coalescing (`??`) - Left
+  4. Option<T> Coalescing (`??`) - Left
   5. Equality (`==`, `!=`) - Left
   6. Comparison (`<`, `>`, `<=`, `>=`) - Left
   7. Bitwise OR (`|`) - Left
@@ -95,22 +95,22 @@ VELA-565 validó la arquitectura mediante prototipos. VELA-566 **formaliza** el 
 2. Exponenciación Right Associative: `a ** b ** c` → `a ** (b ** c)`
 3. `??` nivel 4 (antes de equality, después de logical)
 4. NO comparaciones encadenadas: `a < b < c` es error
-5. `?` postfix (error propagation) distinto de `??` infix (null coalescing)
+5. `?` postfix (error propagation) distinto de `??` infix (Option<T> coalescing)
 
 ---
 
 ### ✅ TASK-003: Palabras reservadas
-**Archivo:** `docs/language-design/reserved-keywords.md` (~1,100 lines)
+**Archivo:** `docs/language-design/reserved-keywords.md` (~1,271 lines) - **CORREGIDO**
 
-**Contenido:**
-- **80 Keywords Totales** organizadas en 10 categorías:
-  - Control Flow (11): `if`, `else`, `match`, `while`, `for`, `in`, `loop`, `break`, `continue`, `return`, `yield`
-  - Declarations (8): `let`, `const`, `fn`, `struct`, `enum`, `trait`, `impl`, `type`
-  - Visibility & Modifiers (6): `pub`, `mut`, `async`, `static`, `unsafe`, `extern`
-  - Types & Values (7): `true`, `false`, `null`, `self`, `Self`, `super`, `crate`
-  - Error Handling (3): `try`, `catch`, `throw`
-  - Async Programming (2): `async`, `await`
-  - Module System (5): `import`, `export`, `from`, `as`, `module`
+**Contenido (POST-CORRECCIÓN):**
+- **~100 Keywords Totales** organizadas en categorías funcionales:
+  - Control Flow (3): `if`, `else`, `match` (NO loops imperativos)
+  - Declarations (8): `state`, `fn`, `struct`, `enum`, `trait`, `impl`, `type`, `interface`
+  - Visibility & Modifiers (9): `public`, `private`, `protected`, `async`, `static`, `abstract`, `override`, `overload`, `extern`
+  - Types & Values (8): `true`, `false`, `None`, `Some`, `self`, `Self`, `super`, `Option`
+  - Error Handling (4): `try`, `catch`, `throw`, `finally`
+  - Async Programming (3): `async`, `await`, `yield`
+  - Module System (4): `import`, `from`, `as`, `show`, `hide` (NO export keyword)
   - **Domain-Specific (25):**
     - UI: `widget`, `component`
     - Architecture: `service`, `repository`, `controller`, `usecase`
@@ -131,12 +131,15 @@ VELA-565 validó la arquitectura mediante prototipos. VELA-566 **formaliza** el 
   - Por qué reservar keywords para futuro
 - **Comparación con Lenguajes:** Vela (80) vs Rust (53), Python (35), JavaScript (63), Java (50), C++ (95), Go (25)
 
-**Decisiones Clave:**
-1. **80 keywords** (más que mayoría, pero justificado)
+**Decisiones Clave (POST-CORRECCIÓN):**
+1. **~100 keywords** (paradigma funcional puro)
 2. **25 domain-specific** (claridad arquitectónica)
 3. **8 reactive** (reactividad first-class)
-4. **5 reserved** (prevención de breaking changes)
-5. Capitalización: `Signal`, `Computed`, `Effect`, `Watch` (son constructores)
+4. **NO loops imperativos** (for, while, loop eliminados)
+5. **NO mutabilidad por defecto** (let, const, var eliminados; usar state)
+6. **Option<T> en lugar de null** (None/Some en lugar de null/undefined)
+7. **Modificador public** en lugar de export keyword
+8. Capitalización: `Signal`, `Computed`, `Effect`, `Watch` (son constructores)
 
 ---
 
@@ -159,9 +162,9 @@ VELA-565 validó la arquitectura mediante prototipos. VELA-566 **formaliza** el 
 
 | Archivo | Tipo | Líneas | Contenido |
 |---------|------|--------|-----------|
-| `vela-grammar-ebnf.md` | Especificación | ~400 | Gramática completa |
+| `vela-grammar-ebnf.md` | Especificación | ~400 | Gramática completa (CORREGIDA) |
 | `operator-precedence.md` | Especificación | ~850 | 40+ operadores, 15+ ejemplos |
-| `reserved-keywords.md` | Especificación | ~1,100 | 80 keywords, 40+ ejemplos |
+| `reserved-keywords.md` | Especificación | ~1,271 | ~100 keywords funcionales (CORREGIDA) |
 | `TASK-001.md` | Documentación | ~300 | Meta-documentación EBNF |
 | `TASK-002.md` | Documentación | ~850 | Meta-documentación precedencia |
 | `TASK-003.md` | Documentación | ~1,100 | Meta-documentación keywords |
@@ -172,14 +175,14 @@ VELA-565 validó la arquitectura mediante prototipos. VELA-566 **formaliza** el 
 
 ## 📊 Métricas
 
-### Especificación del Lenguaje
-- **Keywords:** 80 (10 categorías)
+### Especificación del Lenguaje (POST-CORRECCIÓN)
+- **Keywords:** ~100 (paradigma funcional puro)
 - **Operadores:** 40+ (15 niveles de precedencia)
-- **Reglas EBNF:** 150+ (léxicas + sintácticas)
-- **Tipos primitivos:** 10 (`i8`, `i16`, `i32`, `i64`, `i128`, `u8`, `u16`, `u32`, `u64`, `u128`, `f32`, `f64`, `bool`, `char`, `string`)
+- **Reglas EBNF:** 150+ (léxicas + sintácticas, CORREGIDAS)
+- **Tipos primitivos:** Number, Float, String, Bool, Option<T>, Result<T, E>
 - **Keywords domain-specific:** 25 (arquitectura + patrones)
 - **Keywords reactivos:** 8 (signals, stores, DI)
-- **Keywords reservados:** 5 (futuro)
+- **Métodos funcionales:** 25+ (.map(), .filter(), .reduce(), .forEach(), etc.)
 
 ### Documentación
 - **Archivos creados:** 7
@@ -198,11 +201,12 @@ VELA-565 validó la arquitectura mediante prototipos. VELA-566 **formaliza** el 
 ## ✅ Definición de Hecho (DoD)
 
 ### Funcional
-- [x] Gramática EBNF completa (léxica + sintáctica)
-- [x] Todos los tokens definidos (keywords, operadores, delimitadores)
+- [x] Gramática EBNF completa (léxica + sintáctica) - **CORREGIDA**
+- [x] Todos los tokens definidos (keywords funcionales, operadores, delimitadores)
 - [x] Tabla de precedencia completa (15 niveles)
-- [x] Lista completa de keywords (80)
+- [x] Lista completa de keywords (~100 funcionales) - **CORREGIDA**
 - [x] Reglas de asociatividad especificadas
+- [x] **CORRECCIONES POST-SPRINT:** Eliminados loops imperativos, null, let/const/var, export
 
 ### Documentación
 - [x] Especificación EBNF con ejemplos
@@ -302,7 +306,7 @@ VELA-565 validó la arquitectura mediante prototipos. VELA-566 **formaliza** el 
 
 **Justificación:**
 - ✅ **Reactividad core:** Fundamental en Vela
-- ✅ **Ergonomía:** `let count = Signal(0)` > `let count = reactive(0)`
+- ✅ **Ergonomía:** `count: Signal<Number> = Signal(0)` (inmutable y reactivo)
 - ✅ **Consistencia:** Integrado en lenguaje, no librería
 - ✅ **Modern:** Reactividad es estándar en apps modernas
 
@@ -379,14 +383,14 @@ VELA-565 validó la arquitectura mediante prototipos. VELA-566 **formaliza** el 
 
 ---
 
-### 8. Optional Chaining `?.` y Null Coalescing `??`
+### 8. Optional Chaining `?.` y Option<T> Coalescing `??`
 
-**Decisión:** Incluir `?.` (optional chaining) y `??` (null coalescing)
+**Decisión:** Incluir `?.` (optional chaining) y `??` (Option<T> coalescing)
 
 **Justificación:**
-- ✅ **Ergonomía:** `user?.profile?.email` > `user && user.profile && user.profile.email`
+- ✅ **Ergonomía:** `user?.profile?.email` > verificación manual anidada
 - ✅ **Modernidad:** Features estándar en lenguajes modernos (JS, C#, Swift)
-- ✅ **Safety:** Manejo explícito de nulls
+- ✅ **Safety:** Manejo explícito de Option<T> con None/Some
 - ✅ **Legibilidad:** Código más conciso
 
 **Alternativas Consideradas:**
@@ -395,7 +399,7 @@ VELA-565 validó la arquitectura mediante prototipos. VELA-566 **formaliza** el 
 - Usar `||` en lugar de `??` (ambiguo)
 
 **Consecuencias:**
-- ✅ Manejo de nulls ergonómico
+- ✅ Manejo de Option<T> ergonómico (None/Some en lugar de null)
 - ✅ Código más legible
 - ⚠️ 2 operadores adicionales (pero valen la pena)
 
@@ -456,6 +460,11 @@ VELA-565 validó la arquitectura mediante prototipos. VELA-566 **formaliza** el 
    - 8 keywords reactivos
    - Aumenta complejidad
    - Decision: Reactividad es core en Vela
+
+6. **Correcciones post-Sprint**
+   - Archivos originales contenían keywords imperativos (for, while, loop)
+   - Se corrigió a paradigma funcional puro (commits e5bc0a6, 39c7f5c)
+   - ~100 keywords finales (vs 80 originales)
 
 ### 🔄 Mejoras futuras
 
@@ -523,11 +532,13 @@ VELA-565 validó la arquitectura mediante prototipos. VELA-566 **formaliza** el 
 - ✅ **Documentación exhaustiva:** ~5,200 lines
 - ✅ **Decisiones validadas:** Prototipos + especificación formal
 
-### En el Lenguaje
-- ✅ **Gramática completa:** 150+ reglas EBNF
-- ✅ **80 keywords:** Cobertura completa del lenguaje
+### En el Lenguaje (POST-CORRECCIÓN)
+- ✅ **Gramática completa:** 150+ reglas EBNF (funcional pura)
+- ✅ **~100 keywords:** Cobertura completa con paradigma funcional
 - ✅ **40+ operadores:** Precedencia bien definida
-- ✅ **Features modernos:** String interpolation, optional chaining, null coalescing, async/await, pattern matching
+- ✅ **Features modernos:** String interpolation, optional chaining, Option<T> coalescing, async/await, pattern matching
+- ✅ **NO loops imperativos:** for, while, loop eliminados
+- ✅ **NO mutabilidad por defecto:** let, const, var eliminados
 
 ### En el Compilador (Futuro)
 - 🔧 **Lexer:** Tabla de keywords y operadores lista
@@ -547,23 +558,31 @@ VELA-565 validó la arquitectura mediante prototipos. VELA-566 **formaliza** el 
 
 | Aspecto | Vela | Rust | Python | JavaScript | Go |
 |---------|------|------|--------|------------|-----|
-| **Keywords** | 80 | 53 | 35 | 63 | 25 |
+| **Keywords** | ~100 | 53 | 35 | 63 | 25 |
 | **Precedence Levels** | 15 | 14 | 16 | 20 | 5 |
 | **Operators** | 40+ | 35+ | 30+ | 50+ | 20+ |
 | **Domain-Specific** | ✅ 25 | ❌ | ❌ | ❌ | ❌ |
 | **Reactive Built-in** | ✅ 8 | ❌ | ❌ | ❌ | ❌ |
+| **Functional Methods** | ✅ 25+ | ✅ | ✅ | ✅ | ✅ |
+| **Imperative Loops** | ❌ | ✅ | ✅ | ✅ | ✅ |
+| **Null Type** | ❌ Option<T> | ❌ Option<T> | ✅ None | ✅ null | ✅ nil |
+| **Immutable by Default** | ✅ | ❌ | ❌ | ❌ | ❌ |
 | **String Interpolation** | ✅ `${}` | ❌ (macros) | ✅ f-strings | ✅ template strings | ❌ |
 | **Optional Chaining** | ✅ `?.` | ❌ | ❌ | ✅ `?.` | ❌ |
-| **Null Coalescing** | ✅ `??` | ❌ | ❌ | ✅ `??` | ❌ |
+| **Option<T> Coalescing** | ✅ `??` | ❌ | ❌ | ✅ `??` | ❌ |
 | **Pattern Matching** | ✅ | ✅ | ✅ (3.10+) | ❌ | ❌ |
 | **Async/Await** | ✅ | ✅ | ✅ | ✅ | ❌ (goroutines) |
 
-**Análisis:**
-- Vela tiene **MÁS keywords** (80) que la mayoría por domain-specific y reactive support
+**Análisis (POST-CORRECCIÓN):**
+- Vela tiene **MÁS keywords** (~100) que la mayoría por paradigma funcional puro + domain-specific + reactive
 - **Precedencia similar a Rust** (14-15 niveles) - probado y exitoso
-- **Features modernos** como optional chaining, null coalescing, string interpolation
+- **Paradigma funcional PURO:** NO loops imperativos (for, while, loop)
+- **Inmutabilidad por defecto:** NO let/const/var keywords
+- **Option<T> en lugar de null:** None/Some (seguridad de tipos)
+- **Features modernos** como optional chaining, Option<T> coalescing, string interpolation
 - **Único** con domain-specific keywords (service, repository, dto, widget, etc.)
 - **Único** con reactive keywords first-class (Signal, Computed, Effect, Watch, store)
+- **Único** con paradigma funcional puro e inmutabilidad por defecto
 
 ---
 
@@ -596,11 +615,12 @@ VELA-565 validó la arquitectura mediante prototipos. VELA-566 **formaliza** el 
 ✅ **3 Subtasks completadas**
 ✅ **7 archivos generados** (~5,200 lines)
 ✅ **Especificación formal completa** (EBNF + precedencia + keywords)
-✅ **80 keywords** documentadas con ejemplos
+✅ **~100 keywords funcionales** documentadas con ejemplos (POST-CORRECCIÓN)
 ✅ **40+ operadores** con 15 niveles de precedencia
 ✅ **100+ ejemplos** de código funcional
 ✅ **15+ decisiones** arquitectónicas documentadas
 ✅ **Comparación** con 8 lenguajes (C++, Rust, Python, JavaScript, Java, Go, TypeScript, Swift)
+✅ **CORRECCIONES:** Commits e5bc0a6 y 39c7f5c eliminaron keywords imperativos
 
 🚀 **Phase 0 COMPLETADA**
 
@@ -613,7 +633,8 @@ VELA-565 validó la arquitectura mediante prototipos. VELA-566 **formaliza** el 
 **Estado:** ✅ COMPLETADA  
 **Fecha:** 2025-11-30  
 **Total Subtasks:** 3/3 ✅  
-**Total Archivos:** 7 (~5,200 lines)  
-**Total Keywords:** 80  
+**Total Archivos:** 7 (~5,200 lines) + 2 correcciones post-Sprint  
+**Total Keywords:** ~100 (paradigma funcional puro)  
 **Total Operadores:** 40+  
-**Total Ejemplos:** 100+
+**Total Ejemplos:** 100+  
+**Commits de Corrección:** e5bc0a6, 39c7f5c (eliminados for, while, loop, null, let, const, var, export)
