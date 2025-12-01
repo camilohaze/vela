@@ -11,7 +11,7 @@ Implementa el decorador @injectable que marca clases/keywords arquitectónicos
 como inyectables en el sistema DI con soporte para scopes.
 """
 
-from typing import Type, TypeVar, Optional, Any, Dict, Callable
+from typing import Type, TypeVar, Optional, Any, Dict, Callable, Union
 from dataclasses import dataclass, field
 from .scopes import Scope, DEFAULT_SCOPE
 
@@ -40,21 +40,28 @@ class InjectableMetadata:
 
 
 def injectable(
+    _cls: Optional[Type[T]] = None,
+    *,
     scope: Scope = DEFAULT_SCOPE,
     token: Optional[str] = None,
     factory: Optional[Callable[..., Any]] = None
-) -> Callable[[Type[T]], Type[T]]:
+) -> Union[Type[T], Callable[[Type[T]], Type[T]]]:
     """
     Decorador que marca una clase/keyword como inyectable en el sistema DI.
     
+    Soporta ambas formas:
+        @injectable                     # Sin paréntesis (defaults)
+        @injectable(scope=Scope.SCOPED) # Con paréntesis (custom args)
+    
     Args:
+        _cls: Clase a decorar (solo cuando se usa sin paréntesis)
         scope: Scope de lifecycle (Singleton, Transient, Scoped).
                Default: Scope.SINGLETON
         token: Token opcional para registro. Si no se provee, usa el nombre de clase.
         factory: Factory function opcional para crear instancias custom.
     
     Returns:
-        Decorator function que agrega metadata a la clase
+        Clase decorada o decorator function
     
     Raises:
         TypeError: Si se intenta decorar algo que no es una clase
@@ -113,6 +120,8 @@ def injectable(
     """
     
     def decorator(cls: Type[T]) -> Type[T]:
+        import inspect
+        
         # Validar que sea una clase
         if not isinstance(cls, type):
             raise TypeError(
@@ -120,12 +129,26 @@ def injectable(
                 f"Recibido: {type(cls).__name__}"
             )
         
+        # Inferir dependencias desde type hints del constructor
+        dependencies = []
+        if hasattr(cls, '__init__'):
+            try:
+                sig = inspect.signature(cls.__init__)
+                for param_name, param in sig.parameters.items():
+                    if param_name == 'self':
+                        continue
+                    if param.annotation != inspect.Parameter.empty:
+                        # Agregar type hint como dependencia
+                        dependencies.append(param.annotation)
+            except (ValueError, TypeError):
+                pass
+        
         # Crear metadata
         metadata = InjectableMetadata(
             scope=scope,
             token=token or cls.__name__,
             factory=factory,
-            dependencies=[]  # Se inferirá después desde __init__
+            dependencies=dependencies
         )
         
         # Almacenar metadata en la clase
@@ -140,7 +163,13 @@ def injectable(
         
         return cls
     
-    return decorator
+    # Soportar ambas formas: @injectable y @injectable()
+    if _cls is not None:
+        # Llamado sin paréntesis: @injectable
+        return decorator(_cls)
+    else:
+        # Llamado con paréntesis: @injectable(...)
+        return decorator
 
 
 def is_injectable(cls: Type) -> bool:
