@@ -581,6 +581,89 @@ class SerializerDeclaration(Declaration):
 
 
 # ===================================================================
+# MODULE SYSTEM (Angular-style)
+# ===================================================================
+
+@dataclass
+class Decorator:
+    """
+    Decorator/Annotation.
+    
+    Ejemplos en Vela:
+    ```vela
+    @injectable
+    @controller("/api/users")
+    @get("/profile")
+    @validate
+    @module({
+      declarations: [UserService, UserController],
+      exports: [UserService],
+      providers: [UserService],
+      imports: [HttpModule]
+    })
+    ```
+    
+    Tipos de decoradores:
+    - DI: @injectable, @inject, @container, @provides, @singleton
+    - HTTP/REST: @controller, @get, @post, @put, @delete, @patch
+    - Guards/Middleware: @middleware, @guard
+    - Validación: @validate, @required, @email, @min, @max, @length, @regex
+    - Module System: @module, @extension, @library, @package
+    """
+    name: str
+    arguments: List['Expression'] = field(default_factory=list)
+    range: Range = field(default=None)
+
+
+@dataclass
+class ModuleDeclaration(Declaration):
+    """
+    module keyword - Angular-style module (NO instanciable).
+    
+    Ejemplo en Vela:
+    ```vela
+    @module({
+      declarations: [AuthService, LoginWidget, RegisterWidget],
+      exports: [AuthService],
+      providers: [AuthService, TokenService],
+      imports: [HttpModule, CryptoModule]
+    })
+    module AuthModule {
+      # Módulo NO instanciable (NO tiene constructor)
+      # NO se puede hacer: new AuthModule()
+    }
+    ```
+    
+    Reglas Obligatorias:
+    1. DEBE tener decorador @module({ ... })
+    2. declarations DEBE contener todas las clases del módulo
+    3. exports DEBE ser subconjunto de declarations (exports ⊆ declarations)
+    4. providers DEBE ser subconjunto de declarations
+    5. imports DEBE referenciar otros módulos válidos
+    6. NO es instanciable (NO tiene constructor, NO se puede hacer new ModuleX())
+    7. NO puede tener métodos de instancia
+    8. Solo puede contener declaraciones estáticas
+    
+    Sistema de Imports con Prefijos:
+    - import 'system:ui'      → APIs internas de Vela (Container, Column, Text, etc.)
+    - import 'package:http'   → Dependencias externas (npm, pub, etc.)
+    - import 'module:auth'    → Módulos del proyecto (@module)
+    - import 'library:utils'  → Librerías internas (@library)
+    - import 'extension:charts' → Extensiones internas (@extension)
+    - import 'assets:images'  → Assets del proyecto
+    """
+    name: str
+    decorators: List[Decorator] = field(default_factory=list)
+    body: List[Declaration] = field(default_factory=list)  # Declaraciones dentro del módulo
+    
+    # Metadata extraída del decorador @module (se llena durante semantic analysis)
+    declarations: List[str] = field(default_factory=list)  # Nombres de clases declaradas
+    exports: List[str] = field(default_factory=list)       # Nombres de clases exportadas
+    providers: List[str] = field(default_factory=list)     # Nombres de clases proveedoras
+    imports: List[str] = field(default_factory=list)       # Nombres de módulos importados
+
+
+# ===================================================================
 # STATEMENTS
 # ===================================================================
 
