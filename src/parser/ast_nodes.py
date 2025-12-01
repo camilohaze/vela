@@ -394,6 +394,193 @@ class DTODeclaration(Declaration):
 
 
 # ===================================================================
+# UI KEYWORDS
+# ===================================================================
+
+@dataclass
+class WidgetDeclaration(Declaration):
+    """widget keyword - Stateful widget (UI component)"""
+    name: str
+    fields: List['ClassField']
+    methods: List['MethodDeclaration']
+
+
+@dataclass
+class ComponentDeclaration(Declaration):
+    """component keyword - UI component"""
+    name: str
+    fields: List['ClassField']
+    methods: List['MethodDeclaration']
+
+
+# ===================================================================
+# MODEL KEYWORDS
+# ===================================================================
+
+@dataclass
+class ModelDeclaration(Declaration):
+    """model keyword - Generic model"""
+    name: str
+    fields: List['StructField']
+
+
+# ===================================================================
+# DESIGN PATTERN KEYWORDS
+# ===================================================================
+
+@dataclass
+class FactoryDeclaration(Declaration):
+    """factory keyword - Factory pattern"""
+    name: str
+    methods: List['MethodDeclaration']
+
+
+@dataclass
+class BuilderDeclaration(Declaration):
+    """builder keyword - Builder pattern"""
+    name: str
+    methods: List['MethodDeclaration']
+
+
+@dataclass
+class StrategyDeclaration(Declaration):
+    """strategy keyword - Strategy pattern"""
+    name: str
+    methods: List['MethodDeclaration']
+
+
+@dataclass
+class ObserverDeclaration(Declaration):
+    """observer keyword - Observer pattern"""
+    name: str
+    methods: List['MethodDeclaration']
+
+
+@dataclass
+class SingletonDeclaration(Declaration):
+    """singleton keyword - Singleton pattern"""
+    name: str
+    fields: List['ClassField']
+    methods: List['MethodDeclaration']
+
+
+@dataclass
+class AdapterDeclaration(Declaration):
+    """adapter keyword - Adapter pattern"""
+    name: str
+    methods: List['MethodDeclaration']
+
+
+@dataclass
+class DecoratorDeclaration(Declaration):
+    """decorator keyword - Decorator pattern"""
+    name: str
+    methods: List['MethodDeclaration']
+
+
+# ===================================================================
+# WEB/API KEYWORDS
+# ===================================================================
+
+@dataclass
+class GuardDeclaration(Declaration):
+    """guard keyword - Route guard/authorization"""
+    name: str
+    methods: List['MethodDeclaration']
+
+
+@dataclass
+class MiddlewareDeclaration(Declaration):
+    """middleware keyword - HTTP middleware"""
+    name: str
+    methods: List['MethodDeclaration']
+
+
+@dataclass
+class InterceptorDeclaration(Declaration):
+    """interceptor keyword - Request/response interceptor"""
+    name: str
+    methods: List['MethodDeclaration']
+
+
+@dataclass
+class ValidatorDeclaration(Declaration):
+    """validator keyword - Input validator"""
+    name: str
+    methods: List['MethodDeclaration']
+
+
+# ===================================================================
+# STATE & DI KEYWORDS
+# ===================================================================
+
+@dataclass
+class StoreDeclaration(Declaration):
+    """store keyword - State store"""
+    name: str
+    fields: List['ClassField']
+    methods: List['MethodDeclaration']
+
+
+@dataclass
+class ProviderDeclaration(Declaration):
+    """provider keyword - Dependency provider"""
+    name: str
+    methods: List['MethodDeclaration']
+
+
+# ===================================================================
+# CONCURRENCY KEYWORDS
+# ===================================================================
+
+@dataclass
+class ActorDeclaration(Declaration):
+    """actor keyword - Actor model concurrency"""
+    name: str
+    fields: List['ClassField']
+    methods: List['MethodDeclaration']
+
+
+# ===================================================================
+# UTILITY KEYWORDS
+# ===================================================================
+
+@dataclass
+class PipeDeclaration(Declaration):
+    """pipe keyword - Transformation pipeline"""
+    name: str
+    methods: List['MethodDeclaration']
+
+
+@dataclass
+class TaskDeclaration(Declaration):
+    """task keyword - Asynchronous task/job"""
+    name: str
+    methods: List['MethodDeclaration']
+
+
+@dataclass
+class HelperDeclaration(Declaration):
+    """helper keyword - Helper utilities"""
+    name: str
+    methods: List['MethodDeclaration']
+
+
+@dataclass
+class MapperDeclaration(Declaration):
+    """mapper keyword - Object mapper"""
+    name: str
+    methods: List['MethodDeclaration']
+
+
+@dataclass
+class SerializerDeclaration(Declaration):
+    """serializer keyword - Data serializer"""
+    name: str
+    methods: List['MethodDeclaration']
+
+
+# ===================================================================
 # STATEMENTS
 # ===================================================================
 

@@ -380,6 +380,79 @@ class Parser:
         if self.check(TokenType.DTO):
             return self.parse_dto_declaration(is_public)
         
+        # UI Keywords
+        if self.check(TokenType.WIDGET):
+            return self.parse_widget_declaration(is_public)
+        
+        if self.check(TokenType.COMPONENT):
+            return self.parse_component_declaration(is_public)
+        
+        # Models
+        if self.check(TokenType.MODEL):
+            return self.parse_model_declaration(is_public)
+        
+        # Design Patterns
+        if self.check(TokenType.FACTORY):
+            return self.parse_factory_declaration(is_public)
+        
+        if self.check(TokenType.BUILDER):
+            return self.parse_builder_declaration(is_public)
+        
+        if self.check(TokenType.STRATEGY):
+            return self.parse_strategy_declaration(is_public)
+        
+        if self.check(TokenType.OBSERVER):
+            return self.parse_observer_declaration(is_public)
+        
+        if self.check(TokenType.SINGLETON):
+            return self.parse_singleton_declaration(is_public)
+        
+        if self.check(TokenType.ADAPTER):
+            return self.parse_adapter_declaration(is_public)
+        
+        if self.check(TokenType.DECORATOR):
+            return self.parse_decorator_declaration(is_public)
+        
+        # Web/API
+        if self.check(TokenType.GUARD):
+            return self.parse_guard_declaration(is_public)
+        
+        if self.check(TokenType.MIDDLEWARE):
+            return self.parse_middleware_declaration(is_public)
+        
+        if self.check(TokenType.INTERCEPTOR):
+            return self.parse_interceptor_declaration(is_public)
+        
+        if self.check(TokenType.VALIDATOR):
+            return self.parse_validator_declaration(is_public)
+        
+        # State & DI
+        if self.check(TokenType.STORE):
+            return self.parse_store_declaration(is_public)
+        
+        if self.check(TokenType.PROVIDER):
+            return self.parse_provider_declaration(is_public)
+        
+        # Concurrency
+        if self.check(TokenType.ACTOR):
+            return self.parse_actor_declaration(is_public)
+        
+        # Utilities
+        if self.check(TokenType.PIPE_KEYWORD):
+            return self.parse_pipe_declaration(is_public)
+        
+        if self.check(TokenType.TASK):
+            return self.parse_task_declaration(is_public)
+        
+        if self.check(TokenType.HELPER):
+            return self.parse_helper_declaration(is_public)
+        
+        if self.check(TokenType.MAPPER):
+            return self.parse_mapper_declaration(is_public)
+        
+        if self.check(TokenType.SERIALIZER):
+            return self.parse_serializer_declaration(is_public)
+        
         # Unknown
         token = self.peek()
         if token:
@@ -1018,6 +1091,499 @@ class Parser:
             is_public=is_public,
             name=name,
             fields=fields
+        )
+    
+    # ===============================================================
+    # UI KEYWORDS
+    # ===============================================================
+    
+    def parse_widget_declaration(self, is_public: bool = False) -> WidgetDeclaration:
+        """Parsea widget declaration (StatefulWidget)"""
+        start = self.expect(TokenType.WIDGET)
+        name = self.expect(TokenType.IDENTIFIER).value
+        
+        self.expect(TokenType.LBRACE)
+        fields = []
+        methods = []
+        while not self.check(TokenType.RBRACE) and not self.is_at_end():
+            if self.check(TokenType.FN) or self.check(TokenType.ASYNC):
+                methods.append(self.parse_method())
+            else:
+                fields.append(self.parse_class_field())
+        self.expect(TokenType.RBRACE)
+        
+        end = self.peek(-1)
+        
+        return WidgetDeclaration(
+            range=self.create_range_from_tokens(start, end),
+            is_public=is_public,
+            name=name,
+            fields=fields,
+            methods=methods
+        )
+    
+    def parse_component_declaration(self, is_public: bool = False) -> ComponentDeclaration:
+        """Parsea component declaration"""
+        start = self.expect(TokenType.COMPONENT)
+        name = self.expect(TokenType.IDENTIFIER).value
+        
+        self.expect(TokenType.LBRACE)
+        fields = []
+        methods = []
+        while not self.check(TokenType.RBRACE) and not self.is_at_end():
+            if self.check(TokenType.FN) or self.check(TokenType.ASYNC):
+                methods.append(self.parse_method())
+            else:
+                fields.append(self.parse_class_field())
+        self.expect(TokenType.RBRACE)
+        
+        end = self.peek(-1)
+        
+        return ComponentDeclaration(
+            range=self.create_range_from_tokens(start, end),
+            is_public=is_public,
+            name=name,
+            fields=fields,
+            methods=methods
+        )
+    
+    # ===============================================================
+    # MODEL KEYWORDS
+    # ===============================================================
+    
+    def parse_model_declaration(self, is_public: bool = False) -> ModelDeclaration:
+        """Parsea model declaration"""
+        start = self.expect(TokenType.MODEL)
+        name = self.expect(TokenType.IDENTIFIER).value
+        
+        self.expect(TokenType.LBRACE)
+        fields = []
+        while not self.check(TokenType.RBRACE) and not self.is_at_end():
+            fields.append(self.parse_struct_field())
+        self.expect(TokenType.RBRACE)
+        
+        end = self.peek(-1)
+        
+        return ModelDeclaration(
+            range=self.create_range_from_tokens(start, end),
+            is_public=is_public,
+            name=name,
+            fields=fields
+        )
+    
+    # ===============================================================
+    # DESIGN PATTERN KEYWORDS
+    # ===============================================================
+    
+    def parse_factory_declaration(self, is_public: bool = False) -> FactoryDeclaration:
+        """Parsea factory declaration"""
+        start = self.expect(TokenType.FACTORY)
+        name = self.expect(TokenType.IDENTIFIER).value
+        
+        self.expect(TokenType.LBRACE)
+        methods = []
+        while not self.check(TokenType.RBRACE) and not self.is_at_end():
+            methods.append(self.parse_method())
+        self.expect(TokenType.RBRACE)
+        
+        end = self.peek(-1)
+        
+        return FactoryDeclaration(
+            range=self.create_range_from_tokens(start, end),
+            is_public=is_public,
+            name=name,
+            methods=methods
+        )
+    
+    def parse_builder_declaration(self, is_public: bool = False) -> BuilderDeclaration:
+        """Parsea builder declaration"""
+        start = self.expect(TokenType.BUILDER)
+        name = self.expect(TokenType.IDENTIFIER).value
+        
+        self.expect(TokenType.LBRACE)
+        methods = []
+        while not self.check(TokenType.RBRACE) and not self.is_at_end():
+            methods.append(self.parse_method())
+        self.expect(TokenType.RBRACE)
+        
+        end = self.peek(-1)
+        
+        return BuilderDeclaration(
+            range=self.create_range_from_tokens(start, end),
+            is_public=is_public,
+            name=name,
+            methods=methods
+        )
+    
+    def parse_strategy_declaration(self, is_public: bool = False) -> StrategyDeclaration:
+        """Parsea strategy declaration"""
+        start = self.expect(TokenType.STRATEGY)
+        name = self.expect(TokenType.IDENTIFIER).value
+        
+        self.expect(TokenType.LBRACE)
+        methods = []
+        while not self.check(TokenType.RBRACE) and not self.is_at_end():
+            methods.append(self.parse_method())
+        self.expect(TokenType.RBRACE)
+        
+        end = self.peek(-1)
+        
+        return StrategyDeclaration(
+            range=self.create_range_from_tokens(start, end),
+            is_public=is_public,
+            name=name,
+            methods=methods
+        )
+    
+    def parse_observer_declaration(self, is_public: bool = False) -> ObserverDeclaration:
+        """Parsea observer declaration"""
+        start = self.expect(TokenType.OBSERVER)
+        name = self.expect(TokenType.IDENTIFIER).value
+        
+        self.expect(TokenType.LBRACE)
+        methods = []
+        while not self.check(TokenType.RBRACE) and not self.is_at_end():
+            methods.append(self.parse_method())
+        self.expect(TokenType.RBRACE)
+        
+        end = self.peek(-1)
+        
+        return ObserverDeclaration(
+            range=self.create_range_from_tokens(start, end),
+            is_public=is_public,
+            name=name,
+            methods=methods
+        )
+    
+    def parse_singleton_declaration(self, is_public: bool = False) -> SingletonDeclaration:
+        """Parsea singleton declaration"""
+        start = self.expect(TokenType.SINGLETON)
+        name = self.expect(TokenType.IDENTIFIER).value
+        
+        self.expect(TokenType.LBRACE)
+        fields = []
+        methods = []
+        while not self.check(TokenType.RBRACE) and not self.is_at_end():
+            if self.check(TokenType.FN) or self.check(TokenType.ASYNC):
+                methods.append(self.parse_method())
+            else:
+                fields.append(self.parse_class_field())
+        self.expect(TokenType.RBRACE)
+        
+        end = self.peek(-1)
+        
+        return SingletonDeclaration(
+            range=self.create_range_from_tokens(start, end),
+            is_public=is_public,
+            name=name,
+            fields=fields,
+            methods=methods
+        )
+    
+    def parse_adapter_declaration(self, is_public: bool = False) -> AdapterDeclaration:
+        """Parsea adapter declaration"""
+        start = self.expect(TokenType.ADAPTER)
+        name = self.expect(TokenType.IDENTIFIER).value
+        
+        self.expect(TokenType.LBRACE)
+        methods = []
+        while not self.check(TokenType.RBRACE) and not self.is_at_end():
+            methods.append(self.parse_method())
+        self.expect(TokenType.RBRACE)
+        
+        end = self.peek(-1)
+        
+        return AdapterDeclaration(
+            range=self.create_range_from_tokens(start, end),
+            is_public=is_public,
+            name=name,
+            methods=methods
+        )
+    
+    def parse_decorator_declaration(self, is_public: bool = False) -> DecoratorDeclaration:
+        """Parsea decorator declaration"""
+        start = self.expect(TokenType.DECORATOR)
+        name = self.expect(TokenType.IDENTIFIER).value
+        
+        self.expect(TokenType.LBRACE)
+        methods = []
+        while not self.check(TokenType.RBRACE) and not self.is_at_end():
+            methods.append(self.parse_method())
+        self.expect(TokenType.RBRACE)
+        
+        end = self.peek(-1)
+        
+        return DecoratorDeclaration(
+            range=self.create_range_from_tokens(start, end),
+            is_public=is_public,
+            name=name,
+            methods=methods
+        )
+    
+    # ===============================================================
+    # WEB/API KEYWORDS
+    # ===============================================================
+    
+    def parse_guard_declaration(self, is_public: bool = False) -> GuardDeclaration:
+        """Parsea guard declaration"""
+        start = self.expect(TokenType.GUARD)
+        name = self.expect(TokenType.IDENTIFIER).value
+        
+        self.expect(TokenType.LBRACE)
+        methods = []
+        while not self.check(TokenType.RBRACE) and not self.is_at_end():
+            methods.append(self.parse_method())
+        self.expect(TokenType.RBRACE)
+        
+        end = self.peek(-1)
+        
+        return GuardDeclaration(
+            range=self.create_range_from_tokens(start, end),
+            is_public=is_public,
+            name=name,
+            methods=methods
+        )
+    
+    def parse_middleware_declaration(self, is_public: bool = False) -> MiddlewareDeclaration:
+        """Parsea middleware declaration"""
+        start = self.expect(TokenType.MIDDLEWARE)
+        name = self.expect(TokenType.IDENTIFIER).value
+        
+        self.expect(TokenType.LBRACE)
+        methods = []
+        while not self.check(TokenType.RBRACE) and not self.is_at_end():
+            methods.append(self.parse_method())
+        self.expect(TokenType.RBRACE)
+        
+        end = self.peek(-1)
+        
+        return MiddlewareDeclaration(
+            range=self.create_range_from_tokens(start, end),
+            is_public=is_public,
+            name=name,
+            methods=methods
+        )
+    
+    def parse_interceptor_declaration(self, is_public: bool = False) -> InterceptorDeclaration:
+        """Parsea interceptor declaration"""
+        start = self.expect(TokenType.INTERCEPTOR)
+        name = self.expect(TokenType.IDENTIFIER).value
+        
+        self.expect(TokenType.LBRACE)
+        methods = []
+        while not self.check(TokenType.RBRACE) and not self.is_at_end():
+            methods.append(self.parse_method())
+        self.expect(TokenType.RBRACE)
+        
+        end = self.peek(-1)
+        
+        return InterceptorDeclaration(
+            range=self.create_range_from_tokens(start, end),
+            is_public=is_public,
+            name=name,
+            methods=methods
+        )
+    
+    def parse_validator_declaration(self, is_public: bool = False) -> ValidatorDeclaration:
+        """Parsea validator declaration"""
+        start = self.expect(TokenType.VALIDATOR)
+        name = self.expect(TokenType.IDENTIFIER).value
+        
+        self.expect(TokenType.LBRACE)
+        methods = []
+        while not self.check(TokenType.RBRACE) and not self.is_at_end():
+            methods.append(self.parse_method())
+        self.expect(TokenType.RBRACE)
+        
+        end = self.peek(-1)
+        
+        return ValidatorDeclaration(
+            range=self.create_range_from_tokens(start, end),
+            is_public=is_public,
+            name=name,
+            methods=methods
+        )
+    
+    # ===============================================================
+    # STATE & DI KEYWORDS
+    # ===============================================================
+    
+    def parse_store_declaration(self, is_public: bool = False) -> StoreDeclaration:
+        """Parsea store declaration"""
+        start = self.expect(TokenType.STORE)
+        name = self.expect(TokenType.IDENTIFIER).value
+        
+        self.expect(TokenType.LBRACE)
+        fields = []
+        methods = []
+        while not self.check(TokenType.RBRACE) and not self.is_at_end():
+            if self.check(TokenType.FN) or self.check(TokenType.ASYNC):
+                methods.append(self.parse_method())
+            else:
+                fields.append(self.parse_class_field())
+        self.expect(TokenType.RBRACE)
+        
+        end = self.peek(-1)
+        
+        return StoreDeclaration(
+            range=self.create_range_from_tokens(start, end),
+            is_public=is_public,
+            name=name,
+            fields=fields,
+            methods=methods
+        )
+    
+    def parse_provider_declaration(self, is_public: bool = False) -> ProviderDeclaration:
+        """Parsea provider declaration"""
+        start = self.expect(TokenType.PROVIDER)
+        name = self.expect(TokenType.IDENTIFIER).value
+        
+        self.expect(TokenType.LBRACE)
+        methods = []
+        while not self.check(TokenType.RBRACE) and not self.is_at_end():
+            methods.append(self.parse_method())
+        self.expect(TokenType.RBRACE)
+        
+        end = self.peek(-1)
+        
+        return ProviderDeclaration(
+            range=self.create_range_from_tokens(start, end),
+            is_public=is_public,
+            name=name,
+            methods=methods
+        )
+    
+    # ===============================================================
+    # CONCURRENCY KEYWORDS
+    # ===============================================================
+    
+    def parse_actor_declaration(self, is_public: bool = False) -> ActorDeclaration:
+        """Parsea actor declaration"""
+        start = self.expect(TokenType.ACTOR)
+        name = self.expect(TokenType.IDENTIFIER).value
+        
+        self.expect(TokenType.LBRACE)
+        fields = []
+        methods = []
+        while not self.check(TokenType.RBRACE) and not self.is_at_end():
+            if self.check(TokenType.FN) or self.check(TokenType.ASYNC):
+                methods.append(self.parse_method())
+            else:
+                fields.append(self.parse_class_field())
+        self.expect(TokenType.RBRACE)
+        
+        end = self.peek(-1)
+        
+        return ActorDeclaration(
+            range=self.create_range_from_tokens(start, end),
+            is_public=is_public,
+            name=name,
+            fields=fields,
+            methods=methods
+        )
+    
+    # ===============================================================
+    # UTILITY KEYWORDS
+    # ===============================================================
+    
+    def parse_pipe_declaration(self, is_public: bool = False) -> PipeDeclaration:
+        """Parsea pipe declaration"""
+        start = self.expect(TokenType.PIPE_KEYWORD)
+        name = self.expect(TokenType.IDENTIFIER).value
+        
+        self.expect(TokenType.LBRACE)
+        methods = []
+        while not self.check(TokenType.RBRACE) and not self.is_at_end():
+            methods.append(self.parse_method())
+        self.expect(TokenType.RBRACE)
+        
+        end = self.peek(-1)
+        
+        return PipeDeclaration(
+            range=self.create_range_from_tokens(start, end),
+            is_public=is_public,
+            name=name,
+            methods=methods
+        )
+    
+    def parse_task_declaration(self, is_public: bool = False) -> TaskDeclaration:
+        """Parsea task declaration"""
+        start = self.expect(TokenType.TASK)
+        name = self.expect(TokenType.IDENTIFIER).value
+        
+        self.expect(TokenType.LBRACE)
+        methods = []
+        while not self.check(TokenType.RBRACE) and not self.is_at_end():
+            methods.append(self.parse_method())
+        self.expect(TokenType.RBRACE)
+        
+        end = self.peek(-1)
+        
+        return TaskDeclaration(
+            range=self.create_range_from_tokens(start, end),
+            is_public=is_public,
+            name=name,
+            methods=methods
+        )
+    
+    def parse_helper_declaration(self, is_public: bool = False) -> HelperDeclaration:
+        """Parsea helper declaration"""
+        start = self.expect(TokenType.HELPER)
+        name = self.expect(TokenType.IDENTIFIER).value
+        
+        self.expect(TokenType.LBRACE)
+        methods = []
+        while not self.check(TokenType.RBRACE) and not self.is_at_end():
+            methods.append(self.parse_method())
+        self.expect(TokenType.RBRACE)
+        
+        end = self.peek(-1)
+        
+        return HelperDeclaration(
+            range=self.create_range_from_tokens(start, end),
+            is_public=is_public,
+            name=name,
+            methods=methods
+        )
+    
+    def parse_mapper_declaration(self, is_public: bool = False) -> MapperDeclaration:
+        """Parsea mapper declaration"""
+        start = self.expect(TokenType.MAPPER)
+        name = self.expect(TokenType.IDENTIFIER).value
+        
+        self.expect(TokenType.LBRACE)
+        methods = []
+        while not self.check(TokenType.RBRACE) and not self.is_at_end():
+            methods.append(self.parse_method())
+        self.expect(TokenType.RBRACE)
+        
+        end = self.peek(-1)
+        
+        return MapperDeclaration(
+            range=self.create_range_from_tokens(start, end),
+            is_public=is_public,
+            name=name,
+            methods=methods
+        )
+    
+    def parse_serializer_declaration(self, is_public: bool = False) -> SerializerDeclaration:
+        """Parsea serializer declaration"""
+        start = self.expect(TokenType.SERIALIZER)
+        name = self.expect(TokenType.IDENTIFIER).value
+        
+        self.expect(TokenType.LBRACE)
+        methods = []
+        while not self.check(TokenType.RBRACE) and not self.is_at_end():
+            methods.append(self.parse_method())
+        self.expect(TokenType.RBRACE)
+        
+        end = self.peek(-1)
+        
+        return SerializerDeclaration(
+            range=self.create_range_from_tokens(start, end),
+            is_public=is_public,
+            name=name,
+            methods=methods
         )
     
     # ===============================================================
