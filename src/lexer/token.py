@@ -4,9 +4,20 @@ Token Types for Vela Lexer
 Implementación de: VELA-567 (Sprint 5)
 Subtask: TASK-004
 Fecha: 2025-11-30
+Actualización: 2025-12-01 (Post-Sprint 8)
 
 Este módulo define todos los tipos de tokens que el lexer puede reconocer.
-Incluye ~100 keywords del paradigma funcional puro de Vela.
+Incluye ~120 keywords del paradigma funcional puro de Vela.
+
+ACTUALIZACIONES 2025-12-01:
+- Agregado keyword 'module' (Angular-style modules)
+- Agregados keywords 'extension', 'library', 'package'
+- Agregado keyword 'memo' (memoized computed)
+- Agregados keywords 'actor', 'Channel', 'Worker' (concurrency)
+- Agregados keywords 'on', 'emit', 'off' (event system)
+- Agregados keywords 'StatefulWidget', 'StatelessWidget'
+- Agregados lifecycle hooks 'beforeMount', 'afterMount'
+- Agregado keyword 'batch' (reactive batching)
 """
 
 from enum import Enum, auto
@@ -62,11 +73,13 @@ class TokenKind(Enum):
     EXTERN = auto()
     
     # ============================================================
-    # DOMAIN-SPECIFIC KEYWORDS (25)
+    # DOMAIN-SPECIFIC KEYWORDS (30+)
     # ============================================================
     # UI
     WIDGET = auto()
     COMPONENT = auto()
+    STATEFUL_WIDGET = auto()
+    STATELESS_WIDGET = auto()
     
     # Architecture
     SERVICE = auto()
@@ -104,25 +117,35 @@ class TokenKind(Enum):
     STORE = auto()
     PROVIDER = auto()
     
+    # Module System (Angular-style)
+    MODULE = auto()         # module keyword (NOT class, NOT namespace)
+    EXTENSION = auto()      # extension keyword
+    LIBRARY = auto()        # library keyword
+    PACKAGE = auto()        # package keyword
+    
     # ============================================================
-    # REACTIVE SYSTEM (8)
+    # REACTIVE SYSTEM (10)
     # ============================================================
     SIGNAL = auto()         # Signal<T> constructor
     COMPUTED = auto()       # Computed property
+    MEMO = auto()           # Memoized computed (aggressive cache)
     EFFECT = auto()         # Side effect
     WATCH = auto()          # Watch value changes
     DISPATCH = auto()       # Store dispatch
     PROVIDE = auto()        # DI provide
     INJECT = auto()         # DI inject
+    BATCH = auto()          # Batch reactive updates
     
     # ============================================================
-    # LIFECYCLE HOOKS
+    # LIFECYCLE HOOKS (7)
     # ============================================================
     MOUNT = auto()
+    BEFORE_MOUNT = auto()
+    AFTER_MOUNT = auto()
     UPDATE = auto()
-    DESTROY = auto()
     BEFORE_UPDATE = auto()
     AFTER_UPDATE = auto()
+    DESTROY = auto()
     
     # ============================================================
     # TYPES (NO null, undefined, nil)
@@ -155,8 +178,18 @@ class TokenKind(Enum):
     FINALLY = auto()
     
     # ============================================================
-    # ASYNC PROGRAMMING
+    # EVENT SYSTEM (3)
     # ============================================================
+    ON = auto()             # Event listener: on(event, handler)
+    EMIT = auto()           # Emit event: emit(event, data)
+    OFF = auto()            # Remove listener: off(event, handler)
+    
+    # ============================================================
+    # CONCURRENCY & ASYNC PROGRAMMING
+    # ============================================================
+    ACTOR = auto()          # Actor system keyword
+    CHANNEL = auto()        # Channel<T> for message passing
+    WORKER = auto()         # Worker threads
     ASYNC_KW = auto()       # async keyword
     AWAIT = auto()
     
@@ -345,9 +378,11 @@ KEYWORDS = {
     "static": TokenKind.STATIC,
     "extern": TokenKind.EXTERN,
     
-    # Domain-specific (25)
+    # Domain-specific (30+)
     "widget": TokenKind.WIDGET,
     "component": TokenKind.COMPONENT,
+    "StatefulWidget": TokenKind.STATEFUL_WIDGET,
+    "StatelessWidget": TokenKind.STATELESS_WIDGET,
     "service": TokenKind.SERVICE,
     "repository": TokenKind.REPOSITORY,
     "controller": TokenKind.CONTROLLER,
@@ -375,21 +410,41 @@ KEYWORDS = {
     "store": TokenKind.STORE,
     "provider": TokenKind.PROVIDER,
     
-    # Reactive (8)
+    # Module System (Angular-style)
+    "module": TokenKind.MODULE,
+    "extension": TokenKind.EXTENSION,
+    "library": TokenKind.LIBRARY,
+    "package": TokenKind.PACKAGE,
+    
+    # Reactive (10)
     "Signal": TokenKind.SIGNAL,
     "Computed": TokenKind.COMPUTED,
+    "memo": TokenKind.MEMO,
     "Effect": TokenKind.EFFECT,
     "Watch": TokenKind.WATCH,
     "dispatch": TokenKind.DISPATCH,
     "provide": TokenKind.PROVIDE,
     "inject": TokenKind.INJECT,
+    "batch": TokenKind.BATCH,
     
-    # Lifecycle
+    # Concurrency
+    "actor": TokenKind.ACTOR,
+    "Channel": TokenKind.CHANNEL,
+    "Worker": TokenKind.WORKER,
+    
+    # Event System
+    "on": TokenKind.ON,
+    "emit": TokenKind.EMIT,
+    "off": TokenKind.OFF,
+    
+    # Lifecycle (7)
     "mount": TokenKind.MOUNT,
+    "beforeMount": TokenKind.BEFORE_MOUNT,
+    "afterMount": TokenKind.AFTER_MOUNT,
     "update": TokenKind.UPDATE,
-    "destroy": TokenKind.DESTROY,
     "beforeUpdate": TokenKind.BEFORE_UPDATE,
     "afterUpdate": TokenKind.AFTER_UPDATE,
+    "destroy": TokenKind.DESTROY,
     
     # Types
     "Number": TokenKind.NUMBER,
@@ -457,5 +512,8 @@ if __name__ == "__main__":
     print(f"\n'service' is keyword: {is_keyword('service')}")
     print(f"'let' is keyword: {is_keyword('let')}")  # False (NO existe)
     print(f"'state' is keyword: {is_keyword('state')}")  # True
+    print(f"'module' is keyword: {is_keyword('module')}")  # True (agregado 2025-12-01)
+    print(f"'namespace' is keyword: {is_keyword('namespace')}")  # False (NO existe)
     
     print(f"\nTotal keywords: {len(KEYWORDS)}")
+    print(f"Total tokens: {len(TokenKind)}")
