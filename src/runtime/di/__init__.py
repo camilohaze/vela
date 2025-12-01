@@ -75,6 +75,31 @@ from .http_decorators import (
     get_routes_by_method,
     get_route_by_path,
 )
+from .providers import (
+    ProviderScope,
+    ProviderMetadata,
+    provides,
+    is_provider,
+    get_provider_metadata,
+    get_all_providers,
+    get_providers_by_scope,
+    get_provider_by_token,
+)
+from .file_decorators import (
+    FileMetadata,
+    FormMetadata,
+    FileMarker,
+    FormMarker,
+    file,
+    files,
+    upload,
+    uploads,
+    form,
+    is_file_parameter,
+    is_form_parameter,
+    get_file_metadata,
+    get_form_metadata,
+)
 
 __all__ = [
     # Scopes
@@ -154,7 +179,32 @@ __all__ = [
     'get_all_routes',
     'get_routes_by_method',
     'get_route_by_path',
+    
+    # Providers (TASK-035E)
+    'ProviderScope',
+    'ProviderMetadata',
+    'provides',
+    'is_provider',
+    'get_provider_metadata',
+    'get_all_providers',
+    'get_providers_by_scope',
+    'get_provider_by_token',
+    
+    # File Upload Decorators (TASK-035E)
+    'FileMetadata',
+    'FormMetadata',
+    'FileMarker',
+    'FormMarker',
+    'file',
+    'files',
+    'upload',
+    'uploads',
+    'form',
+    'is_file_parameter',
+    'is_form_parameter',
+    'get_file_metadata',
+    'get_form_metadata',
 ]
 
-__version__ = '0.5.1'  # TASK-035D3 completa: +@cookie, @request, @response
+__version__ = '0.7.0'  # TASK-035E: +@provides decorator + file upload decorators
 __author__ = 'GitHub Copilot Agent'

@@ -1,8 +1,0 @@
-2025-11-30 17:13:41 - 
-🔍 Verificando conexión con Jira...
-2025-11-30 17:13:41 - ✅ Conectado a Jira como: Cristian Camilo Naranjo Valencia (cristian.naranjo@outlook.es)
-2025-11-30 17:13:41 - 
-🔍 Verificando proyecto: VELA
-2025-11-30 17:13:42 - ✅ Proyecto encontrado: Vela Lang
-2025-11-30 17:13:43 - 🔍 No se encontró board Scrum específico, buscando cualquier board...
-2025-11-30 17:13:44 - ✅ Board encontrado: SCRUM board (ID: 1, Type: simple)
