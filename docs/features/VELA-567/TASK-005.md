@@ -1,5 +1,14 @@
 # TASK-005: String Interpolation con Sintaxis ${}
 
+## ⚠️ IMPORTANTE: Código Python del Compilador
+
+Este documento describe implementación del **lexer en Python** (compilador de Vela).
+
+- **Código mostrado**: Python (implementación del compilador)
+- **Sintaxis Vela**: Funcional puro (lenguaje a compilar)
+
+---
+
 ## 📋 Información General
 - **Historia:** VELA-567 (Lexer de Producción)
 - **Estado:** Completada ✅
@@ -67,7 +76,7 @@ def _string_with_interpolation(self, start_pos: Position) -> Token:
     - \" → quote
     - \\ → backslash
     - \$ → $ literal (NO interpola)
-    - \r, \0 → carriage return, null char
+    - \r, \0 → carriage return, carácter nulo (null byte en ASCII)
     
     Returns:
         Token(STRING_LITERAL, raw_string_with_${}, position)

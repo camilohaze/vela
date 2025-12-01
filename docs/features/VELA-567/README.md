@@ -8,6 +8,24 @@
 - **Fecha:** 2025-11-30
 - **Branch:** feature/VELA-567-lexer-produccion
 
+## ⚠️ IMPORTANTE: Compilador (Python) vs Lenguaje Vela
+
+Este Sprint implementa el **compilador de Vela** escrito en **Python**.
+
+### Dos componentes diferentes:
+
+1. **Código del compilador** (`src/lexer/*.py`): Escrito en **Python**
+   - Usa Python features: `while`, `for`, `class`, `def`, etc.
+   - Es la **herramienta** que compila código Vela
+   - Válido usar sintaxis imperativa Python
+
+2. **Lenguaje Vela** (código a compilar): **Funcional puro**
+   - ❌ NO tiene: `while`, `for`, `null`, `let`, `const`, `var`
+   - ✅ SÍ tiene: `.map()`, `.filter()`, `state`, `Option<T>`, `None`
+   - Los ejemplos de **código Vela** en esta documentación muestran sintaxis del lenguaje, NO del compilador
+
+---
+
 ## 🎯 Descripción
 
 Como **desarrollador del compilador de Vela**, necesito un **lexer de producción completo** que tokenize el código fuente de Vela, reconociendo todos los keywords, operadores, literales y estructuras del lenguaje, para que el **parser** (Sprint 6) pueda construir el AST.
@@ -225,8 +243,9 @@ class Position:
 - Lexer captura raw text: `"Hello, ${name}!"` → `Token(STRING_LITERAL, "Hello, ${name}!", ...)`
 - Parser (Sprint 6) procesará las expresiones dentro de `${}`
 
-**Brace Balancing:**
+**Brace Balancing (código Python del lexer):**
 ```python
+# NOTA: Este es código Python del compilador, NO código Vela
 brace_depth = 1
 while brace_depth > 0:
     if char == '{': brace_depth += 1
@@ -234,10 +253,10 @@ while brace_depth > 0:
     raw_string += char
 ```
 
-**Permite:**
+**Permite (sintaxis Vela):**
 - `${x + y}` - Expresiones simples
-- `${users.map(u => u.name)}` - Arrow functions con braces
-- `${fn() { return x }}` - Funciones con bloques
+- `${users.map(u => u.name)}` - Arrow functions
+- `${fn() -> Number { x + 1 }}` - Funciones con bloques
 
 **Escape:**
 - `\$` → `$` literal (no interpola)

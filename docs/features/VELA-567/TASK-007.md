@@ -67,11 +67,11 @@ Clases de tests:
 
 **Ejemplo de test:**
 ```python
-def test_null_coalescing_operator(self):
-    """?? es null coalescing."""
+def test_none_coalescing_operator(self):
+    """?? es None coalescing en Vela (no null)."""
     tokens = Lexer("value = x ?? 'default'").tokenize()
-    null_coal = [t for t in tokens if t.kind == TokenKind.QUESTION_QUESTION]
-    assert len(null_coal) == 1
+    none_coal = [t for t in tokens if t.kind == TokenKind.QUESTION_QUESTION]
+    assert len(none_coal) == 1
 ```
 
 #### 3. test_literals.py (~280 líneas, 50+ tests)
@@ -165,7 +165,7 @@ Clases de tests:
 - `TestComponentWithState`: Componentes UI con state
 - `TestMatchExpressions`: Pattern matching con Option/Result
 - `TestReactiveCode`: Signal, Computed, Effect
-- `TestComplexExpressions`: Precedencia, null safety
+- `TestComplexExpressions`: Precedencia, Option<T> safety
 - `TestArraysAndMaps`: Arrays y functional methods
 - `TestErrorHandling`: try-catch-finally
 - `TestImportsAndModules`: import, show, as
@@ -362,8 +362,8 @@ Tests organizados en 8 archivos por categoría:
 ### Nomenclatura
 Nombres descriptivos para entender propósito sin leer código:
 ```python
-def test_null_coalescing_operator(self):
-    """?? es null coalescing."""
+def test_none_coalescing_operator(self):
+    """?? es None coalescing en Vela (no null)."""
     ...
 ```
 
@@ -386,7 +386,7 @@ Tests de código real Vela para validar comportamiento completo:
 - Componentes UI con state reactivo
 - Pattern matching con Option/Result
 - Expresiones complejas con precedencia
-- Null safety operators (?., ??)
+- Option<T> safety operators (?., ??)
 
 ### Pytest Warnings
 Los tests muestran warning "Import 'pytest' could not be resolved" porque pytest no está instalado. Esto es esperado y no afecta la validez de los tests. Instalar pytest con:
