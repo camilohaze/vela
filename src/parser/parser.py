@@ -376,6 +376,68 @@ class Parser:
         
         return decorators
     
+    def parse_object_literal(self) -> StructLiteral:
+        """
+        Parsea object literal para metadata de decoradores.
+        
+        Grammar:
+        ```
+        object_literal = '{' (property (',' property)*)? '}'
+        property = IDENTIFIER ':' expression
+        ```
+        
+        Ejemplos en Vela:
+        ```vela
+        { declarations: [UserService, ProductService] }
+        { path: "/api/users", method: "GET" }
+        { scope: "singleton" }
+        { min: 5, max: 100 }
+        ```
+        
+        Returns:
+            StructLiteral con fields representando las propiedades del objeto
+        """
+        start = self.expect(TokenType.LBRACE, "'{'")
+        
+        fields = []
+        
+        # Parse properties
+        if not self.check(TokenType.RBRACE):
+            # First property
+            prop_name = self.expect(TokenType.IDENTIFIER, "property name").value
+            self.expect(TokenType.COLON, "':'")
+            prop_value = self.parse_expression()
+            
+            fields.append(StructLiteralField(
+                name=prop_name,
+                value=prop_value,
+                range=self.create_range_from_tokens(start, self.peek(-1))
+            ))
+            
+            # Additional properties
+            while self.match(TokenType.COMMA):
+                # Allow trailing comma
+                if self.check(TokenType.RBRACE):
+                    break
+                
+                prop_name = self.expect(TokenType.IDENTIFIER, "property name").value
+                self.expect(TokenType.COLON, "':'")
+                prop_value = self.parse_expression()
+                
+                fields.append(StructLiteralField(
+                    name=prop_name,
+                    value=prop_value,
+                    range=self.create_range_from_tokens(start, self.peek(-1))
+                ))
+        
+        end = self.expect(TokenType.RBRACE, "'}'")
+        
+        return StructLiteral(
+            struct_name="",  # Anonymous object literal
+            fields=fields,
+            range=self.create_range_from_tokens(start, end)
+        )
+    
     def parse_declaration(self) -> Optional[Declaration]:
         """
         Parsea una declaración de nivel superior.
@@ -1687,7 +1749,7 @@ class Parser:
         end = self.expect(TokenType.RBRACE)
         
         # Extraer metadata del decorador @module (si existe)
-        # Esto se hace de forma básica aquí, la validación completa es en semantic analysis
+        # La validación completa (exports ⊆ declarations) se hace en semantic analysis
         declarations_list = []
         exports_list = []
         providers_list = []
@@ -1696,10 +1758,19 @@ class Parser:
         if decorators:
             for decorator in decorators:
                 if decorator.name == "module" and len(decorator.arguments) > 0:
-                    # TODO: Parsear object literal del decorador @module para extraer metadata
-                    # Por ahora, solo marcamos que existe el decorador
-                    # La extracción completa se hará en TASK-016I
-                    pass
+                    # Extraer metadata del object literal
+                    metadata_obj = decorator.arguments[0]
+                    
+                    if isinstance(metadata_obj, StructLiteral):
+                        for field in metadata_obj.fields:
+                            if field.name == "declarations" and isinstance(field.value, ArrayLiteral):
+                                declarations_list = field.value.elements
+                            elif field.name == "exports" and isinstance(field.value, ArrayLiteral):
+                                exports_list = field.value.elements
+                            elif field.name == "providers" and isinstance(field.value, ArrayLiteral):
+                                providers_list = field.value.elements
+                            elif field.name == "imports" and isinstance(field.value, ArrayLiteral):
+                                imports_list = field.value.elements
         
         return ModuleDeclaration(
             range=self.create_range_from_tokens(start, end),
@@ -2246,6 +2317,10 @@ class Parser:
                 range=self.create_range_from_tokens(start, end),
                 elements=elements
             )
+        
+        # Object literal
+        if self.check(TokenType.LBRACE):
+            return self.parse_object_literal()
         
         # Lambda expression
         if self.match(TokenType.PIPE):

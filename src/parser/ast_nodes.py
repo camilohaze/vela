@@ -656,11 +656,13 @@ class ModuleDeclaration(Declaration):
     decorators: List[Decorator] = field(default_factory=list)
     body: List[Declaration] = field(default_factory=list)  # Declaraciones dentro del módulo
     
-    # Metadata extraída del decorador @module (se llena durante semantic analysis)
-    declarations: List[str] = field(default_factory=list)  # Nombres de clases declaradas
-    exports: List[str] = field(default_factory=list)       # Nombres de clases exportadas
-    providers: List[str] = field(default_factory=list)     # Nombres de clases proveedoras
-    imports: List[str] = field(default_factory=list)       # Nombres de módulos importados
+    # Metadata extraída del decorador @module (parsed desde object literal)
+    # Estos son Expressions (Identifier para clases, Literal para strings de imports)
+    # La validación semántica (exports ⊆ declarations) se hace en semantic analyzer
+    declarations: List['Expression'] = field(default_factory=list)  # [Service1, Service2]
+    exports: List['Expression'] = field(default_factory=list)       # [Service1]
+    providers: List['Expression'] = field(default_factory=list)     # [Service1, DatabaseConnection]
+    imports: List['Expression'] = field(default_factory=list)       # ['system:http', 'module:auth']
 
 
 # ===================================================================
