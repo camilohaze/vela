@@ -1,26 +1,36 @@
-# VELA-561: US-00B - Especificaciones Formales Completas
+# VELA-561: Sprint 1 - Especificaciones Formales del Lenguaje Vela
 
 ## 📋 Información General
-- **Epic:** Sprint 1 - Especificaciones
-- **Sprint:** Sprint 1 (ID: 175)
-- **Estado:** Completada ✅
-- **Fecha:** 2025-11-30
-- **Historia:** US-00B
+- **Historia:** VELA-561
+- **Epic:** EPIC-00B: Formal Specifications
+- **Sprint:** 1 (ID: 175)
+- **Estado:** Completado ✅
+- **Fecha:** Enero 2025
+- **Prioridad:** P0 (Crítica - Bloqueante)
 
 ## 🎯 Descripción
 
-Como desarrollador del compilador, necesito especificaciones formales completas para implementación correcta del lenguaje Vela.
+Este sprint documenta **formalmente** las especificaciones fundamentales del lenguaje Vela:
 
-**Objetivo:** Documentar rigurosamente todos los aspectos del lenguaje siguiendo el estándar de Rust Reference y ECMAScript spec.
+1. **Especificación formal del lenguaje** (sintaxis, semántica, tipos)
+2. **Modelo de memoria** (ARC, cycle detection, thread safety)
+3. **Modelo de concurrencia** (actors, signals, garantías)
+4. **Contratos de stdlib** (precondiciones, postcondiciones, complejidades)
+
+Estas especificaciones son **críticas** para:
+- ✅ Guiar la implementación del compilador
+- ✅ Garantizar consistencia y seguridad
+- ✅ Servir como documentación de referencia
+- ✅ Permitir formal verification
 
 ## 📦 Subtasks Completadas
 
-| # | Tarea | Archivo | Líneas |
-|---|---|---|---|
-| 1 | TASK-000F: Especificación formal del lenguaje | `vela-language-specification.md` | ~400 |
-| 2 | TASK-000G: Modelo de memoria formal | `vela-memory-model.md` | ~350 |
-| 3 | TASK-000H: Modelo de concurrencia formal | `vela-concurrency-model.md` | ~300 |
-| 4 | TASK-000I: Contratos formales de stdlib | `vela-stdlib-specification.md` | ~350 |
+| # | Tarea | Archivo | Líneas | Estado |
+|---|---|---|---|---|
+| 1 | TASK-000F: Especificación formal del lenguaje | `TASK-000F.md` | 700+ | ✅ |
+| 2 | TASK-000G: Modelo de memoria formal | `TASK-000G.md` | 650+ | ✅ |
+| 3 | TASK-000H: Modelo de concurrencia formal | `TASK-000H.md` | 650+ | ✅ |
+| 4 | TASK-000I: Contratos formales de stdlib | `TASK-000I.md` | 550+ | ✅ |
 
 ## 🔨 Especificaciones Creadas
 
