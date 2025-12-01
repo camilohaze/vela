@@ -1,7 +1,7 @@
 """
 Sistema de Dependency Injection para Vela
 
-Implementación de: TASK-035B, TASK-035C, TASK-035D, TASK-035D2
+Implementación de: TASK-035B, TASK-035C, TASK-035D, TASK-035D2, TASK-035D3
 Historia: VELA-575
 Sprint: 13
 
@@ -60,6 +60,20 @@ from .controller import (
     clear_controller_registry,
     find_controller_by_path,
     get_controllers_by_tag
+)
+from .http_decorators import (
+    HTTPMethod,
+    ParameterType,
+    RouteMetadata,
+    ParameterMetadata,
+    ParameterMarker,
+    get, post, put, patch, delete, head, options,
+    param, query, body, header, cookie, request, response,
+    is_route_handler,
+    get_route_metadata,
+    get_all_routes,
+    get_routes_by_method,
+    get_route_by_path,
 )
 
 __all__ = [
@@ -126,7 +140,21 @@ __all__ = [
     'clear_controller_registry',
     'find_controller_by_path',
     'get_controllers_by_tag',
+    
+    # HTTP Decorators (TASK-035D3)
+    'HTTPMethod',
+    'ParameterType',
+    'RouteMetadata',
+    'ParameterMetadata',
+    'ParameterMarker',
+    'get', 'post', 'put', 'patch', 'delete', 'head', 'options',
+    'param', 'query', 'body', 'header', 'cookie', 'request', 'response',
+    'is_route_handler',
+    'get_route_metadata',
+    'get_all_routes',
+    'get_routes_by_method',
+    'get_route_by_path',
 ]
 
-__version__ = '0.4.0'
+__version__ = '0.5.1'  # TASK-035D3 completa: +@cookie, @request, @response
 __author__ = 'GitHub Copilot Agent'
