@@ -29,12 +29,12 @@ Describe the current pain points or limitations that motivate this RFC.
 **Example:**
 ```vela
 // Current approach is verbose
-let result = getUserData();
-if (result.type === "success") {
-  let data = result.value;
+result: Result<UserData, Error> = getUserData()
+if result.type === "success" {
+  data: UserData = result.value
   // handle success
-} else if (result.type === "error") {
-  let error = result.error;
+} else if result.type === "error" {
+  error: Error = result.error
   // handle error
 }
 ```
@@ -229,7 +229,7 @@ Research from other languages:
 > What parts of the design do you expect to resolve through the RFC process before this gets merged?
 
 1. **Pattern guards:** Should we support `match x { Some(y) if y > 10 => ... }` in v1?
-2. **Irrefutable patterns:** Should `let Some(x) = value` be allowed?
+2. **Irrefutable patterns:** Should pattern destructuring be allowed (NO let keyword in Vela)?
 3. **Performance:** Can we guarantee zero-cost abstraction for simple matches?
 
 ---
@@ -248,7 +248,7 @@ Research from other languages:
 
 - **Active patterns:** Custom pattern extractors
 - **View patterns:** Pattern matching with transformations
-- **Or-patterns in bindings:** `let (Some(x) | None) = value`
+- **Or-patterns in bindings:** `(Some(x) | None) = value` (immutable by default)
 
 ### Interaction with Future Features
 

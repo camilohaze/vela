@@ -39,8 +39,8 @@
 **Thread Safety:** Not thread-safe (use from single actor)
 
 ```vela
-let list = List<Int>();
-list.push(42);  // length: 0 → 1
+list: List<Number> = List()
+list.push(42)  // length: 0 → 1
 ```
 
 #### 1.1.2 pop() -> T?
@@ -50,23 +50,23 @@ list.push(42);  // length: 0 → 1
 
 **Postconditions:**
 - If `old(list.length) > 0`: returns `Some(last_item)`, `list.length == old(list.length) - 1`
-- If `old(list.length) == 0`: returns `null`
+- If `old(list.length) == 0`: returns `None`
 
 **Complexity:** O(1)
 
 ```vela
-let list = List([1, 2, 3]);
-let item = list.pop();  // Some(3), length: 3 → 2
+list: List<Number> = List([1, 2, 3])
+item: Option<Number> = list.pop()  // Some(3), length: 3 → 2
 ```
 
-#### 1.1.3 get(index: Int) -> T?
+#### 1.1.3 get(index: Number) -> Option<T>
 
 **Preconditions:**
 - List is initialized
 
 **Postconditions:**
 - If `0 <= index < length`: returns `Some(list[index])`
-- Otherwise: returns `null`
+- Otherwise: returns `None`
 
 **Invariants:**
 - Does not modify list
@@ -74,9 +74,9 @@ let item = list.pop();  // Some(3), length: 3 → 2
 **Complexity:** O(1)
 
 ```vela
-let list = List([10, 20, 30]);
-list.get(1);  // Some(20)
-list.get(5);  // null
+list: List<Number> = List([10, 20, 30])
+list.get(1)  // Some(20)
+list.get(5)  // None
 ```
 
 #### 1.1.4 map<U>(fn: (T) -> U) -> List<U>
@@ -97,8 +97,8 @@ list.get(5);  // null
 **Thread Safety:** Safe if `fn` is pure
 
 ```vela
-let nums = List([1, 2, 3]);
-let doubled = nums.map(x => x * 2);  // [2, 4, 6]
+nums: List<Number> = List([1, 2, 3])
+doubled: List<Number> = nums.map(x => x * 2)  // [2, 4, 6]
 ```
 
 ---
@@ -120,9 +120,9 @@ let doubled = nums.map(x => x * 2);  // [2, 4, 6]
 **Complexity:** O(1) average, O(n) worst case
 
 ```vela
-let set = Set<String>();
-set.insert("hello");  // true
-set.insert("hello");  // false (already present)
+set: Set<String> = Set()
+set.insert("hello")  // true
+set.insert("hello")  // false (already present)
 ```
 
 #### 1.2.2 contains(item: T) -> Bool
@@ -157,18 +157,18 @@ set.insert("hello");  // false (already present)
 **Complexity:** O(1) average
 
 ```vela
-let dict = Dict<String, Int>();
-dict.set("age", 25);
+dict: Dict<String, Number> = Dict()
+dict.set("age", 25)
 ```
 
-#### 1.3.2 get(key: K) -> V?
+#### 1.3.2 get(key: K) -> Option<V>
 
 **Preconditions:**
 - Dict is initialized
 
 **Postconditions:**
 - Returns `Some(value)` if key exists
-- Returns `null` otherwise
+- Returns `None` otherwise
 
 **Invariants:**
 - Dict unchanged
@@ -206,8 +206,8 @@ dict.set("age", 25);
 
 ```vela
 match File.read("/path/to/file.txt") {
-    Ok(contents) => print(contents),
-    Err(e) => print("Error: " + e.message),
+    Ok(contents) => print(contents)
+    Err(e) => print("Error: ${e.message}")
 }
 ```
 
@@ -256,17 +256,18 @@ match File.read("/path/to/file.txt") {
 - Uses OS native TLS (OpenSSL on Linux, Secure Transport on macOS, Schannel on Windows)
 
 ```vela
-let response = await HTTP.get("https://api.example.com/data");
-match response {
+response: Future<Result<Response, Error>> = HTTP.get("https://api.example.com/data")
+result: Result<Response, Error> = await response
+match result {
     Ok(res) => {
-        print("Status: " + res.status);
-        print("Body: " + res.body);
-    },
-    Err(e) => print("Network error: " + e),
+        print("Status: ${res.status}")
+        print("Body: ${res.body}")
+    }
+    Err(e) => print("Network error: ${e}")
 }
 ```
 
-### 3.2 Server.listen(port: Int, handler: (Request) -> Response) -> Result<(), Error>
+### 3.2 Server.listen(port: Number, handler: (Request) -> Response) -> Result<(), Error>
 
 **Preconditions:**
 - `1024 <= port <= 65535` (or root privileges for port < 1024)
@@ -310,19 +311,19 @@ match response {
 **Thread Safety:** Thread-safe (multiple senders)
 
 ```vela
-let (sender, receiver) = channel<Int>();
-sender.send(42);
+(sender, receiver): (Sender<Number>, Receiver<Number>) = channel<Number>()
+sender.send(42)
 ```
 
-#### 4.1.2 recv() -> T?
+#### 4.1.2 recv() -> Option<T>
 
 **Preconditions:**
 - Channel exists
 
 **Postconditions:**
-- **If messages available**: Returns next message
+- **If messages available**: Returns `Some(next_message)`
 - **If empty and senders exist**: Blocks until message arrives
-- **If empty and all senders dropped**: Returns `null`
+- **If empty and all senders dropped**: Returns `None`
 
 **Complexity:** O(1) if message available, otherwise blocks
 
@@ -352,10 +353,10 @@ sender.send(42);
 **Thread Safety:** Thread-safe
 
 ```vela
-let mutex = Mutex(0);
+mutex: Mutex<Number> = Mutex(0)
 {
-    let guard = mutex.lock();
-    *guard += 1;  // Exclusive access
+    guard: MutexGuard<Number> = mutex.lock()
+    *guard += 1  // Exclusive access
 }  // Automatically unlocked here
 ```
 

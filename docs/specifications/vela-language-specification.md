@@ -57,17 +57,34 @@ BlockComment := '/*' ~('*/')* '*/'
 #### 2.2.2 Keywords
 
 ```ebnf
+(* NOTE: Vela is PURE FUNCTIONAL - NO loops, NO null, NO let/const/var *)
 Keyword := 
-    | 'fn' | 'let' | 'const' | 'var'
-    | 'if' | 'else' | 'match' | 'loop' | 'while' | 'for' | 'break' | 'continue' | 'return'
-    | 'type' | 'interface' | 'enum' | 'struct'
-    | 'actor' | 'signal' | 'async' | 'await'
-    | 'import' | 'export' | 'from'
-    | 'true' | 'false' | 'null' | 'undefined'
-    | 'this' | 'super'
+    | 'fn' | 'state' 
+    | 'if' | 'else' | 'match' | 'return'
+    | 'type' | 'interface' | 'enum' | 'struct' | 'class' | 'extends' | 'implements'
+    | 'public' | 'private' | 'protected' | 'abstract' | 'override'
+    | 'async' | 'await' | 'yield'
+    | 'try' | 'catch' | 'throw' | 'finally'
+    | 'import' | 'show' | 'hide' | 'as'
+    | 'computed' | 'memo' | 'effect' | 'watch'
+    | 'mount' | 'update' | 'destroy' | 'beforeUpdate' | 'afterUpdate'
+    | 'StatefulWidget' | 'StatelessWidget' | 'widget' | 'component'
+    | 'service' | 'repository' | 'controller' | 'usecase' | 'entity' | 'dto' | 'valueObject'
+    | 'factory' | 'builder' | 'strategy' | 'observer' | 'singleton' | 'adapter' | 'decorator'
+    | 'guard' | 'middleware' | 'interceptor' | 'validator' | 'pipe'
+    | 'task' | 'helper' | 'mapper' | 'serializer' | 'store' | 'provider'
+    | 'true' | 'false' | 'None' | 'Some'
+    | 'this' | 'super' | 'constructor'
 ```
 
 **Semantic constraint:** Keywords are reserved and cannot be used as identifiers.
+
+**Important notes:**
+- Variables are **immutable by default** (no keyword needed)
+- Use `state` for reactive mutability (UI state)
+- NO `null`, `undefined`, `nil` - use `Option<T>` with `None` and `Some(value)`
+- NO loops (`for`, `while`, `loop`) - use functional methods (`.map()`, `.filter()`, etc.) or recursion
+- NO `export` keyword - use `public` modifier
 
 #### 2.2.3 Identifiers
 
@@ -93,7 +110,7 @@ Literal :=
     | FloatLiteral
     | StringLiteral
     | BooleanLiteral
-    | NullLiteral
+    | OptionLiteral
 
 IntegerLiteral := 
     | DecimalInteger
@@ -113,11 +130,15 @@ FloatLiteral :=
 Exponent := ('e' | 'E') ('+' | '-')? Digit+
 
 StringLiteral := 
-    | '"' StringChar* '"'
-    | "'" StringChar* "'"
+    | '"' StringChar* '"'     (* Double quotes with ${} interpolation *)
+    | "'" StringChar* "'"     (* Single quotes without interpolation *)
+
+StringInterpolation := '${' Expression '}'
 
 BooleanLiteral := 'true' | 'false'
-NullLiteral := 'null'
+
+(* NO null/undefined in Vela - use Option<T> *)
+OptionLiteral := 'None' | 'Some' '(' Expression ')'
 ```
 
 #### 2.2.5 Operators and Punctuation
@@ -154,7 +175,8 @@ Type :=
     | TypeVariable
 
 PrimitiveType := 
-    | 'Int' | 'Float' | 'String' | 'Bool' | 'Null' | 'Undefined'
+    | 'Number' | 'Float' | 'String' | 'Bool' | 'void' | 'never'
+    (* NO Null or Undefined - use Option<T> *)
 
 FunctionType := '(' TypeList? ')' '->' Type
 
@@ -184,8 +206,8 @@ TypeList := Type (',' Type)*
 #### 3.2.2 Literals
 
 ```
-─────────────── (T-Int)
-Γ ⊢ n : Int
+─────────────── (T-Number)
+Γ ⊢ n : Number
 
 
 ─────────────── (T-Float)
@@ -200,8 +222,13 @@ TypeList := Type (',' Type)*
 Γ ⊢ b : Bool
 
 
-─────────────── (T-Null)
-Γ ⊢ null : Null
+─────────────── (T-None)
+Γ ⊢ None : Option<τ>
+
+
+Γ ⊢ e : τ
+────────────────── (T-Some)
+Γ ⊢ Some(e) : Option<τ>
 ```
 
 #### 3.2.3 Functions
@@ -220,12 +247,21 @@ TypeList := Type (',' Type)*
 Γ ⊢ e₁(e₂, ..., eₙ) : τ
 ```
 
-#### 3.2.5 Let Binding
+#### 3.2.5 Immutable Binding
 
 ```
+(* NOTE: Variables are immutable by default - no 'let' keyword *)
 Γ ⊢ e₁ : τ₁    Γ, x:τ₁ ⊢ e₂ : τ₂
-────────────────────────────────── (T-Let)
-Γ ⊢ let x = e₁; e₂ : τ₂
+────────────────────────────────── (T-ImmutableBinding)
+Γ ⊢ x: τ₁ = e₁; e₂ : τ₂
+```
+
+#### 3.2.6 State Binding (Reactive Mutability)
+
+```
+Γ ⊢ e : τ    τ is reactive-compatible
+────────────────────────────────── (T-State)
+Γ ⊢ state x: τ = e : Reactive<τ>
 ```
 
 ### 3.3 Subtyping Rules
@@ -258,7 +294,7 @@ E :=
     | v op E                  (right operand)
     | E(e₁, ..., eₙ)         (function)
     | v(v₁, ..., vᵢ₋₁, E, eᵢ₊₁, ..., eₙ)  (arguments)
-    | let x = E; e           (let binding)
+    | x: τ = E; e            (immutable binding)
 ```
 
 ### 4.2 Small-Step Semantics
@@ -271,12 +307,13 @@ E :=
 ⟨x, σ⟩ → ⟨v, σ⟩
 ```
 
-#### 4.2.2 Let Binding
+#### 4.2.2 Immutable Binding
 
 ```
+(* NOTE: Immutable by default - no 'let' keyword *)
 ⟨e₁, σ⟩ → ⟨v, σ'⟩
-──────────────────────────────── (E-Let)
-⟨let x = e₁; e₂, σ⟩ → ⟨e₂, σ'[x ↦ v]⟩
+──────────────────────────────── (E-ImmutableBinding)
+⟨x: τ = e₁; e₂, σ⟩ → ⟨e₂, σ'[x ↦ v]⟩
 ```
 
 #### 4.2.3 Function Application
@@ -364,17 +401,32 @@ x + y;  // Prints "1", then "2"
 ⟨if cond { then_branch } else { else_branch }, σ⟩ → ⟨v, σ''⟩
 ```
 
-#### 6.1.2 While Loop
+#### 6.1.2 Functional Iteration (NO Loops)
 
 ```
-⟨cond, σ⟩ → ⟨false, σ'⟩
-──────────────────────────── (S-While-End)
-⟨while cond { body }, σ⟩ → ⟨(), σ'⟩
+(* NOTE: Vela is PURE FUNCTIONAL - NO while/for/loop *)
+(* Use functional methods like .forEach(), .map(), .filter() instead *)
+
+(* Example: list.forEach(fn) *)
+⟨list, σ⟩ → ⟨[], σ'⟩
+──────────────────────────── (S-ForEach-Empty)
+⟨list.forEach(fn), σ⟩ → ⟨(), σ'⟩
 
 
-⟨cond, σ⟩ → ⟨true, σ'⟩    ⟨body, σ'⟩ → ⟨v, σ''⟩    ⟨while cond { body }, σ''⟩ → ⟨v', σ'''⟩
-──────────────────────────────────────────────────────────────────────────────────────── (S-While-Continue)
-⟨while cond { body }, σ⟩ → ⟨v', σ'''⟩
+⟨list, σ⟩ → ⟨[v₁, ...rest], σ'⟩    ⟨fn(v₁), σ'⟩ → ⟨_, σ''⟩    ⟨rest.forEach(fn), σ''⟩ → ⟨_, σ'''⟩
+────────────────────────────────────────────────────────────────────────────────────────────────────── (S-ForEach-Cons)
+⟨list.forEach(fn), σ⟩ → ⟨(), σ'''⟩
+```
+
+**Alternative: Tail-Call Optimized Recursion**
+
+```
+fn processUntil(condition: () -> Bool, action: () -> void) -> void {
+  if !condition() {
+    action()
+    processUntil(condition, action)  // Tail-call optimized
+  }
+}
 ```
 
 #### 6.1.3 Return Statement
@@ -432,9 +484,9 @@ A call is in tail position if:
 2. Its result is returned without modification
 
 ```vela
-fn factorial(n: Int, acc: Int) -> Int {
+fn factorial(n: Number, acc: Number) -> Number {
     if n == 0 {
-        return acc;  // Not a tail call (return wraps it)
+        return acc  // Not a tail call (return wraps it)
     } else {
         factorial(n - 1, n * acc)  // Tail call (last expression)
     }
@@ -448,11 +500,11 @@ fn factorial(n: Int, acc: Int) -> Int {
 #### 7.3.1 Direct Recursion
 
 ```vela
-fn fib(n: Int) -> Int {
+fn fib(n: Number) -> Number {
     if n <= 1 {
-        return n;
+        return n
     } else {
-        return fib(n - 1) + fib(n - 2);
+        return fib(n - 1) + fib(n - 2)
     }
 }
 ```
@@ -460,12 +512,12 @@ fn fib(n: Int) -> Int {
 #### 7.3.2 Mutual Recursion
 
 ```vela
-fn is_even(n: Int) -> Bool {
-    if n == 0 { true } else { is_odd(n - 1) }
+fn isEven(n: Number) -> Bool {
+    if n == 0 { true } else { isOdd(n - 1) }
 }
 
-fn is_odd(n: Int) -> Bool {
-    if n == 0 { false } else { is_even(n - 1) }
+fn isOdd(n: Number) -> Bool {
+    if n == 0 { false } else { isEven(n - 1) }
 }
 ```
 
@@ -491,18 +543,60 @@ fn is_odd(n: Int) -> Bool {
 
 ## Appendix A: Reserved Keywords (Complete List)
 
+**NOTE: Vela is PURE FUNCTIONAL - NO loops (for/while/loop/break/continue), NO null/undefined, NO let/const/var/mut**
+
 ```
-fn          let         const       var         if          else
-match       loop        while       for         break       continue
-return      type        interface   enum        struct      actor
-signal      async       await       import      export      from
-true        false       null        undefined   this        super
-try         catch       finally     throw       as          is
-in          of          new         delete      typeof      void
-yield       static      public      private     protected   abstract
-final       override    virtual     extends     implements  package
-namespace   module      class       trait       where       mut
-ref         move        copy        unsafe      extern      macro
+(* Core Keywords *)
+fn          state       if          else        match       return
+
+(* Types *)
+type        interface   enum        struct      class       
+Number      Float       String      Bool        void        never
+Option      Result      Some        None
+
+(* OOP *)
+extends     implements  override    overload    abstract    
+this        super       constructor public      private     protected
+
+(* Async *)
+async       await       yield       try         catch       throw       finally
+
+(* Imports *)
+import      show        hide        as
+
+(* Reactive System *)
+computed    memo        effect      watch       
+mount       update      destroy     beforeUpdate afterUpdate
+
+(* UI Widgets *)
+StatefulWidget          StatelessWidget         widget      component
+
+(* Architecture Keywords *)
+service     repository  controller  usecase     entity      dto
+valueObject model       factory     builder     strategy    observer
+singleton   adapter     decorator   guard       middleware  interceptor
+validator   pipe        task        helper      mapper      serializer
+store       provider
+
+(* Literals *)
+true        false       
+
+(* PROHIBITED Keywords (DO NOT USE) *)
+(* let, const, var, mut - use immutable by default or 'state' *)
+(* for, while, loop, break, continue - use functional methods *)
+(* null, undefined, nil - use Option<T> with None/Some *)
+(* export - use 'public' modifier *)
+```
+
+**Variables in Vela:**
+- **Immutable by default** (no keyword): `name: String = "Vela"`
+- **Reactive mutable** (state): `state count: Number = 0`
+
+**Functional Methods (NO loops):**
+```
+map, filter, reduce, forEach, flatMap, find, findIndex, 
+every, some, take, drop, takeWhile, dropWhile, partition,
+groupBy, sortBy, chunk, zip, scan, distinct, reverse
 ```
 
 ---

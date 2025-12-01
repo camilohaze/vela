@@ -30,11 +30,16 @@ LINE_COMMENT = "//" { ANY_CHAR - "\n" } "\n" ;
 BLOCK_COMMENT = "/*" { ANY_CHAR } "*/" ;
 
 (* Keywords *)
-KEYWORD = "let" | "mut" | "const" | "fn" | "if" | "else" | "for" | "while" |
-          "loop" | "break" | "continue" | "return" | "match" | "struct" |
-          "enum" | "trait" | "impl" | "type" | "module" | "import" | "export" |
-          "pub" | "priv" | "as" | "in" | "true" | "false" | "null" | "self" |
-          "super" | "async" | "await" | "try" | "catch" | "throw" | "yield" |
+(* NOTE: Vela is PURE FUNCTIONAL - NO loops (for/while/loop), NO null, NO let/const/var *)
+(* Variables are immutable by default (no keyword). Use 'state' for reactive mutability *)
+KEYWORD = "state" | "fn" | "if" | "else" | "return" | "match" | "struct" |
+          "enum" | "interface" | "class" | "extends" | "implements" | "override" |
+          "abstract" | "this" | "super" | "constructor" | "overload" |
+          "type" | "import" | "public" | "private" | "protected" |
+          "as" | "show" | "hide" | "true" | "false" | "None" | "Some" |
+          "async" | "await" | "try" | "catch" | "throw" | "finally" | "yield" |
+          "computed" | "memo" | "effect" | "watch" | "mount" | "update" | "destroy" |
+          "beforeUpdate" | "afterUpdate" | "StatefulWidget" | "StatelessWidget" |
           "widget" | "component" | "service" | "repository" | "controller" |
           "usecase" | "dto" | "entity" | "valueObject" | "model" | "factory" |
           "builder" | "strategy" | "observer" | "singleton" | "adapter" |
@@ -82,29 +87,26 @@ DELIMITER = "(" | ")" | "{" | "}" | "[" | "]" |
 ```ebnf
 Program = { TopLevelItem } ;
 
-TopLevelItem = ModuleDecl
-             | ImportDecl
-             | ExportDecl
+TopLevelItem = ImportDecl
              | FunctionDecl
              | StructDecl
              | EnumDecl
-             | TraitDecl
-             | ImplBlock
+             | ClassDecl
+             | InterfaceDecl
+             | ServiceDecl
              | TypeAlias
-             | ConstDecl ;
+             | ImmutableDecl ;
 ```
 
 ### Module System
 
 ```ebnf
-ModuleDecl = "module" IDENTIFIER "{" { TopLevelItem } "}" ;
-
-ImportDecl = "import" ImportPath [ "as" IDENTIFIER ] ;
-ImportPath = ImportPrefix IDENTIFIER { "::" IDENTIFIER } ;
-ImportPrefix = "system:" | "package:" | "module:" | "library:" | 
-               "extension:" | "assets:" ;
-
-ExportDecl = "export" TopLevelItem ;
+(* NOTE: NO 'export' keyword in Vela - use 'public' modifier *)
+ImportDecl = "import" ImportPath [ ImportQualifiers ] [ "as" IDENTIFIER ] ;
+ImportPath = "'" ImportPrefix IDENTIFIER "'" ;
+ImportPrefix = "package:" | "lib:" | "system:" | "assets:" | "extension:" ;
+ImportQualifiers = "show" "{" IDENTIFIER { "," IDENTIFIER } "}"
+                 | "hide" "{" IDENTIFIER { "," IDENTIFIER } "}" ;
 ```
 
 ### Declarations
@@ -118,11 +120,12 @@ FunctionDecl = [ "pub" ] [ "async" ] "fn" IDENTIFIER
                Block ;
 
 FunctionParams = FunctionParam { "," FunctionParam } [ "," ] ;
-FunctionParam = [ "mut" ] IDENTIFIER ":" Type ;
+FunctionParam = IDENTIFIER ":" Type ;
 
 (* Variable Declaration *)
-LetStmt = "let" [ "mut" ] Pattern [ ":" Type ] "=" Expression ";" ;
-ConstDecl = "const" IDENTIFIER ":" Type "=" Expression ";" ;
+(* NOTE: Immutable by default (no keyword). Use 'state' for reactive mutability *)
+ImmutableDecl = IDENTIFIER ":" Type "=" Expression ";" ;
+StateDecl = "state" IDENTIFIER ":" Type "=" Expression ";" ;
 
 (* Struct Declaration *)
 StructDecl = [ "pub" ] "struct" IDENTIFIER [ GenericParams ] 
@@ -130,25 +133,30 @@ StructDecl = [ "pub" ] "struct" IDENTIFIER [ GenericParams ]
 StructField = [ "pub" ] IDENTIFIER ":" Type "," ;
 
 (* Enum Declaration *)
-EnumDecl = [ "pub" ] "enum" IDENTIFIER [ GenericParams ] 
+EnumDecl = [ "public" | "private" | "protected" ] "enum" IDENTIFIER [ GenericParams ] 
            "{" { EnumVariant } "}" ;
 EnumVariant = IDENTIFIER [ "(" { Type "," } ")" | "{" { StructField } "}" ] "," ;
 
-(* Trait Declaration *)
-TraitDecl = [ "pub" ] "trait" IDENTIFIER [ GenericParams ]
-            [ ":" TraitBounds ]
-            "{" { TraitItem } "}" ;
-TraitItem = FunctionSignature | TypeAlias ;
+(* Class Declaration *)
+ClassDecl = [ "public" | "private" | "protected" ] [ "abstract" ] "class" IDENTIFIER 
+            [ GenericParams ] 
+            [ "extends" Type ] 
+            [ "implements" Type { "," Type } ]
+            "{" { ClassMember } "}" ;
+ClassMember = ConstructorDecl | MethodDecl | PropertyDecl ;
+ConstructorDecl = "constructor" "(" [ FunctionParams ] ")" Block ;
+MethodDecl = [ "override" | "overload" ] FunctionDecl ;
+PropertyDecl = [ "state" ] IDENTIFIER ":" Type [ "=" Expression ] ";" ;
+
+(* Interface Declaration *)
+InterfaceDecl = [ "public" ] "interface" IDENTIFIER [ GenericParams ]
+                [ "extends" Type { "," Type } ]
+                "{" { InterfaceItem } "}" ;
+InterfaceItem = FunctionSignature | PropertySignature ;
 FunctionSignature = "fn" IDENTIFIER [ GenericParams ] 
                     "(" [ FunctionParams ] ")" 
                     [ "->" Type ] ";" ;
-
-(* Impl Block *)
-ImplBlock = "impl" [ GenericParams ] 
-            [ Trait "for" ] 
-            Type 
-            "{" { ImplItem } "}" ;
-ImplItem = FunctionDecl | TypeAlias ;
+PropertySignature = IDENTIFIER ":" Type ";" ;
 
 (* Type Alias *)
 TypeAlias = "type" IDENTIFIER [ GenericParams ] "=" Type ";" ;
@@ -157,7 +165,8 @@ TypeAlias = "type" IDENTIFIER [ GenericParams ] "=" Type ";" ;
 ### Statements
 
 ```ebnf
-Statement = LetStmt
+Statement = ImmutableDecl
+          | StateDecl
           | ExpressionStmt
           | ItemDecl
           | ";" ;
@@ -177,8 +186,9 @@ AssignmentOp = "=" | "+=" | "-=" | "*=" | "/=" | "%=" | "**=" |
                "&=" | "|=" | "^=" | "<<=" | ">>=" ;
 
 LogicalOrExpr = LogicalAndExpr { "||" LogicalAndExpr } ;
-LogicalAndExpr = NullCoalescingExpr { "&&" NullCoalescingExpr } ;
-NullCoalescingExpr = EqualityExpr { "??" EqualityExpr } ;
+LogicalAndExpr = OptionCoalescingExpr { "&&" OptionCoalescingExpr } ;
+(* NOTE: ?? operator for Option<T> coalescing, NOT null *)
+OptionCoalescingExpr = EqualityExpr { "??" EqualityExpr } ;
 
 EqualityExpr = ComparisonExpr { ("==" | "!=") ComparisonExpr } ;
 ComparisonExpr = BitwiseOrExpr { ("<" | ">" | "<=" | ">=") BitwiseOrExpr } ;
@@ -198,53 +208,52 @@ UnaryExpr = ( "-" | "!" | "~" | "*" | "&" | "&mut" ) UnaryExpr
 PostfixExpr = PrimaryExpr { PostfixOp } ;
 PostfixOp = "(" [ Arguments ] ")"           (* Function call *)
           | "[" Expression "]"              (* Index *)
-          | "." IDENTIFIER                  (* Field access *)
-          | "?." IDENTIFIER                 (* Safe navigation *)
-          | "?" ;                           (* Unwrap *)
+          | "." IDENTIFIER                  (* Field/method access *)
+          | "?." IDENTIFIER                 (* Safe navigation for Option<T> *)
+          | "?" ;                           (* Unwrap Option<T> *)
 
+(* NOTE: NO loop/for/while in Vela - use functional methods (.map, .filter, etc.) or recursion *)
 PrimaryExpr = Literal
             | IDENTIFIER
-            | "self"
+            | "this"
             | "super"
             | Block
             | IfExpr
             | MatchExpr
-            | LoopExpr
-            | ForExpr
-            | WhileExpr
             | TryExpr
             | AsyncExpr
             | LambdaExpr
             | ArrayExpr
             | TupleExpr
             | StructExpr
+            | FunctionalMethodCall
             | "(" Expression ")" ;
+
+(* Functional methods replace loops *)
+FunctionalMethodCall = Expression "." FunctionalMethod "(" [ Arguments ] ")" ;
+FunctionalMethod = "map" | "filter" | "reduce" | "forEach" | "flatMap" | "find" 
+                 | "findIndex" | "every" | "some" | "take" | "drop" 
+                 | "takeWhile" | "dropWhile" | "partition" | "groupBy" 
+                 | "sortBy" | "chunk" | "zip" | "scan" | "distinct" | "reverse" ;
 ```
 
 ### Control Flow
 
 ```ebnf
-(* If Expression *)
+(* If Expression - also returns value *)
 IfExpr = "if" Expression Block 
          [ "else" ( IfExpr | Block ) ] ;
 
-(* Match Expression *)
+(* Match Expression - exhaustive pattern matching *)
 MatchExpr = "match" Expression "{" { MatchArm } "}" ;
 MatchArm = Pattern [ "if" Expression ] "=>" ( Expression "," | Block ) ;
 
-(* Loop *)
-LoopExpr = "loop" Block ;
-
-(* For Loop *)
-ForExpr = "for" Pattern "in" Expression Block ;
-
-(* While Loop *)
-WhileExpr = "while" Expression Block ;
-
-(* Control Flow Keywords *)
-BreakExpr = "break" [ Expression ] ;
-ContinueExpr = "continue" ;
+(* Return - early exit from function *)
 ReturnExpr = "return" [ Expression ] ;
+
+(* NOTE: NO loop/for/while/break/continue in Vela *)
+(* Use functional methods like .map(), .filter(), .forEach() instead *)
+(* For infinite loops, use tail-call optimized recursion *)
 ```
 
 ### Async/Await
@@ -281,7 +290,8 @@ Literal = INTEGER
         | CHAR
         | "true"
         | "false"
-        | "null" ;
+        | "None"      (* Option<T> - NO null in Vela *)
+        | "Some" "(" Expression ")" ;
 
 ArrayExpr = "[" [ Expression { "," Expression } [ "," ] ] "]" ;
 
@@ -304,7 +314,7 @@ Pattern = LiteralPattern
         | RangePattern ;
 
 LiteralPattern = Literal ;
-IdentifierPattern = [ "mut" ] IDENTIFIER [ "@" Pattern ] ;
+IdentifierPattern = IDENTIFIER [ "@" Pattern ] ;
 WildcardPattern = "_" ;
 TuplePattern = "(" [ Pattern { "," Pattern } [ "," ] ] ")" ;
 StructPattern = PathExpr "{" [ FieldPattern { "," FieldPattern } ] [ ".." ] "}" ;
@@ -327,18 +337,20 @@ Type = PrimitiveType
      | ResultType
      | GenericType ;
 
-PrimitiveType = "i8" | "i16" | "i32" | "i64" | "i128" |
-                "u8" | "u16" | "u32" | "u64" | "u128" |
-                "f32" | "f64" |
-                "bool" | "char" | "str" | "string" |
-                "unit" | "never" ;
+PrimitiveType = "Number"     (* 64-bit integer *)
+              | "Float"      (* 64-bit float *)
+              | "String"     (* UTF-8 string *)
+              | "Bool"       (* boolean *)
+              | "Char"       (* single Unicode character *)
+              | "void"       (* no return value *)
+              | "never" ;    (* never returns *)
 
-ArrayType = "[" Type ";" INTEGER "]" ;
-TupleType = "(" [ Type { "," Type } [ "," ] ] ")" ;
+ArrayType = "[" Type { "," Type } [ "," ] "]" ;
+TupleType = "(" Type "," [ Type { "," Type } ] [ "," ] ")" ;
 FunctionType = "fn" "(" [ Type { "," Type } ] ")" [ "->" Type ] ;
 PathType = IDENTIFIER { "::" IDENTIFIER } [ GenericArgs ] ;
-ReferenceType = "&" [ "mut" ] Type ;
-OptionType = Type "?" ;
+OptionType = "Option" "<" Type ">"    (* NO null - use Option<T> *)
+           | Type "?" ;                (* Syntactic sugar for Option<T> *)
 ResultType = "Result" "<" Type "," Type ">" ;
 
 GenericType = IDENTIFIER [ GenericArgs ] ;
@@ -354,13 +366,17 @@ TraitBounds = Trait { "+" Trait } ;
 (* Widget/Component *)
 WidgetDecl = [ "pub" ] "widget" IDENTIFIER [ GenericParams ]
              "{" { WidgetItem } "}" ;
-WidgetItem = StateDecl | MethodDecl ;
-StateDecl = [ "mut" ] IDENTIFIER ":" Type [ "=" Expression ] ";" ;
+WidgetItem = PropertyDecl | MethodDecl | ComputedDecl | EffectDecl ;
 MethodDecl = FunctionDecl ;
 
-ComponentDecl = [ "pub" ] "component" IDENTIFIER [ GenericParams ]
+ComponentDecl = [ "public" ] "component" IDENTIFIER [ GenericParams ]
                 "{" { ComponentItem } "}" ;
-ComponentItem = StateDecl | MethodDecl ;
+ComponentItem = PropertyDecl | MethodDecl | ComputedDecl | EffectDecl ;
+
+(* Reactive declarations *)
+ComputedDecl = "computed" IDENTIFIER ":" Type Block ;
+EffectDecl = "effect" Block ;
+WatchDecl = "watch" "(" Expression ")" Block ;
 
 (* Service Layer *)
 ServiceDecl = [ "pub" ] "service" IDENTIFIER [ GenericParams ]
@@ -474,9 +490,12 @@ AttributeArgs = Expression { "," Expression } [ "," ] ;
 2. **Trailing commas**: Allowed in lists (function params, struct fields, etc.)
 3. **Unicode**: Full Unicode support in identifiers and strings
 4. **String interpolation**: `"Hello, ${name}!"` (uses `${}` not `{}`)
-5. **Optional chaining**: `obj?.field?.method()` returns `null` on first `null`
-6. **Null coalescing**: `value ?? default` returns `default` if `value` is `null`
+5. **Optional chaining**: `obj?.field?.method()` returns `None` on first `None` (for Option<T>)
+6. **Option coalescing**: `value ?? default` returns `default` if `value` is `None`
 7. **Range patterns**: `1..=10` (inclusive), `1..10` (exclusive)
+8. **NO loops**: Vela is PURE FUNCTIONAL - use `.map()`, `.filter()`, `.forEach()`, `.reduce()` instead
+9. **Immutability**: Variables immutable by default (no keyword). Use `state` for reactive mutability
+10. **NO null**: Use `Option<T>` with `Some(value)` or `None` instead of null/undefined/nil
 
 ---
 
