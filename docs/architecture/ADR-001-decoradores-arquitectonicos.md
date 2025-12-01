@@ -300,25 +300,56 @@ class WebsiteDTO {
 ### 5. Sistema de Módulos
 
 #### @module
-Define un módulo (Angular-style).
+Define un módulo (MULTIPLATAFORMA: Angular + NestJS style).
 
-**Sintaxis:**
+**Sintaxis (Backend Module):**
 ```vela
 @module({
-  declarations: [AuthService, LoginWidget, RegisterWidget],
-  exports: [AuthService],
-  providers: [AuthService, TokenService, DatabaseConnection],
-  imports: ['system:http', 'module:shared']
+  controllers: [LoginController, RegisterController],  # REST endpoints
+  providers: [AuthService, TokenService, DatabaseConnection],  # Business logic
+  imports: ['system:http', 'module:shared'],
+  exports: [AuthService]
 })
 module AuthModule {
   # Módulo NO instanciable
 }
 ```
 
-**Reglas obligatorias:**
-1. `exports ⊆ declarations` (exports debe ser subconjunto)
-2. `providers ⊆ declarations`
-3. Módulo NO es instanciable (NO tiene constructor)
+**Sintaxis (Frontend Module):**
+```vela
+@module({
+  declarations: [LoginWidget, RegisterWidget, HeaderWidget],  # UI components
+  providers: [AuthService, TokenService],  # Shared services
+  imports: ['system:ui', 'module:shared'],
+  exports: [AuthService, LoginWidget]
+})
+module AuthModule {
+  # Módulo NO instanciable
+}
+```
+
+**Sintaxis (Hybrid Module - TÍPICO EN VELA):**
+```vela
+@module({
+  declarations: [AuthWidget, LoginForm],  # UI components
+  controllers: [AuthController],  # REST API
+  providers: [AuthService, TokenService, DatabaseConnection],  # Business logic
+  imports: ['system:http', 'system:ui', 'module:shared'],
+  exports: [AuthService, AuthWidget]  # Exporta AMBOS: service + widget
+})
+module AuthModule {
+  # Módulo NO instanciable
+}
+```
+
+**Reglas obligatorias (patrón MULTIPLATAFORMA):**
+1. `declarations: []` → Widgets, components (frontend/general)
+2. `controllers: []` → Controllers REST (backend, NO usan `@injectable`)
+3. `providers: []` → Services, repositories, guards, middleware, pipes (con `@injectable`)
+4. `imports: []` → Otros módulos
+5. `exports ⊆ (declarations ∪ providers)` (puede exportar widgets O providers)
+6. Módulo NO es instanciable (NO tiene constructor)
+7. **Vela soporta AMBOS**: `declarations` (frontend) + `controllers` (backend)
 
 ---
 

@@ -73,13 +73,13 @@ repository UserRepository {
 - `Scope.Transient`: Nueva instancia cada vez que se inyecta
 - `Scope.Scoped`: Una instancia por scope (útil para requests HTTP)
 
-**⚠️ IMPORTANTE**: `@injectable` se usa SOLO con keywords arquitectónicos (`service`, `repository`, `controller`, `guard`, `middleware`, `usecase`). NO se usa con `class` genérica a menos que sea un caso especial.
+**⚠️ IMPORTANTE**: `@injectable` se usa SOLO con keywords arquitectónicos (`service`, `repository`, `guard`, `middleware`, `usecase`). **Controllers NO usan `@injectable`** (como NestJS). NO se usa con `class` genérica a menos que sea un caso especial.
 
 #### `@inject`
 Marca parámetros de constructor para inyección automática:
 
 ```vela
-@injectable
+# ✅ CORRECTO: Controller NO usa @injectable
 @controller("/api/users")
 controller UserController {
   service: UserService
@@ -96,31 +96,62 @@ controller UserController {
 ```
 
 #### `@module`
-Define un módulo funcional con configuración de providers y DI:
+Define un módulo funcional con configuración de providers y DI (patrón MULTIPLATAFORMA):
 
 ```vela
+# Backend module
 @module({
-  declarations: [UserService, UserRepository, Logger],
-  providers: [UserService, UserRepository, Logger, DatabaseConnection],
+  controllers: [UserController],  # REST endpoints
+  providers: [UserService, UserRepository, Logger],  # Business logic
   imports: [DatabaseModule, LoggerModule],
   exports: [UserService]
 })
-module AppModule { }
+module UserBackendModule { }
+
+# Frontend module
+@module({
+  declarations: [UserWidget, UserCard, UserList],  # UI components
+  providers: [UserService],  # Shared services
+  imports: [UiModule],
+  exports: [UserService, UserWidget]
+})
+module UserFrontendModule { }
+
+# Hybrid module (TÍPICO EN VELA)
+@module({
+  declarations: [UserWidget, UserCard],  # UI components
+  controllers: [UserController],  # REST API
+  providers: [UserService, UserRepository, Logger, DatabaseConnection],  # Business logic
+  imports: [DatabaseModule, LoggerModule, UiModule],
+  exports: [UserService, UserWidget]  # AMBOS: service + widget
+})
+module UserModule { }
 ```
 
 **Propiedades de `@module`:**
-- `declarations`: Componentes/servicios/widgets declarados en el módulo
-- `providers`: Clases inyectables registradas (debe ser subconjunto de declarations)
+- `declarations`: Widgets, components (frontend/general)
+- `controllers`: Controllers REST (backend, NO son providers)
+- `providers`: Clases inyectables (`@injectable`): services, repositories, guards, middleware, pipes
 - `imports`: Otros módulos a importar
-- `exports`: Providers disponibles para otros módulos (debe ser subconjunto de declarations)
+- `exports`: Declarations y/o providers disponibles para otros módulos (subconjunto de declarations ∪ providers)
 
-**⚠️ IMPORTANTE**: `@module` NO es instanciable. Es una unidad de organización y configuración, no una clase.
+**⚠️ IMPORTANTE**: 
+- `@module` NO es instanciable. Es una unidad de organización y configuración, no una clase.
+- **Vela es MULTIPLATAFORMA**: soporta `declarations` (frontend) + `controllers` (backend)
+- **Controllers** van en `controllers: []`, NO en `providers: []` (como NestJS)
+- **Declarations** para widgets/components (como Angular)
+- **Providers** son servicios inyectables que necesitan `@injectable`
 
 #### `@controller`
 Define controlador REST con path prefix:
 
 ```vela
-@injectable
+# ❌ INCORRECTO: Controller NO necesita @injectable
+# @injectable
+# @controller("/api/users")
+# controller UserController { }
+
+# ✅ CORRECTO: Controller usa SOLO @controller (como NestJS)
 @controller("/api/users")
 controller UserController {
   service: UserService
@@ -158,7 +189,10 @@ controller UserController {
 - `@body`: Request body
 - `@query`: Query parameters
 
-**⚠️ NOTA**: El keyword `controller` YA implica que es inyectable cuando tiene `@injectable`. El decorador `@controller(path)` solo agrega metadata del path base.
+**⚠️ IMPORTANTE**: 
+- `controller` **NO necesita** `@injectable` (igual que NestJS)
+- Se registra en `controllers: []` del `@module`, NO en `providers: []`
+- El decorador `@controller(path)` es suficiente para routing y DI
 
 #### `@provides`
 Marca factory methods que proveen instancias en módulos:
@@ -368,7 +402,7 @@ guard AuthGuard {
 **Uso en controllers:**
 
 ```vela
-@injectable
+# ✅ Controller NO usa @injectable
 @controller("/api/admin")
 @guard(AuthGuard)
 controller AdminController {
@@ -822,7 +856,7 @@ service UserService {
 # Controller Layer (keyword: controller)
 # ========================================
 
-@injectable
+# ✅ CORRECTO: Controller NO usa @injectable (como NestJS)
 @controller("/api/users")
 controller UserController {
   service: UserService
@@ -869,6 +903,7 @@ controller UserController {
 # Middleware (keyword: middleware)
 # ========================================
 
+# ✅ CORRECTO: Middleware SÍ usa @injectable (es provider, no controller)
 @injectable
 middleware LoggerMiddleware {
   logger: Logger
@@ -892,6 +927,7 @@ middleware LoggerMiddleware {
 # Guard (keyword: guard)
 # ========================================
 
+# ✅ CORRECTO: Guard SÍ usa @injectable (es provider, no controller)
 @injectable
 guard AuthGuard {
   authService: AuthService
@@ -914,30 +950,29 @@ guard AuthGuard {
 # ========================================
 
 @module({
-  declarations: [
-    DatabaseConnection,
-    UserRepository,
-    UserService,
-    UserController,
-    Logger,
-    AuthService,
-    LoggerMiddleware,
-    AuthGuard
-  ],
+  # Controllers se registran separadamente (NO en providers)
+  controllers: [UserController],
+  
+  # Providers: services, repositories, guards, middleware, etc.
   providers: [
     DatabaseConnection,
     UserRepository,
     UserService,
-    UserController,
     Logger,
     AuthService,
     LoggerMiddleware,
     AuthGuard
   ],
+  
   imports: [],
   exports: [UserService]
 })
 module AppModule { }
+
+# ⚠️ NOTA: 
+# - controllers: [] → Solo controllers (NO son providers)
+# - providers: [] → Services, repositories, guards, middleware, pipes
+# - Como NestJS: @Module({ controllers, providers, imports, exports })
 
 # ========================================
 # Main Entry Point

@@ -65,17 +65,21 @@ Implementar parsing completo de **module declarations** con decoradores y **sist
 - Método `parse_module_declaration()` extrae metadata del decorador `@module`:
   ```vela
   @module({
-    declarations: [Service1, Service2],
-    exports: [Service1],
-    providers: [Service1, DatabaseConnection],
-    imports: ['system:http', 'module:shared']
+    declarations: [Service1, Widget1],  # UI components/general
+    controllers: [UserController],  # Backend REST
+    providers: [Service1, DatabaseConnection],  # Services, repos, guards
+    imports: ['system:http', 'module:shared'],  # Otros módulos
+    exports: [Service1, Widget1]  # Providers y/o declarations
   })
   module AppModule { }
   ```
 
 - Validación:
   - ✅ Módulo DEBE tener decorador `@module`
-  - ⏳ Validación `exports ⊆ declarations` se hace en semantic analyzer
+  - ✅ `declarations: []` para widgets/components (frontend/general)
+  - ✅ `controllers: []` para controllers REST (backend, NO en providers)
+  - ✅ `providers: []` para services, repositories, guards, middleware
+  - ⏳ Validación `exports ⊆ (declarations ∪ providers)` se hace en semantic analyzer
 
 **Archivos modificados:**
 - `src/parser/parser.py` - parse_module_declaration() completado
@@ -243,13 +247,37 @@ src/parser/
 
 ## 🎨 Ejemplos de Uso
 
-### Module con decoradores
+### Module con decoradores (patrón MULTIPLATAFORMA)
 ```vela
+# Backend module
 @module({
-  declarations: [AuthService, LoginWidget, RegisterWidget],
-  exports: [AuthService],
-  providers: [AuthService, TokenService],
-  imports: ['system:http', 'module:shared']
+  controllers: [LoginController, RegisterController],  # REST endpoints
+  providers: [AuthService, TokenService],  # Business logic
+  imports: ['system:http', 'module:shared'],
+  exports: [AuthService]
+})
+module AuthBackendModule {
+  # Módulo NO instanciable
+}
+
+# Frontend module
+@module({
+  declarations: [LoginWidget, RegisterWidget],  # UI components
+  providers: [AuthService],  # Shared services
+  imports: ['system:ui', 'module:shared'],
+  exports: [AuthService, LoginWidget]
+})
+module AuthFrontendModule {
+  # Módulo NO instanciable
+}
+
+# Hybrid module (TÍPICO EN VELA)
+@module({
+  declarations: [AuthWidget, LoginForm],  # UI components
+  controllers: [AuthController],  # REST API
+  providers: [AuthService, TokenService],  # Business logic
+  imports: ['system:http', 'system:ui', 'module:shared'],
+  exports: [AuthService, AuthWidget]  # AMBOS: service + widget
 })
 module AuthModule {
   # Módulo NO instanciable
@@ -258,11 +286,13 @@ module AuthModule {
 
 ### Service con DI
 ```vela
-@injectable({ scope: "singleton" })
-@provides(IUserService)
-class UserService implements IUserService {
-  @inject({ token: "IUserRepository" })
+@injectable(scope: Scope.Singleton)
+service UserService {
   repository: IUserRepository
+  
+  constructor(@inject repository: IUserRepository) {
+    this.repository = repository
+  }
   
   fn createUser(dto: CreateUserDTO) -> Result<User> {
     return this.repository.save(dto)
@@ -270,7 +300,22 @@ class UserService implements IUserService {
 }
 ```
 
-### Controller REST
+### Controller REST (NO usa @injectable)
+```vela
+@controller("/api/users")
+controller UserController {
+  service: UserService
+  
+  constructor(@inject service: UserService) {
+    this.service = service
+  }
+  
+  @get("/:id")
+  async fn getUser(@param id: Number) -> Response<User> {
+    # Implementación
+  }
+}
+```
 ```vela
 @injectable
 @controller("/api/users")

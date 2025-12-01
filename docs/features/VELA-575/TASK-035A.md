@@ -75,18 +75,19 @@ class UserService {
   }
 }
 
-# Contenedor DI (usando @module, NO @container)
+# Contenedor DI usando @module (patrón MULTIPLATAFORMA)
 @module({
-  declarations: [UserService, UserRepository],
-  providers: [UserService, UserRepository],
-  exports: [UserService]
+  declarations: [UserWidget],  # UI components (frontend, si aplica)
+  controllers: [UserController],  # REST endpoints (backend)
+  providers: [UserService, UserRepository],  # Services, repositories
+  imports: [],  # Otros módulos
+  exports: [UserService, UserWidget]  # Services y/o widgets exportados
 })
 module AppModule { }
 
-# Controller REST
-@injectable
-@controller(path: "/users")
-class UserController {
+# Controller REST (NO usa @injectable)
+@controller("/users")
+controller UserController {
   service: UserService
   
   constructor(@inject service: UserService) {
@@ -94,24 +95,22 @@ class UserController {
   }
   
   @get("/:id")
-  async fn getUser(id: Number) -> Result<Response<User>, Error> {
+  async fn getUser(@param id: Number) -> Response<User> {
     # Implementación
   }
 }
 
-# Middleware
+# Middleware (SÍ usa @injectable, es provider)
 @injectable
-@middleware
-class LoggerMiddleware {
-  fn handle(req: Request, next: () -> Response) -> Response {
+middleware LoggerMiddleware {
+  async fn apply(req: Request, res: Response, next: NextFunction) -> Promise<void> {
     # Log request
-    response = next()
+    await next()
     # Log response
-    return response
   }
 }
 
-# Guard de autorización
+# Guard de autorización (SÍ usa @injectable, es provider)
 @injectable
 @guard
 class AuthGuard {
