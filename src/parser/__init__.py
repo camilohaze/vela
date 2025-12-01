@@ -31,6 +31,17 @@ from .pratt_parser import (
     parse_expression_from_tokens
 )
 
+# Export Error Recovery classes
+from .error_recovery import (
+    ErrorRecoveryParser,
+    ParseError,
+    ErrorSeverity,
+    ErrorStatistics,
+    parse_with_error_recovery,
+    collect_error_statistics,
+    format_errors
+)
+
 # Export AST node types
 from .ast_nodes import (
     # Base
