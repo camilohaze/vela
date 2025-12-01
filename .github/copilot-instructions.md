@@ -638,7 +638,6 @@ Si algo no está claro:
 
 #### Exports Explícitos (PROHIBIDO):
 - ❌ `export` - NO EXISTE (usar modificador `public` en lugar)
-- ❌ `module` - NO EXISTE (usar estructura de carpetas)
 
 #### Otros (PROHIBIDOS):
 - ❌ `switch` - NO EXISTE (usar `match` con pattern matching)
@@ -647,6 +646,7 @@ Si algo no está claro:
 - ❌ `goto` - NO EXISTE (jamás)
 - ❌ `with` - NO EXISTE
 - ❌ `in` - NO EXISTE como keyword standalone
+- ❌ `namespace` - NO EXISTE (Vela NO usa namespaces)
 
 ---
 
@@ -835,9 +835,50 @@ match divide(10, 2) {
 | Keyword | Propósito | Ejemplo |
 |---------|-----------|---------|
 | `import` | Importar módulo/paquete | `import 'package:http'` |
-| `show` | Importar elementos específicos | `import 'lib:utils' show { sort, filter }` |
-| `hide` | Importar todo excepto | `import 'lib:math' hide { deprecated_fn }` |
+| `show` | Importar elementos específicos | `import 'library:utils' show { sort, filter }` |
+| `hide` | Importar todo excepto | `import 'library:math' hide { deprecated_fn }` |
 | `as` | Alias para import | `import 'package:long_name' as ln` |
+
+**Sistema de Imports con Prefijos:**
+```vela
+# APIs INTERNAS DE VELA
+import 'system:ui'              # Sistema de UI de Vela (Container, Column, Text, etc.)
+import 'system:reactive'        # Sistema reactivo (signal, computed, effect)
+import 'system:http'            # Sistema HTTP (Request, Response, HttpClient)
+import 'system:actors'          # Sistema de actores
+
+# DEPENDENCIAS EXTERNAS (npm, pub, etc.)
+import 'package:lodash'         # Librería externa instalada
+import 'package:axios'          # Cliente HTTP externo
+
+# MÓDULOS DEL PROYECTO (@module)
+import 'module:auth'            # AuthModule (definido con @module)
+import 'module:users'           # UsersModule
+
+# LIBRERÍAS INTERNAS DEL PROYECTO (@library)
+import 'library:utils'          # Librería de utilidades interna
+import 'library:validators'     # Librería de validadores
+
+# EXTENSIONES INTERNAS (@extension)
+import 'extension:charts'       # Extensión de gráficos
+import 'extension:maps'         # Extensión de mapas
+
+# ASSETS
+import 'assets:images'          # Assets de imágenes
+import 'assets:fonts'           # Assets de fuentes
+```
+
+**❌ NO EXISTE `namespace` NI declaraciones de paquete estilo Java:**
+```vela
+# ❌ PROHIBIDO: namespace/package declarations
+# module com.example.myapp;     // NO EXISTE
+# package com.example.myapp;    // NO EXISTE
+# namespace Math { }            // NO EXISTE
+
+# ✅ CORRECTO: imports con prefijos
+import 'module:auth'
+import 'library:utils'
+```
 
 **⚠️ NO EXISTE `export`**:
 ```vela
@@ -955,7 +996,52 @@ fn privateHelper() -> void {
 
 ---
 
+#### 18. Sistema de Módulos (Angular-style)
+
+| Keyword | Propósito | Ejemplo |
+|---------|-----------|---------|
+| `module` | Módulo funcional (NO instanciable) | `module AuthModule { }` |
+
+**⚠️ IMPORTANTE: `module` vs `class`**
+
+**`module`** - Unidad de organización (NO instanciable):
+```vela
+@module({
+  declarations: [AuthService, LoginWidget],
+  exports: [AuthService],
+  providers: [AuthService],
+  imports: [HttpModule]
+})
+module AuthModule { }
+```
+
+**`class`** - Tipo instanciable:
+```vela
+class User {
+  constructor(name: String) { }
+}
+
+user = User("Alice")  # OK: class es instanciable
+```
+
+**Reglas Obligatorias para `module`:**
+- ✅ DEBE tener decorador `@module({ ... })`
+- ✅ DEBE declarar `declarations`, `exports`, `providers`, `imports`
+- ✅ `exports` ⊆ `declarations` (exports debe ser subconjunto)
+- ✅ `providers` ⊆ `declarations`
+- ❌ NO es instanciable (no se puede hacer `new AuthModule()`)
+- ❌ NO tiene constructor
+- ❌ NO se usa para crear objetos
+
+---
+
 ### 🎨 DECORADORES / ANNOTATIONS
+
+**Decoradores para Sistema de Módulos**:
+- `@module({ ... })` - Define módulo funcional (Angular-style)
+- `@package` - Define paquete publicable
+- `@library` - Define librería interna reutilizable
+- `@extension` - Define extensión del lenguaje
 
 **Decoradores para DI (Dependency Injection)**:
 - `@injectable` - Marca clase como inyectable
