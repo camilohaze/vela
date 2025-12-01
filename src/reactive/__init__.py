@@ -25,13 +25,30 @@ from .signal import Signal, signal
 from .computed import Computed, computed
 from .effect import Effect, effect
 from .watch import Watch, watch
+from .scheduler import ReactiveScheduler, SchedulerPriority
+from .batch import (
+    batch,
+    batching,
+    start_batch,
+    end_batch,
+    flush_batch,
+    is_batching,
+    batch_decorator,
+    batch_fn,
+    BatchScope,
+    set_global_graph,
+    get_global_graph as get_batch_global_graph,
+)
 
 __all__ = [
+    # Core
     'ReactiveGraph',
     'ReactiveNode',
     'TrackingContext',
     'track',
     'untrack',
+    
+    # Primitives
     'Signal',
     'signal',
     'Computed',
@@ -40,6 +57,22 @@ __all__ = [
     'effect',
     'Watch',
     'watch',
+    
+    # Scheduler (VELA-574 - TASK-031)
+    'ReactiveScheduler',
+    'SchedulerPriority',
+    
+    # Batch API (VELA-574 - TASK-032)
+    'batch',
+    'batching',
+    'start_batch',
+    'end_batch',
+    'flush_batch',
+    'is_batching',
+    'batch_decorator',
+    'batch_fn',
+    'BatchScope',
+    'set_global_graph',
 ]
 
 # Instancia global del grafo reactivo
