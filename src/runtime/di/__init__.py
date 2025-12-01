@@ -1,7 +1,7 @@
 """
 Sistema de Dependency Injection para Vela
 
-Implementación de: TASK-035B, TASK-035C, TASK-035D, TASK-035D2, TASK-035D3
+Implementación de: TASK-035B, TASK-035C, TASK-035D, TASK-035D2, TASK-035D3, TASK-035E, TASK-035E2
 Historia: VELA-575
 Sprint: 13
 
@@ -99,6 +99,41 @@ from .file_decorators import (
     is_form_parameter,
     get_file_metadata,
     get_form_metadata,
+)
+from .pipes import (
+    PipeContext,
+    HTTPPipeMetadata,
+    UIPipeMetadata,
+    ParameterPipeMetadata,
+    pipe,
+    is_ui_pipe,
+    is_http_pipe,
+    is_parameter_pipe,
+    get_ui_pipe_metadata,
+    get_http_pipe_metadata,
+    get_pipe_name,
+    get_pipe_classes,
+    validate_pipe_class,
+)
+from .middleware import (
+    MiddlewareMetadata,
+    middleware,
+    is_middleware,
+    get_middleware_metadata,
+    get_middleware_classes,
+    get_middleware_order,
+    combine_middleware,
+    validate_middleware_class,
+)
+from .guards import (
+    ExecutionContext,
+    GuardMetadata,
+    guard,
+    is_guard,
+    get_guard_metadata,
+    get_guard_classes,
+    combine_guards,
+    validate_guard_class,
 )
 
 __all__ = [
@@ -204,7 +239,42 @@ __all__ = [
     'is_form_parameter',
     'get_file_metadata',
     'get_form_metadata',
+    
+    # Pipes (TASK-035E2 - Context-Aware)
+    'PipeContext',
+    'HTTPPipeMetadata',
+    'UIPipeMetadata',
+    'ParameterPipeMetadata',
+    'pipe',
+    'is_ui_pipe',
+    'is_http_pipe',
+    'is_parameter_pipe',
+    'get_ui_pipe_metadata',
+    'get_http_pipe_metadata',
+    'get_pipe_name',
+    'get_pipe_classes',
+    'validate_pipe_class',
+    
+    # Middleware (TASK-035E2 - Backend Only)
+    'MiddlewareMetadata',
+    'middleware',
+    'is_middleware',
+    'get_middleware_metadata',
+    'get_middleware_classes',
+    'get_middleware_order',
+    'combine_middleware',
+    'validate_middleware_class',
+    
+    # Guards (TASK-035E2 - Backend Only)
+    'ExecutionContext',
+    'GuardMetadata',
+    'guard',
+    'is_guard',
+    'get_guard_metadata',
+    'get_guard_classes',
+    'combine_guards',
+    'validate_guard_class',
 ]
 
-__version__ = '0.7.0'  # TASK-035E: +@provides decorator + file upload decorators
+__version__ = '0.8.0'  # TASK-035E2: +@pipe (context-aware), @middleware, @guard decorators
 __author__ = 'GitHub Copilot Agent'
