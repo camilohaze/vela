@@ -167,21 +167,26 @@ We welcome contributions! Please read our [CONTRIBUTING.md](.github/CONTRIBUTING
 
 **Current Phase:** Phase 0 (Foundation)
 
-| Component | Status | Progress |
-|-----------|--------|----------|
-| **Sprint 0: Critical Decisions** | ✅ Complete | 100% |
-| **Sprint 1: Formal Specifications** | ✅ Complete | 100% |
-| **Sprint 2: Tooling Architecture** | ✅ Complete | 100% |
-| **Sprint 3: Infrastructure Setup** | 🚧 In Progress | 75% |
-| **Compiler (Lexer)** | ⏳ Planned | 0% |
-| **Compiler (Parser)** | ⏳ Planned | 0% |
-| **Type System** | ⏳ Planned | 0% |
-| **Reactive Engine** | ⏳ Planned | 0% |
-| **VM** | ⏳ Planned | 0% |
-| **Standard Library** | ⏳ Planned | 0% |
-| **CLI** | ⏳ Planned | 0% |
-| **LSP** | ⏳ Planned | 0% |
-| **DevTools** | ⏳ Planned | 0% |
+| Component | Status | Progress | Tests | LOC |
+|-----------|--------|----------|-------|-----|
+| **Sprint 0: Critical Decisions** | ✅ Complete | 100% | - | - |
+| **Sprint 1: Formal Specifications** | ✅ Complete | 100% | - | - |
+| **Sprint 2: Tooling Architecture** | ✅ Complete | 100% | - | - |
+| **Sprint 3: Infrastructure Setup** | ✅ Complete | 100% | - | - |
+| **Sprint 11-12: Signal System** | ✅ Complete | 100% | 245 | ~5000 |
+| **Sprint 13: DI System** | ✅ Complete | 100% | 327 | ~8000 |
+| **Sprint 14: Event System** | ✅ Complete | 100% | 231 | ~6500 |
+| **Compiler (Lexer)** | 🚧 Partial | 40% | - | ~2000 |
+| **Compiler (Parser)** | 🚧 Partial | 35% | - | ~3000 |
+| **Type System** | ⏳ Planned | 0% | - | - |
+| **VM** | ⏳ Planned | 0% | - | - |
+| **Standard Library** | 🚧 In Progress | 20% | - | ~1500 |
+| **CLI** | ⏳ Planned | 0% | - | - |
+| **LSP** | ⏳ Planned | 0% | - | - |
+| **DevTools** | ⏳ Planned | 0% | - | - |
+
+**Total Tests Passing:** 803 tests (245 Signal + 327 DI + 231 Event)  
+**Total LOC (Production + Tests):** ~19,500 LOC
 
 ---
 
@@ -191,7 +196,12 @@ We welcome contributions! Please read our [CONTRIBUTING.md](.github/CONTRIBUTING
 - ✅ Architectural decisions
 - ✅ Formal specifications
 - ✅ Tooling architecture
-- 🚧 Infrastructure setup
+- ✅ Infrastructure setup
+- ✅ Signal System (Sprint 11-12) - 245 tests
+- ✅ Dependency Injection (Sprint 13) - 327 tests
+- ✅ Event System (Sprint 14) - 231 tests
+- 🚧 Lexer (40% complete)
+- 🚧 Parser (35% complete)
 
 ### Phase 1: Core Language (Q2 2026)
 - Lexer and parser
@@ -277,4 +287,4 @@ For questions, suggestions, or feedback:
 
 ---
 
-*Last updated: 2025-11-30*
+*Last updated: 2025-12-02*
