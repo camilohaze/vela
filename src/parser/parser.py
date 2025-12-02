@@ -1829,6 +1829,10 @@ class Parser:
         if self.check(TokenType.THROW):
             return self.parse_throw_statement()
         
+        # State Management - Dispatch (TASK-035U)
+        if self.check(TokenType.DISPATCH):
+            return self.parse_dispatch_statement()
+        
         # Event System (TASK-035M)
         if self.check(TokenType.ON):
             return self.parse_on_statement()
@@ -1997,6 +2001,42 @@ class Parser:
         return ThrowStatement(
             range=self.create_range_from_tokens(start, end),
             exception=exception
+        )
+    
+    # ===============================================================
+    # STATE MANAGEMENT - DISPATCH (TASK-035U)
+    # ===============================================================
+    
+    def parse_dispatch_statement(self) -> DispatchStatement:
+        """
+        Parsea dispatch statement: dispatch(action)
+        
+        Sintaxis:
+        ```vela
+        dispatch(INCREMENT)
+        dispatch(AddTodo({ title: "Buy milk" }))
+        dispatch(todoActions.add("Buy milk"))
+        dispatch(await fetchUser(userId))
+        ```
+        
+        dispatch es un keyword nativo (como return, yield, throw)
+        que envía una acción al Store actual del contexto.
+        """
+        start = self.expect(TokenType.DISPATCH)
+        
+        # Expect opening paren
+        self.expect(TokenType.LPAREN)
+        
+        # Parse action expression
+        action = self.parse_expression()
+        
+        # Expect closing paren
+        self.expect(TokenType.RPAREN)
+        end = self.peek(-1)
+        
+        return DispatchStatement(
+            range=self.create_range_from_tokens(start, end),
+            action=action
         )
     
     # ===============================================================
@@ -2308,7 +2348,7 @@ class Parser:
     
     def parse_unary_expression(self) -> Expression:
         """Parse unary expression"""
-        if self.match(TokenType.MINUS, TokenType.NOT):
+        if self.match(TokenType.MINUS, TokenType.BANG):
             start = self.peek(-1)
             operator = start.value
             operand = self.parse_unary_expression()
