@@ -55,9 +55,9 @@ class MockEventTarget:
             use_bubbling=event.bubbles
         )
     
-    def add_event_listener(self, event_type: str, listener):
+    def add_event_listener(self, event_type: str, listener, use_capture: bool = False):
         """Add event listener."""
-        return self.bus.on(event_type, listener)
+        return self.bus.on(event_type, listener, use_capture=use_capture)
     
     def __repr__(self):
         return f"MockEventTarget({self.name})"
@@ -215,7 +215,6 @@ class TestBubblingPropagation:
 class TestCapturingPropagation:
     """Test propagación capturing (parent → child)."""
     
-    @pytest.mark.skip(reason="Capturing phase disabled until useCapture support implemented")
     def test_full_propagation_cycle(self):
         """Test ciclo completo: capturing → at_target → bubbling."""
         root = MockEventTarget("root")
@@ -234,9 +233,14 @@ class TestCapturingPropagation:
                 })
             return handler
         
-        root.add_event_listener("click", track("root"))
-        child.add_event_listener("click", track("child"))
-        grandchild.add_event_listener("click", track("grandchild"))
+        # Register capturing listeners (for capturing phase)
+        root.add_event_listener("click", track("root"), use_capture=True)
+        child.add_event_listener("click", track("child"), use_capture=True)
+        
+        # Register bubbling listeners (for at_target and bubbling phases)
+        root.add_event_listener("click", track("root"), use_capture=False)
+        child.add_event_listener("click", track("child"), use_capture=False)
+        grandchild.add_event_listener("click", track("grandchild"), use_capture=False)
         
         event = Event("click", {}, bubbles=True)
         grandchild.dispatch_event(event)
@@ -303,7 +307,6 @@ class TestStopPropagation:
         # Solo child (stopPropagation prevents bubbling to root)
         assert order == ["child"]
     
-    @pytest.mark.skip(reason="Capturing phase disabled until useCapture support implemented")
     def test_stop_propagation_in_capturing(self):
         """Test que stopPropagation() detiene capturing."""
         root = MockEventTarget("root")
@@ -316,9 +319,12 @@ class TestStopPropagation:
             execution.append("child-capturing")
             e.stop_propagation()
         
-        root.add_event_listener("click", lambda e: execution.append("root-capturing"))
-        child.add_event_listener("click", stop_at_child)
-        grandchild.add_event_listener("click", lambda e: execution.append("grandchild"))
+        # Register capturing listeners
+        root.add_event_listener("click", lambda e: execution.append("root-capturing"), use_capture=True)
+        child.add_event_listener("click", stop_at_child, use_capture=True)
+        
+        # Register bubbling listener on grandchild
+        grandchild.add_event_listener("click", lambda e: execution.append("grandchild"), use_capture=False)
         
         event = Event("click", {}, bubbles=True)
         grandchild.dispatch_event(event)

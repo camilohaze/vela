@@ -168,17 +168,19 @@ class Subscription:
         self, 
         event_type: str, 
         listener: EventListener, 
-        bus: 'EventBus'
+        bus: 'EventBus',
+        use_capture: bool = False
     ):
         self.event_type = event_type
         self.listener = listener
         self.bus = bus
+        self.use_capture = use_capture
         self.disposed = False
     
     def unsubscribe(self) -> None:
         """Unsubscribe from event bus."""
         if not self.disposed:
-            self.bus.off(self.event_type, self.listener)
+            self.bus.off(self.event_type, self.listener, self.use_capture)
             self.disposed = True
     
     def __enter__(self):
@@ -210,8 +212,9 @@ class EventBus:
     """
     
     def __init__(self):
-        """Initialize EventBus with empty listeners dict."""
-        self._listeners = {}  # type: Dict[str, List[EventListener]]
+        """Initialize EventBus with empty listeners dicts."""
+        self._listeners = {}  # type: Dict[str, List[tuple]]
+        self._capturing_listeners = {}  # type: Dict[str, List[tuple]]
         self._lock = threading.Lock()
     
     @classmethod
@@ -222,7 +225,9 @@ class EventBus:
     def on(
         self, 
         event_type: str, 
-        listener: EventListener
+        listener: EventListener,
+        use_capture: bool = False,
+        priority: int = 0
     ) -> Subscription:
         """
         Subscribe to event type.
@@ -230,6 +235,8 @@ class EventBus:
         Args:
             event_type: Event type to listen to (e.g., "user.created")
             listener: Callback function to handle event
+            use_capture: Listen during capturing phase (default: False)
+            priority: Listener priority (higher = earlier, default: 0)
         
         Returns:
             Subscription object for unsubscribe
@@ -238,13 +245,29 @@ class EventBus:
             >>> def on_user_created(event: Event[User]):
             ...     print(f"User created: {event.payload.name}")
             >>> sub = bus.on("user.created", on_user_created)
+            >>> 
+            >>> # Listen during capturing with high priority
+            >>> sub = bus.on("click", handler, use_capture=True, priority=10)
         """
-        with self._lock:
-            if event_type not in self._listeners:
-                self._listeners[event_type] = []
-            self._listeners[event_type].append(listener)
+        listener_tuple = (listener, priority, use_capture)
         
-        return Subscription(event_type, listener, self)
+        with self._lock:
+            if use_capture:
+                # Add to capturing listeners
+                if event_type not in self._capturing_listeners:
+                    self._capturing_listeners[event_type] = []
+                self._capturing_listeners[event_type].append(listener_tuple)
+                # Sort by priority (higher first)
+                self._capturing_listeners[event_type].sort(key=lambda x: -x[1])
+            else:
+                # Add to bubbling listeners
+                if event_type not in self._listeners:
+                    self._listeners[event_type] = []
+                self._listeners[event_type].append(listener_tuple)
+                # Sort by priority (higher first)
+                self._listeners[event_type].sort(key=lambda x: -x[1])
+        
+        return Subscription(event_type, listener, self, use_capture)
     
     def emit(self, event_type: str, payload: Any) -> None:
         """
@@ -272,7 +295,9 @@ class EventBus:
         event = Event(type=event_type, payload=payload)
         
         # Notify listeners (outside lock to avoid deadlock)
-        for listener in listeners:
+        # Listeners are stored as tuples: (listener, priority, use_capture)
+        for listener_tuple in listeners:
+            listener = listener_tuple[0]  # Extract actual listener function
             try:
                 listener(event)
             except Exception as e:
@@ -286,7 +311,8 @@ class EventBus:
     def off(
         self, 
         event_type: str, 
-        listener: EventListener
+        listener: EventListener,
+        use_capture: bool = False
     ) -> None:
         """
         Unsubscribe listener from event type.
@@ -294,25 +320,31 @@ class EventBus:
         Args:
             event_type: Event type to unsubscribe from
             listener: Listener function to remove
+            use_capture: Remove from capturing listeners (default: False)
         
         Example:
             >>> bus.off("user.created", on_user_created)
+            >>> bus.off("click", handler, use_capture=True)
         """
         with self._lock:
-            if event_type in self._listeners:
-                try:
-                    self._listeners[event_type].remove(listener)
-                    # Remove event type if no more listeners
-                    if not self._listeners[event_type]:
-                        del self._listeners[event_type]
-                except ValueError:
-                    # Listener not found, ignore
-                    pass
+            listeners_dict = self._capturing_listeners if use_capture else self._listeners
+            
+            if event_type in listeners_dict:
+                # Find and remove listener tuple
+                listeners_dict[event_type] = [
+                    t for t in listeners_dict[event_type] 
+                    if t[0] != listener
+                ]
+                # Remove event type if no more listeners
+                if not listeners_dict[event_type]:
+                    del listeners_dict[event_type]
     
     def once(
         self, 
         event_type: str, 
-        listener: EventListener
+        listener: EventListener,
+        use_capture: bool = False,
+        priority: int = 0
     ) -> Subscription:
         """
         Subscribe to event type for one-time notification.
@@ -321,6 +353,8 @@ class EventBus:
         Args:
             event_type: Event type to listen to
             listener: Callback function to handle event
+            use_capture: Listen during capturing phase (default: False)
+            priority: Listener priority (default: 0)
         
         Returns:
             Subscription object
@@ -330,9 +364,9 @@ class EventBus:
         """
         def wrapped_listener(event: Any):
             listener(event)
-            self.off(event_type, wrapped_listener)
+            self.off(event_type, wrapped_listener, use_capture)
         
-        return self.on(event_type, wrapped_listener)
+        return self.on(event_type, wrapped_listener, use_capture, priority)
     
     def clear(self, event_type: Optional[str] = None) -> None:
         """
@@ -349,8 +383,10 @@ class EventBus:
         with self._lock:
             if event_type is not None:
                 self._listeners.pop(event_type, None)
+                self._capturing_listeners.pop(event_type, None)
             else:
                 self._listeners.clear()
+                self._capturing_listeners.clear()
     
     def listener_count(self, event_type: str) -> int:
         """
@@ -367,7 +403,9 @@ class EventBus:
             >>> print(f"{count} listeners for user.created")
         """
         with self._lock:
-            return len(self._listeners.get(event_type, []))
+            bubbling_count = len(self._listeners.get(event_type, []))
+            capturing_count = len(self._capturing_listeners.get(event_type, []))
+            return bubbling_count + capturing_count
     
     def event_types(self) -> List[str]:
         """
@@ -381,7 +419,9 @@ class EventBus:
             >>> print(f"Registered events: {types}")
         """
         with self._lock:
-            return list(self._listeners.keys())
+            # Combine keys from both bubbling and capturing listeners
+            all_types = set(self._listeners.keys()) | set(self._capturing_listeners.keys())
+            return list(all_types)
     
     def dispatch_event(
         self, 
@@ -436,23 +476,21 @@ class EventBus:
         event.target = target
         
         # Phase 1: CAPTURING (root → target, excluding target)
-        # TODO: Implement capturing listener tracking (useCapture parameter)
-        # For now, capturing is disabled by default until we add useCapture support
-        # if use_capturing and len(path) > 1:
-        #     event.event_phase = EventPhase.CAPTURING
-        #     
-        #     for current in path[:-1]:  # Exclude target
-        #         if event.propagation_stopped:
-        #             break
-        #         
-        #         event.current_target = current
-        #         self._dispatch_event_at_target(event, current)
+        if use_capturing and len(path) > 1:
+            event.event_phase = EventPhase.CAPTURING
+            
+            for current in path[:-1]:  # Exclude target
+                if event.propagation_stopped:
+                    break
+                
+                event.current_target = current
+                self._dispatch_event_at_target(event, current, use_capturing=True)
         
         # Phase 2: AT_TARGET
         if not event.propagation_stopped:
             event.event_phase = EventPhase.AT_TARGET
             event.current_target = target
-            self._dispatch_event_at_target(event, target)
+            self._dispatch_event_at_target(event, target, use_capturing=False)
         
         # Phase 3: BUBBLING (target → root, excluding target)
         if use_bubbling and event.bubbles and len(path) > 1:
@@ -465,7 +503,7 @@ class EventBus:
                         break
                     
                     event.current_target = current
-                    self._dispatch_event_at_target(event, current)
+                    self._dispatch_event_at_target(event, current, use_capturing=False)
         
         # Reset phase
         event.event_phase = EventPhase.NONE
@@ -476,36 +514,49 @@ class EventBus:
     def _dispatch_event_at_target(
         self, 
         event: Event[T], 
-        target: Any
+        target: Any,
+        use_capturing: bool = False
     ) -> None:
         """
         Internal: Dispatch event to listeners at specific target.
         
         Busca listeners en el EventBus del target (si tiene uno), o usa
-        self._listeners como fallback.
+        self._listeners o self._capturing_listeners según la fase.
         
         Args:
             event: Event object
             target: Target to dispatch to
+            use_capturing: Use capturing listeners (True) or bubbling (False)
         """
         # Try to get listeners from target's bus (if it has one)
-        listeners = []
+        listener_tuples = []
         
         # Check if target has its own EventBus
         if hasattr(target, 'bus') and hasattr(target.bus, '_listeners'):
             with target.bus._lock:
-                if event.type in target.bus._listeners:
-                    listeners = target.bus._listeners[event.type].copy()
+                if use_capturing:
+                    if event.type in target.bus._capturing_listeners:
+                        listener_tuples = target.bus._capturing_listeners[event.type].copy()
+                else:
+                    if event.type in target.bus._listeners:
+                        listener_tuples = target.bus._listeners[event.type].copy()
         else:
-            # Fallback: use self._listeners
+            # Fallback: use self listeners
             with self._lock:
-                if event.type in self._listeners:
-                    listeners = self._listeners[event.type].copy()
+                if use_capturing:
+                    if event.type in self._capturing_listeners:
+                        listener_tuples = self._capturing_listeners[event.type].copy()
+                else:
+                    if event.type in self._listeners:
+                        listener_tuples = self._listeners[event.type].copy()
         
         # Call listeners (outside lock)
-        for listener in listeners:
+        # Listeners are stored as tuples: (listener, priority, use_capture)
+        for listener_tuple in listener_tuples:
             if event.immediate_propagation_stopped:
                 break
+            
+            listener = listener_tuple[0]  # Extract actual listener function
             
             try:
                 listener(event)
