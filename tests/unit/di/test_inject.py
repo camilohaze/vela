@@ -190,27 +190,18 @@ class TestInjectDecorator:
     """Tests para decorador @inject."""
     
     def test_inject_decorator_basic(self):
-        """Test decorador @inject marca parámetro."""
-        # Simular parámetro con default que actúa como decorador
-        class DummyParam:
-            pass
+        """Test inject() retorna _InjectMarker sin token."""
+        marker = inject()
         
-        param = DummyParam()
-        decorated = inject()(param)
-        
-        assert hasattr(decorated, '__inject_metadata__')
-        assert decorated.__inject_metadata__.token is None
+        assert hasattr(marker, '__inject_metadata__')
+        assert marker.__inject_metadata__.token is None
     
     def test_inject_decorator_with_token(self):
-        """Test @inject con token custom."""
-        class DummyParam:
-            pass
+        """Test inject() retorna _InjectMarker con token custom."""
+        marker = inject("custom-token")
         
-        param = DummyParam()
-        decorated = inject("custom-token")(param)
-        
-        assert hasattr(decorated, '__inject_metadata__')
-        assert decorated.__inject_metadata__.token == "custom-token"
+        assert hasattr(marker, '__inject_metadata__')
+        assert marker.__inject_metadata__.token == "custom-token"
 
 
 class TestInjectIntegration:
