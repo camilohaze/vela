@@ -29,6 +29,17 @@ from .inject import (
     has_inject_params,
     get_inject_token
 )
+from .graph_analyzer import (
+    DependencyNode,
+    DependencyGraph,
+    analyze_injector,
+    verify_no_cycles
+)
+from .cycle_warnings import (
+    NearCycleWarning,
+    CycleWarningDetector,
+    check_near_cycles
+)
 from .module import (
     module,
     ModuleMetadata,
@@ -318,7 +329,16 @@ __all__ = [
     'ScopeContext',
     'IsolatedScope',
     'isolated_scope',
+    
+    # Circular Dependency Detection (TASK-035H)
+    'DependencyGraph',
+    'DependencyNode',
+    'analyze_injector',
+    'verify_no_cycles',
+    'NearCycleWarning',
+    'CycleWarningDetector',
+    'check_near_cycles',
 ]
 
-__version__ = '0.10.0'  # TASK-035G: +Lifecycle Management (disposal automático, scope hierarchy, hooks)
+__version__ = '0.12.0'  # TASK-035H: +Circular Dependency Detection (graph analyzer, cycle detection, visualization)
 __author__ = 'GitHub Copilot Agent'

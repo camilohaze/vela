@@ -51,9 +51,30 @@ class InjectMetadata:
             raise ValueError("param_name cannot be empty")
 
 
+class _InjectMarker:
+    """
+    Objeto sentinel que marca un parámetro para inyección.
+    
+    Este objeto se usa como valor por defecto de parámetros
+    para indicar que deben ser inyectados por el DI container.
+    """
+    def __init__(self, token=None):
+        """
+        Args:
+            token: Token custom para resolver dependencia (opcional)
+        """
+        self.__inject_metadata__ = InjectMetadata(
+            param_name="__placeholder__",
+            token=token
+        )
+    
+    def __repr__(self):
+        return f"_InjectMarker(token={self.__inject_metadata__.token})"
+
+
 def inject(token: Optional[str] = None):
     """
-    Decorador que marca un parámetro de constructor para inyección.
+    Marca un parámetro de constructor para inyección.
     
     Este decorador extrae metadata del parámetro (tipo, nombre, default)
     y permite especificar un token custom para resolver la dependencia.
@@ -115,25 +136,7 @@ def inject(token: Optional[str] = None):
         - Soporta valores por defecto
     """
     
-    def parameter_decorator(param):
-        """Decorador interno que agrega metadata al parámetro."""
-        # Marcar parámetro como inyectable
-        if not hasattr(param, '__inject_metadata__'):
-            # Crear metadata placeholder (se completará en get_inject_metadata)
-            metadata = InjectMetadata(
-                param_name="__placeholder__",
-                token=token
-            )
-            setattr(param, '__inject_metadata__', metadata)
-        
-        return param
-    
-    # Si se llama sin argumentos: @inject
-    if callable(token):
-        return parameter_decorator(token)
-    
-    # Si se llama con argumentos: @inject("token")
-    return parameter_decorator
+    return _InjectMarker(token)
 
 
 def get_inject_metadata(func: callable) -> list[InjectMetadata]:

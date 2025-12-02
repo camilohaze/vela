@@ -60,7 +60,16 @@ class CircularDependencyError(InjectionError):
             cls.__name__ if isinstance(cls, type) else str(cls)
             for cls in dependency_chain
         )
-        super().__init__(f"Circular dependency detected: {chain_str}")
+        
+        # Mensaje mejorado con sugerencias
+        message = f"Circular dependency detected: {chain_str}\n"
+        message += "\nSuggestions to break the cycle:\n"
+        message += "  1. Use @lazy() injection for one dependency\n"
+        message += "  2. Introduce an intermediate service/interface\n"
+        message += "  3. Use event-driven architecture (Observer pattern)\n"
+        message += "  4. Refactor to remove the circular dependency\n"
+        
+        super().__init__(message)
 
 
 class ProviderNotFoundError(InjectionError):
@@ -278,7 +287,15 @@ class Injector:
         service = injector.get(UserService)
     """
     
-    def __init__(self):
+    def __init__(self, validate_cycles: bool = False):
+        """
+        Inicializar Injector.
+        
+        Args:
+            validate_cycles: Si True, valida ciclos automáticamente después de cada registro.
+                           Útil en desarrollo para detectar ciclos temprano.
+                           En producción, mejor usar validate_no_cycles() manualmente.
+        """
         self._registry = ProviderRegistry()
         self._context = ResolutionContext()
         
@@ -292,6 +309,10 @@ class Injector:
         
         # Lifecycle hooks globales
         self._lifecycle_hooks: LifecycleHooks = LifecycleHooks()
+        
+        # TASK-035H: Circular Dependency Detection
+        # Validación automática de ciclos (opcional, desarrollo)
+        self._validate_cycles = validate_cycles
     
     # ========================================
     # Registration Methods
@@ -375,6 +396,21 @@ class Injector:
         )
         
         self._registry.register(entry)
+        
+        # TASK-035H: Re-procesar dependencias de proveedores existentes que podrían
+        # tener forward references ahora resueltas
+        self._update_forward_references()
+        
+        # TASK-035H: Validar ciclos automáticamente si está habilitado
+        if self._validate_cycles:
+            try:
+                self.validate_no_cycles()
+            except CircularDependencyError as e:
+                # Re-lanzar con contexto de qué provider causó el ciclo
+                raise CircularDependencyError(
+                    e.cycle,
+                    message=f"Circular dependency detected after registering {token.__name__}: {e}"
+                )
     
     def register_module(self, module_cls: Type) -> None:
         """
@@ -617,6 +653,31 @@ class Injector:
         """Limpiar cache de un scope."""
         self._context.clear_scope(scope)
     
+    def validate_no_cycles(self) -> None:
+        """
+        Validar que no existan ciclos en el grafo de dependencias.
+        
+        Realiza verificación estática de todos los providers registrados
+        para detectar ciclos ANTES de la resolución en runtime.
+        
+        Raises:
+            CircularDependencyError: Si se detectan ciclos.
+        
+        Ejemplo:
+            injector = Injector()
+            injector.register(ServiceA)
+            injector.register(ServiceB)
+            injector.register(ServiceC)
+            
+            # Validar antes de usar
+            injector.validate_no_cycles()  # Lanza error si hay ciclos
+            
+            # Ahora seguro usar
+            service = injector.get(ServiceA)
+        """
+        from .graph_analyzer import verify_no_cycles
+        verify_no_cycles(self)
+    
     def dispose_scope(self, scope: Scope, context: Optional[ResolutionContext] = None) -> None:
         """
         Disponer todas las instancias de un scope.
@@ -804,20 +865,96 @@ class Injector:
     # Helper Methods
     # ========================================
     
+    def _update_forward_references(self) -> None:
+        """
+        Re-procesar dependencias de todos los providers registrados para resolver
+        forward references que ahora podrían estar disponibles en el registry.
+        
+        TASK-035H: Después de registrar un nuevo tipo, los providers existentes que
+        tenían forward references (strings) ahora pueden resolverlos.
+        """
+        # Iterar sobre todos los providers registrados
+        for token, entry in list(self._registry._providers.items()):
+            # Verificar si hay strings en dependencies (forward references sin resolver)
+            has_unresolved = any(isinstance(dep, str) for dep in entry.dependencies)
+            
+            if has_unresolved:
+                # Re-extraer dependencias usando el contexto actualizado del registry
+                updated_deps = self._extract_constructor_dependencies(token)
+                
+                # Actualizar dependencies
+                entry.dependencies = updated_deps
+    
     def _extract_constructor_dependencies(self, cls: Type) -> List[Type]:
         """
         Extraer dependencias del constructor de una clase.
         
-        Lee metadata de @injectable para obtener dependencias.
+        Lee metadata de @inject en parámetros del constructor.
         """
-        from .injectable import get_injectable_metadata
+        from .inject import get_inject_metadata, get_constructor_inject_metadata
         
-        # Obtener metadata de @injectable
-        metadata = get_injectable_metadata(cls)
-        if metadata and metadata.dependencies:
-            return metadata.dependencies
+        dependencies = []
         
-        return []
+        # Primero intentar obtener metadata del constructor completo
+        constructor_meta = get_constructor_inject_metadata(cls)
+        if constructor_meta:
+            # constructor_meta es una lista de InjectMetadata
+            # Resolver tokens que sean strings (forward references)
+            resolved_deps = []
+            for meta in constructor_meta:
+                token = meta.token
+                
+                # Si token es string, buscar en registry
+                if isinstance(token, str):
+                    found = False
+                    for registered_token in self._registry._providers.keys():
+                        if hasattr(registered_token, '__name__') and registered_token.__name__ == token:
+                            resolved_deps.append(registered_token)
+                            found = True
+                            break
+                    # Si no se encuentra, mantener como string (será resuelto después)
+                    if not found:
+                        resolved_deps.append(token)
+                else:
+                    resolved_deps.append(token)
+            
+            return resolved_deps
+        
+        # Si no hay metadata de constructor, inspeccionar parámetros directamente
+        # (esto maneja forward references que fallan en get_type_hints)
+        try:
+            sig = inspect.signature(cls.__init__)
+            
+            for param_name, param in sig.parameters.items():
+                if param_name == 'self':
+                    continue
+                
+                # Verificar si el default value es un inject()
+                if hasattr(param.default, '__inject_metadata__'):
+                    inject_meta = param.default.__inject_metadata__
+                    
+                    # Si token es string (forward reference), buscarlo en registry
+                    if isinstance(inject_meta.token, str):
+                        # Intentar encontrar el tipo real en los providers ya registrados
+                        token_str = inject_meta.token
+                        
+                        # Buscar en registry por nombre de clase
+                        for registered_token in self._registry._providers.keys():
+                            if hasattr(registered_token, '__name__') and registered_token.__name__ == token_str:
+                                dependencies.append(registered_token)
+                                break
+                        # Si no se encuentra, guardar como string (será resuelto en runtime)
+                        # No agregarlo a dependencies por ahora
+                    else:
+                        dependencies.append(inject_meta.token)
+                # Si tiene type annotation (no string)
+                elif param.annotation != inspect.Parameter.empty and not isinstance(param.annotation, str):
+                    dependencies.append(param.annotation)
+        except Exception:
+            # Si falla la inspección, retornar vacío
+            pass
+        
+        return dependencies
     
     def _extract_factory_dependencies(self, factory: Callable) -> List[Type]:
         """
