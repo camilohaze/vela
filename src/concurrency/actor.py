@@ -100,12 +100,12 @@ class Actor(ABC):
         """
         pass
     
-    def pre_restart(self, error: Exception) -> None:
+    def pre_restart(self, error: Optional[Exception] = None) -> None:
         """
         Lifecycle hook: Llamado antes de reiniciar por error.
         
         Args:
-            error: Excepción que causó el restart
+            error: Excepción que causó el restart (None si restart manual)
         
         Útil para:
         - Log del error
@@ -116,12 +116,12 @@ class Actor(ABC):
         """
         pass
     
-    def post_restart(self, error: Exception) -> None:
+    def post_restart(self, error: Optional[Exception] = None) -> None:
         """
         Lifecycle hook: Llamado después de reiniciar.
         
         Args:
-            error: Excepción que causó el restart
+            error: Excepción que causó el restart (None si restart manual)
         
         Útil para:
         - Reinicializar estado
@@ -163,9 +163,38 @@ class Actor(ABC):
     # ACTOR REFERENCE
     # ========================================================================
     
+    @property
+    def ref(self) -> 'ActorRef':
+        """
+        Referencia al propio actor.
+        
+        Returns:
+            ActorRef: Referencia a este actor
+        
+        Útil para:
+        - Pasarse a sí mismo como sender en mensajes
+        - Auto-enviarse mensajes (recursión)
+        
+        Example:
+            other_actor.send(GetValue(sender=self.ref))
+        """
+        if self._actor_ref is None:
+            raise RuntimeError("Actor not initialized (no ActorRef)")
+        return self._actor_ref
+    
+    @ref.setter
+    def ref(self, ref: 'ActorRef') -> None:
+        """
+        Set actor reference (usado principalmente en tests).
+        
+        Args:
+            ref: ActorRef para este actor
+        """
+        self._actor_ref = ref
+    
     def self(self) -> 'ActorRef':
         """
-        Obtener referencia al propio actor.
+        Obtener referencia al propio actor (deprecated - usar property 'ref').
         
         Returns:
             ActorRef: Referencia a este actor
@@ -194,9 +223,29 @@ class Actor(ABC):
     # STATE MANAGEMENT
     # ========================================================================
     
+    @property
+    def state(self) -> ActorState:
+        """
+        Estado actual del actor.
+        
+        Returns:
+            ActorState: Estado actual
+        """
+        return self._actor_state
+    
+    @state.setter
+    def state(self, state: ActorState) -> None:
+        """
+        Set actor state.
+        
+        Args:
+            state: Nuevo estado
+        """
+        self._actor_state = state
+    
     def get_state(self) -> ActorState:
         """
-        Obtener estado actual del actor.
+        Obtener estado actual del actor (deprecated - usar property 'state').
         
         Returns:
             ActorState: Estado actual
@@ -205,7 +254,7 @@ class Actor(ABC):
     
     def _set_state(self, state: ActorState) -> None:
         """
-        Set actor state (internal use only).
+        Set actor state (internal use only - deprecated).
         
         Args:
             state: Nuevo estado
@@ -284,6 +333,18 @@ class ActorRef:
             str: Nombre único
         """
         return self._name
+    
+    @property
+    def actor(self) -> Actor:
+        """
+        Instancia del actor.
+        
+        Returns:
+            Actor: Instancia del actor referenciado
+        
+        Nota: Usado principalmente por supervisores para acceso directo
+        """
+        return self._actor
     
     @property
     def path(self) -> str:
