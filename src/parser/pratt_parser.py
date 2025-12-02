@@ -39,8 +39,14 @@ from typing import Optional, Callable, Dict
 from enum import IntEnum
 import sys
 
-sys.path.append('..')
-from lexer.token import Token, TokenType
+# Import del lexer (con fallback para tests)
+try:
+    # Try relative import (when running from src/)
+    from ..lexer.token import Token, TokenType
+except ImportError:
+    # Fallback to absolute import (when running tests)
+    sys.path.append('..')
+    from src.lexer.token import Token, TokenType
 
 from .ast_nodes import (
     Expression, BinaryExpression, UnaryExpression,

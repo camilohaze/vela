@@ -46,9 +46,16 @@ from dataclasses import dataclass
 from enum import Enum
 import sys
 
-sys.path.append('..')
-from lexer.token import Token, TokenType
-from lexer.lexer import Lexer
+# Import del lexer (con fallback para tests)
+try:
+    # Try relative import (when running from src/)
+    from ..lexer.token import Token, TokenType
+    from ..lexer.lexer import Lexer
+except ImportError:
+    # Fallback to absolute import (when running tests)
+    sys.path.append('..')
+    from src.lexer.token import Token, TokenType
+    from src.lexer.lexer import Lexer
 
 from .ast_nodes import (
     Program, Declaration, Statement, Expression,

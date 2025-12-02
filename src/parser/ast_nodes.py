@@ -121,7 +121,7 @@ class ImportDeclaration(ASTNode):
 @dataclass
 class Declaration(ASTNode):
     """Declaración de nivel superior"""
-    is_public: bool = False  # Modificador public
+    is_public: bool = field(default=False, kw_only=True)  # Modificador public (keyword-only)
 
 
 @dataclass
@@ -321,12 +321,12 @@ class MethodDeclaration:
     parameters: List['Parameter']
     return_type: Optional['TypeAnnotation']
     body: 'BlockStatement'
+    range: Range
     is_async: bool = False
     is_override: bool = False
     is_public: bool = True
     is_protected: bool = False
     is_private: bool = False
-    range: Range
 
 
 # Keywords Específicos de Dominio (DDD, Architecture Patterns, etc.)
@@ -818,6 +818,93 @@ class CatchClause:
     exception_type: Optional['TypeAnnotation']
     body: BlockStatement
     range: Range
+
+
+# ===================================================================
+# EVENT SYSTEM (TASK-035M)
+# ===================================================================
+
+@dataclass
+class EventOnStatement(Statement):
+    """
+    Event listener registration: on(event_type, handler)
+    
+    Sintaxis en Vela:
+    ```vela
+    # Callback inline
+    on("user.created", (event) => {
+      print("User created: ${event.payload.name}")
+    })
+    
+    # Callback con nombre
+    on("user.deleted", handleUserDeleted)
+    
+    # Con tipo de evento
+    on<UserEvent>("user.updated", handleUserUpdated)
+    ```
+    
+    Generará:
+    ```python
+    bus.on("user.created", lambda event: ...)
+    ```
+    """
+    event_type: 'Expression'  # Nombre del evento (String literal o Expression)
+    handler: 'Expression'     # Callback function (Lambda o Identifier)
+    type_param: Optional['TypeAnnotation'] = None  # on<T>
+
+
+@dataclass
+class EventEmitStatement(Statement):
+    """
+    Event emission: emit(event_type, payload)
+    
+    Sintaxis en Vela:
+    ```vela
+    # Emit simple
+    emit("user.created", user)
+    
+    # Emit con datos inline
+    emit("notification", {
+      message: "Hello",
+      level: "info"
+    })
+    
+    # Emit sin datos
+    emit("app.started")
+    ```
+    
+    Generará:
+    ```python
+    bus.emit("user.created", user)
+    ```
+    """
+    event_type: 'Expression'  # Nombre del evento
+    payload: Optional['Expression'] = None  # Datos del evento (opcional)
+
+
+@dataclass
+class EventOffStatement(Statement):
+    """
+    Event listener removal: off(event_type, handler)
+    
+    Sintaxis en Vela:
+    ```vela
+    # Remover listener específico
+    off("user.created", handleUserCreated)
+    
+    # Remover todos los listeners de un evento
+    off("user.created")
+    ```
+    
+    Generará:
+    ```python
+    bus.off("user.created", handleUserCreated)
+    # o
+    bus.clear("user.created")
+    ```
+    """
+    event_type: 'Expression'  # Nombre del evento
+    handler: Optional['Expression'] = None  # Handler a remover (opcional)
 
 
 # ===================================================================

@@ -284,6 +284,24 @@ class TokenKind(Enum):
     NEWLINE = auto()
     EOF = auto()
     ERROR = auto()
+    
+    # ============================================================
+    # ALIASES FOR PARSER COMPATIBILITY
+    # ============================================================
+    # El parser usa nombres cortos, agregamos aliases
+    LPAREN = LEFT_PAREN
+    RPAREN = RIGHT_PAREN
+    LBRACE = LEFT_BRACE
+    RBRACE = RIGHT_BRACE
+    LBRACKET = LEFT_BRACKET
+    RBRACKET = RIGHT_BRACKET
+    LT = LESS
+    GT = GREATER
+    LE = LESS_EQUAL
+    GE = GREATER_EQUAL
+    EQ = EQUAL
+    NE = BANG_EQUAL
+    ASSIGN = EQUAL
 
 
 @dataclass
@@ -333,6 +351,21 @@ class Token:
     lexeme: str
     position: Position
     value: Optional[Union[int, float, str, bool]] = None
+    
+    @property
+    def type(self) -> TokenKind:
+        """Alias for kind (for parser compatibility)"""
+        return self.kind
+    
+    @property
+    def line(self) -> int:
+        """Alias for position.line (for parser compatibility)"""
+        return self.position.line
+    
+    @property
+    def column(self) -> int:
+        """Alias for position.column (for parser compatibility)"""
+        return self.position.column
     
     def __str__(self) -> str:
         if self.value is not None:
@@ -481,6 +514,10 @@ KEYWORDS = {
     "show": TokenKind.SHOW,
     "hide": TokenKind.HIDE,
 }
+
+
+# Alias para compatibilidad con parser (usa TokenType en lugar de TokenKind)
+TokenType = TokenKind
 
 
 def is_keyword(text: str) -> bool:
