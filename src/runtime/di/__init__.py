@@ -135,6 +135,20 @@ from .guards import (
     combine_guards,
     validate_guard_class,
 )
+from .injector import (
+    Injector,
+    Container,
+    ResolutionContext,
+    ProviderEntry,
+    ProviderRegistry,
+    InjectionError,
+    CircularDependencyError,
+    ProviderNotFoundError,
+    InvalidScopeError,
+    create_injector,
+    get_global_injector,
+    create_container,
+)
 
 __all__ = [
     # Scopes
@@ -274,7 +288,21 @@ __all__ = [
     'get_guard_classes',
     'combine_guards',
     'validate_guard_class',
+    
+    # Injector Core (TASK-035F)
+    'Injector',
+    'Container',
+    'ResolutionContext',
+    'ProviderEntry',
+    'ProviderRegistry',
+    'InjectionError',
+    'CircularDependencyError',
+    'ProviderNotFoundError',
+    'InvalidScopeError',
+    'create_injector',
+    'get_global_injector',
+    'create_container',
 ]
 
-__version__ = '0.8.0'  # TASK-035E2: +@pipe (context-aware), @middleware, @guard decorators
+__version__ = '0.9.0'  # TASK-035F: +Injector Core con resolución automática de dependencias
 __author__ = 'GitHub Copilot Agent'
