@@ -1,0 +1,452 @@
+/**
+ * EventEmitter Interface - Standard Library
+ * 
+ * TASK-035N: Implementar EventEmitter interface
+ * Historia: VELA-575 - Dependency Injection
+ * Epic: VELA-573 - Sistema de Reactividad
+ * Sprint: 14
+ * 
+ * Interface estándar para objetos que pueden emitir eventos.
+ * Inspirado en Node.js EventEmitter, pero con type-safety de Vela.
+ * 
+ * Esta interface define el contrato para event emission, permitiendo
+ * que cualquier clase pueda convertirse en emisor de eventos implementándola.
+ * 
+ * @module system:events
+ * @since 1.0.0
+ */
+
+import 'system:reactive'
+
+
+/**
+ * Interface para objetos que pueden emitir eventos.
+ * 
+ * Cualquier clase puede implementar esta interface para ganar capacidades
+ * de event emission. La implementación default (EventEmitterBase) usa
+ * EventBus internamente para manejo de listeners.
+ * 
+ * Features:
+ * - Type-safe: Los eventos pueden tener payloads tipados
+ * - Múltiples listeners por evento
+ * - One-time listeners con once()
+ * - Auto-cleanup con removeAllListeners()
+ * - Subscription pattern para manejo de lifecycle
+ * 
+ * @example
+ * ```vela
+ * // Implementar EventEmitter en una clase custom
+ * class UserManager implements EventEmitter {
+ *     fn createUser(name: String) -> User {
+ *         user = User(name)
+ *         this.emit("user.created", user)
+ *         return user
+ *     }
+ * }
+ * 
+ * // Usar EventEmitter
+ * manager = UserManager()
+ * manager.on("user.created", (event) => {
+ *     print("New user: ${event.payload.name}")
+ * })
+ * ```
+ * 
+ * @interface EventEmitter
+ */
+interface EventEmitter {
+    
+    /**
+     * Subscribe to an event type.
+     * Registra un listener que será llamado cuando el evento sea emitido.
+     * 
+     * @param eventType - Event type identifier (e.g., "user.created")
+     * @param listener - Callback function to handle event
+     * @returns Subscription object para unsubscribe
+     * 
+     * @example
+     * ```vela
+     * subscription = emitter.on("data.received", (event) => {
+     *     print("Data: ${event.payload}")
+     * })
+     * 
+     * // Later: unsubscribe
+     * subscription.unsubscribe()
+     * ```
+     */
+    fn on(eventType: String, listener: (Event<T>) -> void) -> Subscription
+    
+    /**
+     * Subscribe to event for one-time notification.
+     * El listener se ejecuta solo una vez y luego se auto-remueve.
+     * 
+     * @param eventType - Event type identifier
+     * @param listener - Callback function (called only once)
+     * @returns Subscription object
+     * 
+     * @example
+     * ```vela
+     * emitter.once("app.ready", (event) => {
+     *     print("App initialized!")
+     * })
+     * ```
+     */
+    fn once(eventType: String, listener: (Event<T>) -> void) -> Subscription
+    
+    /**
+     * Emit an event to all subscribed listeners.
+     * Notifica a todos los listeners registrados para este tipo de evento.
+     * 
+     * Features:
+     * - Error isolation: Un listener con error no afecta otros
+     * - Listeners ejecutados en orden de suscripción
+     * - Thread-safe
+     * 
+     * @param eventType - Event type to emit
+     * @param payload - Event data (generic type T)
+     * 
+     * @example
+     * ```vela
+     * emitter.emit("user.created", user)
+     * emitter.emit("error", Error("Something went wrong"))
+     * ```
+     */
+    fn emit(eventType: String, payload: T) -> void
+    
+    /**
+     * Remove a specific listener from event type.
+     * Remueve un listener específico del tipo de evento.
+     * 
+     * @param eventType - Event type to unsubscribe from
+     * @param listener - Listener function to remove
+     * 
+     * @example
+     * ```vela
+     * handler = (event) => { print(event.payload) }
+     * emitter.on("data", handler)
+     * emitter.off("data", handler)  // Remove specific handler
+     * ```
+     */
+    fn off(eventType: String, listener: (Event<T>) -> void) -> void
+    
+    /**
+     * Remove all listeners for event type or all events.
+     * Limpia todos los listeners, útil para cleanup en lifecycle.
+     * 
+     * @param eventType - Optional event type. Si None, limpia todos.
+     * 
+     * @example
+     * ```vela
+     * emitter.removeAllListeners("user.created")  // Clear specific event
+     * emitter.removeAllListeners()  // Clear all events
+     * ```
+     */
+    fn removeAllListeners(eventType: Option<String>) -> void
+    
+    /**
+     * Get count of listeners for event type.
+     * Útil para debugging y monitoring.
+     * 
+     * @param eventType - Event type to count listeners for
+     * @returns Number of listeners subscribed
+     * 
+     * @example
+     * ```vela
+     * count = emitter.listenerCount("user.created")
+     * print("${count} listeners for user.created")
+     * ```
+     */
+    fn listenerCount(eventType: String) -> Number
+}
+
+
+/**
+ * Base class que implementa EventEmitter interface.
+ * 
+ * Provee implementación completa de EventEmitter usando EventBus
+ * internamente. Las clases pueden extender EventEmitterBase para
+ * ganar capacidades de event emission sin necesidad de implementar
+ * toda la interface.
+ * 
+ * Features:
+ * - Implementación thread-safe
+ * - Error isolation en listeners
+ * - Memory leak prevention
+ * - Auto-dispose support
+ * 
+ * @example
+ * ```vela
+ * class UserService extends EventEmitterBase {
+ *     fn createUser(name: String) -> User {
+ *         user = User(name)
+ *         this.emit("user.created", user)
+ *         return user
+ *     }
+ *     
+ *     fn deleteUser(id: Number) -> void {
+ *         this.emit("user.deleted", id)
+ *     }
+ * }
+ * 
+ * // Uso
+ * service = UserService()
+ * service.on("user.created", (e) => print("Created: ${e.payload.name}"))
+ * service.on("user.deleted", (e) => print("Deleted ID: ${e.payload}"))
+ * 
+ * service.createUser("Alice")  // Emits "user.created"
+ * service.deleteUser(1)        // Emits "user.deleted"
+ * ```
+ * 
+ * @class EventEmitterBase
+ * @implements EventEmitter
+ */
+class EventEmitterBase implements EventEmitter {
+    
+    /**
+     * Internal event bus para manejo de listeners.
+     * Cada instancia tiene su propio bus aislado.
+     * @private
+     */
+    private _bus: EventBus<T>
+    
+    /**
+     * Constructor.
+     * Inicializa el internal event bus.
+     */
+    constructor() {
+        this._bus = EventBus<T>()
+    }
+    
+    /**
+     * {@inheritDoc EventEmitter.on}
+     */
+    fn on(eventType: String, listener: (Event<T>) -> void) -> Subscription {
+        return this._bus.on(eventType, listener)
+    }
+    
+    /**
+     * {@inheritDoc EventEmitter.once}
+     */
+    fn once(eventType: String, listener: (Event<T>) -> void) -> Subscription {
+        return this._bus.once(eventType, listener)
+    }
+    
+    /**
+     * {@inheritDoc EventEmitter.emit}
+     */
+    fn emit(eventType: String, payload: T) -> void {
+        this._bus.emit(eventType, payload)
+    }
+    
+    /**
+     * {@inheritDoc EventEmitter.off}
+     */
+    fn off(eventType: String, listener: (Event<T>) -> void) -> void {
+        this._bus.off(eventType, listener)
+    }
+    
+    /**
+     * {@inheritDoc EventEmitter.removeAllListeners}
+     */
+    fn removeAllListeners(eventType: Option<String>) -> void {
+        match eventType {
+            Some(type) => this._bus.clear(type)
+            None => this._bus.clear()
+        }
+    }
+    
+    /**
+     * {@inheritDoc EventEmitter.listenerCount}
+     */
+    fn listenerCount(eventType: String) -> Number {
+        return this._bus.listener_count(eventType)
+    }
+    
+    /**
+     * Get list of all registered event types.
+     * Útil para debugging y introspection.
+     * 
+     * @returns List of event types that have listeners
+     * 
+     * @example
+     * ```vela
+     * types = emitter.eventTypes()
+     * print("Registered events: ${types}")
+     * ```
+     */
+    fn eventTypes() -> List<String> {
+        return this._bus.event_types()
+    }
+}
+
+
+/**
+ * Typed EventEmitter para eventos con payload específico.
+ * 
+ * Versión genérica de EventEmitter que enforcea un tipo de payload
+ * específico en compile-time, previniendo errores de tipo en runtime.
+ * 
+ * @example
+ * ```vela
+ * // EventEmitter que solo acepta User objects
+ * class UserEventEmitter extends TypedEventEmitter<User> {
+ *     fn notifyUserChange(user: User) -> void {
+ *         this.emit("user.changed", user)  // ✅ OK
+ *         // this.emit("user.changed", "string")  // ❌ Compile error
+ *     }
+ * }
+ * ```
+ * 
+ * @class TypedEventEmitter
+ * @template T - Type of event payload
+ */
+class TypedEventEmitter<T> extends EventEmitterBase {
+    /**
+     * Emit typed event.
+     * Override para enforcing type safety.
+     * 
+     * @param eventType - Event type identifier
+     * @param payload - Typed payload (must match T)
+     */
+    override fn emit(eventType: String, payload: T) -> void {
+        super.emit(eventType, payload)
+    }
+}
+
+
+/**
+ * Mixin para agregar EventEmitter a clases existentes.
+ * 
+ * Permite agregar capacidades de event emission a clases que no pueden
+ * extender EventEmitterBase (por ejemplo, si ya extienden otra clase).
+ * 
+ * @example
+ * ```vela
+ * class Component extends Widget {
+ *     // No puede extender EventEmitterBase porque ya extiende Widget
+ *     // Usar composition en su lugar
+ *     
+ *     private _emitter: EventEmitterMixin<ComponentEvent>
+ *     
+ *     constructor() {
+ *         super()
+ *         this._emitter = EventEmitterMixin<ComponentEvent>()
+ *     }
+ *     
+ *     fn on(eventType: String, listener: (Event<ComponentEvent>) -> void) -> Subscription {
+ *         return this._emitter.on(eventType, listener)
+ *     }
+ *     
+ *     fn emit(eventType: String, payload: ComponentEvent) -> void {
+ *         this._emitter.emit(eventType, payload)
+ *     }
+ *     
+ *     fn mount() -> void {
+ *         this._emitter.emit("mounted", MountedEvent())
+ *     }
+ * }
+ * ```
+ * 
+ * @class EventEmitterMixin
+ * @template T - Type of event payload
+ */
+class EventEmitterMixin<T> {
+    private _emitter: EventEmitterBase
+    
+    constructor() {
+        this._emitter = EventEmitterBase()
+    }
+    
+    fn on(eventType: String, listener: (Event<T>) -> void) -> Subscription {
+        return this._emitter.on(eventType, listener)
+    }
+    
+    fn once(eventType: String, listener: (Event<T>) -> void) -> Subscription {
+        return this._emitter.once(eventType, listener)
+    }
+    
+    fn emit(eventType: String, payload: T) -> void {
+        this._emitter.emit(eventType, payload)
+    }
+    
+    fn off(eventType: String, listener: (Event<T>) -> void) -> void {
+        this._emitter.off(eventType, listener)
+    }
+    
+    fn removeAllListeners(eventType: Option<String>) -> void {
+        this._emitter.removeAllListeners(eventType)
+    }
+    
+    fn listenerCount(eventType: String) -> Number {
+        return this._emitter.listenerCount(eventType)
+    }
+}
+
+
+/**
+ * Event type constants para eventos comunes.
+ * Provee constantes para event types estandarizados.
+ * 
+ * @example
+ * ```vela
+ * emitter.on(EventTypes.ERROR, handleError)
+ * emitter.emit(EventTypes.READY, appInfo)
+ * ```
+ */
+module EventTypes {
+    public const ERROR: String = "error"
+    public const READY: String = "ready"
+    public const CHANGE: String = "change"
+    public const UPDATE: String = "update"
+    public const CREATE: String = "create"
+    public const DELETE: String = "delete"
+    public const MOUNT: String = "mount"
+    public const UNMOUNT: String = "unmount"
+    public const DESTROY: String = "destroy"
+}
+
+
+// Re-export types from EventBus
+public type Event = Event
+public type Subscription = Subscription
+public type EventListener = EventListener
+
+
+/**
+ * Helper function to create typed event emitter.
+ * 
+ * @template T - Payload type
+ * @returns New TypedEventEmitter instance
+ * 
+ * @example
+ * ```vela
+ * emitter = createEventEmitter<User>()
+ * emitter.on("created", (e: Event<User>) => {
+ *     print(e.payload.name)
+ * })
+ * ```
+ */
+public fn createEventEmitter<T>() -> TypedEventEmitter<T> {
+    return TypedEventEmitter<T>()
+}
+
+
+/**
+ * Helper function to create event emitter mixin.
+ * 
+ * @template T - Payload type
+ * @returns New EventEmitterMixin instance
+ * 
+ * @example
+ * ```vela
+ * class MyComponent {
+ *     private _events = createEventEmitterMixin<ComponentEvent>()
+ *     
+ *     fn on(type: String, listener: (Event<ComponentEvent>) -> void) -> Subscription {
+ *         return this._events.on(type, listener)
+ *     }
+ * }
+ * ```
+ */
+public fn createEventEmitterMixin<T>() -> EventEmitterMixin<T> {
+    return EventEmitterMixin<T>()
+}
