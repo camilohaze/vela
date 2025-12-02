@@ -537,6 +537,7 @@ for subtask in historia.subtasks:
 10. ❌ **NUNCA JAMÁS** crear un archivo nuevo para "arreglar" uno existente
 11. ❌ **SI UN ARCHIVO TIENE ERRORES** → Usa `replace_string_in_file` para corregirlo
 12. ❌ **SI TE PIDEN CORREGIR UN ARCHIVO** → Edita EL MISMO archivo, NO crees otro
+13. ❌ **NUNCA JAMÁS MODIFICAR EL ARCHIVO vela-roadmap-scrum.csv** → El roadmap NO se actualiza automáticamente, NUNCA cambies estados de tareas en ese archivo
 
 ---
 
