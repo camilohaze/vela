@@ -149,6 +149,14 @@ from .injector import (
     get_global_injector,
     create_container,
 )
+from .lifecycle import (
+    OnDisposable,
+    AsyncOnDisposable,
+    LifecycleHooks,
+    ScopeContext,
+    IsolatedScope,
+    isolated_scope,
+)
 
 __all__ = [
     # Scopes
@@ -302,7 +310,15 @@ __all__ = [
     'create_injector',
     'get_global_injector',
     'create_container',
+    
+    # Lifecycle Management (TASK-035G)
+    'OnDisposable',
+    'AsyncOnDisposable',
+    'LifecycleHooks',
+    'ScopeContext',
+    'IsolatedScope',
+    'isolated_scope',
 ]
 
-__version__ = '0.9.0'  # TASK-035F: +Injector Core con resolución automática de dependencias
+__version__ = '0.10.0'  # TASK-035G: +Lifecycle Management (disposal automático, scope hierarchy, hooks)
 __author__ = 'GitHub Copilot Agent'

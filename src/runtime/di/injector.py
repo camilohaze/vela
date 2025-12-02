@@ -30,6 +30,12 @@ from .injectable import is_injectable, get_injectable_metadata
 from .inject import inject as inject_decorator, get_inject_metadata
 from .module import is_module, get_module_metadata
 from .providers import is_provider, get_provider_metadata
+from .lifecycle import (
+    OnDisposable,
+    AsyncOnDisposable,
+    ScopeContext,
+    LifecycleHooks
+)
 
 
 T = TypeVar('T')
@@ -275,6 +281,17 @@ class Injector:
     def __init__(self):
         self._registry = ProviderRegistry()
         self._context = ResolutionContext()
+        
+        # Lifecycle Management (TASK-035G)
+        # Disposal tracking por scope
+        self._disposable_instances: Dict[Scope, List[OnDisposable]] = {
+            Scope.SINGLETON: [],
+            Scope.SCOPED: [],  # Por contexto en ResolutionContext
+            Scope.TRANSIENT: []  # NO trackear (responsabilidad del usuario)
+        }
+        
+        # Lifecycle hooks globales
+        self._lifecycle_hooks: LifecycleHooks = LifecycleHooks()
     
     # ========================================
     # Registration Methods
@@ -510,7 +527,14 @@ class Injector:
             else:
                 raise InjectionError(f"Unknown provider type: {entry.provider_type}")
             
-            # 4. Cachear según scope
+            # 4. Track OnDisposable (TASK-035G)
+            if isinstance(instance, OnDisposable):
+                self._track_disposable(instance, entry.scope, context)
+            
+            # 5. Notify lifecycle hooks (TASK-035G)
+            self._lifecycle_hooks.notify_created(instance)
+            
+            # 6. Cachear según scope
             context.set_cached(entry.token, entry.scope, instance)
             
             return instance
@@ -557,6 +581,13 @@ class Injector:
             else:
                 raise InjectionError(f"Unknown provider type: {entry.provider_type}")
             
+            # Track OnDisposable (TASK-035G)
+            if isinstance(instance, OnDisposable):
+                self._track_disposable(instance, entry.scope, context)
+            
+            # Notify lifecycle hooks (TASK-035G)
+            self._lifecycle_hooks.notify_created(instance)
+            
             # Cachear
             context.set_cached(entry.token, entry.scope, instance)
             
@@ -586,10 +617,188 @@ class Injector:
         """Limpiar cache de un scope."""
         self._context.clear_scope(scope)
     
+    def dispose_scope(self, scope: Scope, context: Optional[ResolutionContext] = None) -> None:
+        """
+        Disponer todas las instancias de un scope.
+        
+        Disposal order: LIFO (Last In, First Out).
+        Instancias se disponen en orden inverso a su creación.
+        
+        Args:
+            scope: Scope a disponer (SINGLETON, SCOPED, TRANSIENT).
+            context: Contexto de resolución (requerido para SCOPED).
+        
+        Raises:
+            ValueError: Si scope es SCOPED y no se proporciona context.
+        
+        Ejemplo:
+            # Disponer todos los singletons
+            injector.dispose_scope(Scope.SINGLETON)
+            
+            # Disponer scope de request
+            request_context = injector.create_scope(Scope.SCOPED)
+            # ... usar servicios ...
+            injector.dispose_scope(Scope.SCOPED, request_context)
+        """
+        import logging
+        logger = logging.getLogger(__name__)
+        
+        if scope == Scope.SINGLETON:
+            # Disponer singletons en orden LIFO
+            for instance in reversed(self._disposable_instances[Scope.SINGLETON]):
+                try:
+                    self._lifecycle_hooks.notify_disposed(instance)
+                    instance.dispose()
+                except Exception as e:
+                    logger.error(f"Error disposing {instance}: {e}")
+            
+            self._disposable_instances[Scope.SINGLETON].clear()
+        
+        elif scope == Scope.SCOPED:
+            if context is None:
+                raise ValueError("Context required for scoped disposal")
+            
+            # Disponer scope context (recursivo si tiene children)
+            if hasattr(context, 'scope_context'):
+                context.scope_context.dispose_all()
+        
+        elif scope == Scope.TRANSIENT:
+            # Transient no se trackea (responsabilidad del usuario)
+            pass
+        
+        # Limpiar cache del scope
+        self.clear_scope(scope)
+    
+    async def dispose_scope_async(
+        self,
+        scope: Scope,
+        context: Optional[ResolutionContext] = None
+    ) -> None:
+        """
+        Disponer todas las instancias de un scope (async).
+        
+        Similar a dispose_scope() pero soporta AsyncOnDisposable.
+        
+        Ejemplo:
+            # Disponer singletons async (ej: RedisClient)
+            await injector.dispose_scope_async(Scope.SINGLETON)
+        """
+        import logging
+        logger = logging.getLogger(__name__)
+        
+        if scope == Scope.SINGLETON:
+            for instance in reversed(self._disposable_instances[Scope.SINGLETON]):
+                try:
+                    self._lifecycle_hooks.notify_disposed(instance)
+                    
+                    # Intentar dispose async primero
+                    if isinstance(instance, AsyncOnDisposable):
+                        await instance.dispose_async()
+                    elif isinstance(instance, OnDisposable):
+                        instance.dispose()
+                except Exception as e:
+                    logger.error(f"Error disposing {instance}: {e}")
+            
+            self._disposable_instances[Scope.SINGLETON].clear()
+        
+        elif scope == Scope.SCOPED:
+            if context is None:
+                raise ValueError("Context required for scoped disposal")
+            
+            if hasattr(context, 'scope_context'):
+                await context.scope_context.dispose_all_async()
+        
+        self.clear_scope(scope)
+    
     def dispose(self) -> None:
-        """Limpiar todo el injector."""
+        """
+        Limpiar todo el injector.
+        
+        Dispone todos los scopes y limpia el registry.
+        """
+        # Disponer todos los singletons
+        self.dispose_scope(Scope.SINGLETON)
+        
+        # Limpiar registry y cache
         self._registry.clear()
         self._context.cache.clear()
+    
+    async def dispose_async(self) -> None:
+        """
+        Limpiar todo el injector (async).
+        
+        Similar a dispose() pero soporta AsyncOnDisposable.
+        """
+        # Disponer todos los singletons async
+        await self.dispose_scope_async(Scope.SINGLETON)
+        
+        # Limpiar registry y cache
+        self._registry.clear()
+        self._context.cache.clear()
+    
+    def create_child_scope(
+        self,
+        parent: Optional[ScopeContext] = None
+    ) -> ScopeContext:
+        """
+        Crear scope hijo para hierarchy.
+        
+        Child scopes heredan lifecycle hooks del padre.
+        
+        Args:
+            parent: Scope padre. Si None, crea scope raíz.
+        
+        Returns:
+            Nuevo ScopeContext hijo.
+        
+        Ejemplo:
+            # Main request scope
+            main_scope = injector.create_child_scope()
+            
+            # Sub-request (transaction)
+            transaction_scope = injector.create_child_scope(main_scope)
+            
+            # ... usar servicios ...
+            
+            # Disponer transaction primero
+            transaction_scope.dispose_all()
+            
+            # Luego main scope
+            main_scope.dispose_all()
+        """
+        if parent is None:
+            # Crear scope raíz
+            return ScopeContext()
+        else:
+            # Crear child scope
+            return parent.create_child()
+    
+    def _track_disposable(
+        self,
+        instance: OnDisposable,
+        scope: Scope,
+        context: ResolutionContext
+    ) -> None:
+        """
+        Trackear instancia OnDisposable para disposal automático.
+        
+        Args:
+            instance: Instancia que implementa OnDisposable.
+            scope: Scope de la instancia.
+            context: Contexto de resolución.
+        """
+        if scope == Scope.SINGLETON:
+            # Trackear en lista global de singletons
+            self._disposable_instances[Scope.SINGLETON].append(instance)
+        
+        elif scope == Scope.SCOPED:
+            # Trackear en scope context
+            if not hasattr(context, 'scope_context'):
+                context.scope_context = ScopeContext()
+            
+            context.scope_context.track_disposable(instance)
+        
+        # Transient: NO trackear (responsabilidad del usuario)
     
     # ========================================
     # Helper Methods
