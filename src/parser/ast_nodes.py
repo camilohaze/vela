@@ -908,6 +908,47 @@ class EventOffStatement(Statement):
 
 
 # ===================================================================
+# STATE MANAGEMENT - DISPATCH (TASK-035U)
+# ===================================================================
+
+@dataclass
+class DispatchStatement(Statement):
+    """
+    Dispatch action to store: dispatch(action)
+    
+    Sintaxis en Vela:
+    ```vela
+    # Dispatch simple action
+    dispatch(INCREMENT)
+    
+    # Dispatch con payload
+    dispatch(AddTodo({ title: "Buy milk", completed: false }))
+    
+    # Dispatch con action creator
+    dispatch(todoActions.add("Buy milk"))
+    
+    # Dispatch async action
+    dispatch(await fetchUser(userId))
+    ```
+    
+    Flujo:
+    1. Evalúa la expresión action
+    2. Valida que sea Action válido
+    3. Envía al Store actual (via context/DI)
+    4. Store ejecuta middleware → reducer → actualiza state
+    
+    Generará:
+    ```python
+    store.dispatch(action)
+    ```
+    
+    Nota: dispatch es un keyword nativo (como return, yield)
+    pero internamente llama a Store.dispatch()
+    """
+    action: 'Expression'  # Expression que evalúa a un Action
+
+
+# ===================================================================
 # EXPRESSIONS
 # ===================================================================
 
