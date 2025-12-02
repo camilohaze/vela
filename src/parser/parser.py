@@ -39,9 +39,16 @@ from dataclasses import dataclass
 import sys
 
 # Import del lexer (necesitamos los tokens)
-sys.path.append('..')
-from lexer.token import Token, TokenType
-from lexer.lexer import Lexer
+try:
+    # Try relative import (when running from src/)
+    from ..lexer.token import Token, TokenType
+    from ..lexer.lexer import Lexer
+except ImportError:
+    # Fallback to absolute import (when running tests)
+    import sys
+    sys.path.append('..')
+    from src.lexer.token import Token, TokenType
+    from src.lexer.lexer import Lexer
 
 # Import de los nodos del AST
 from .ast_nodes import *
@@ -175,16 +182,20 @@ class Parser:
     
     def create_range_from_token(self, token: Token) -> Range:
         """Crea Range desde un token"""
+        # Use lexeme length (always a string with len())
+        token_length = len(token.lexeme)
         return Range(
             start=Position(token.line, token.column),
-            end=Position(token.line, token.column + len(token.value))
+            end=Position(token.line, token.column + token_length)
         )
     
     def create_range_from_tokens(self, start: Token, end: Token) -> Range:
         """Crea Range desde dos tokens"""
+        # Use lexeme length (always a string with len())
+        end_length = len(end.lexeme)
         return Range(
             start=Position(start.line, start.column),
-            end=Position(end.line, end.column + len(end.value))
+            end=Position(end.line, end.column + end_length)
         )
     
     # ===============================================================
@@ -1818,6 +1829,16 @@ class Parser:
         if self.check(TokenType.THROW):
             return self.parse_throw_statement()
         
+        # Event System (TASK-035M)
+        if self.check(TokenType.ON):
+            return self.parse_on_statement()
+        
+        if self.check(TokenType.EMIT):
+            return self.parse_emit_statement()
+        
+        if self.check(TokenType.OFF):
+            return self.parse_off_statement()
+        
         # Variable declaration o assignment
         if self.check(TokenType.STATE) or (self.check(TokenType.IDENTIFIER) and self.peek(1) and self.peek(1).type == TokenType.COLON):
             return self.parse_variable_declaration()
@@ -1976,6 +1997,118 @@ class Parser:
         return ThrowStatement(
             range=self.create_range_from_tokens(start, end),
             exception=exception
+        )
+    
+    # ===============================================================
+    # EVENT SYSTEM STATEMENTS (TASK-035M)
+    # ===============================================================
+    
+    def parse_on_statement(self) -> EventOnStatement:
+        """
+        Parsea on statement: on(event_type, handler) o on<T>(event_type, handler)
+        
+        Sintaxis:
+        ```vela
+        on("user.created", handleUserCreated)
+        on<UserEvent>("user.updated", (event) => { ... })
+        ```
+        """
+        start = self.expect(TokenType.ON)
+        
+        # Type parameter opcional: on<T>(...)
+        type_param = None
+        if self.match(TokenType.LESS):
+            type_param = self.parse_type_annotation()
+            self.expect(TokenType.GREATER)
+        
+        # Expect opening paren
+        self.expect(TokenType.LPAREN)
+        
+        # Event type expression (usualmente string literal)
+        event_type = self.parse_expression()
+        
+        # Expect comma
+        self.expect(TokenType.COMMA)
+        
+        # Handler expression (function reference o lambda)
+        handler = self.parse_expression()
+        
+        # Expect closing paren
+        self.expect(TokenType.RPAREN)
+        end = self.peek(-1)
+        
+        return EventOnStatement(
+            range=self.create_range_from_tokens(start, end),
+            event_type=event_type,
+            handler=handler,
+            type_param=type_param
+        )
+    
+    def parse_emit_statement(self) -> EventEmitStatement:
+        """
+        Parsea emit statement: emit(event_type) o emit(event_type, payload)
+        
+        Sintaxis:
+        ```vela
+        emit("app.started")
+        emit("user.created", user)
+        emit("notification", { message: "Hello", level: "info" })
+        ```
+        """
+        start = self.expect(TokenType.EMIT)
+        
+        # Expect opening paren
+        self.expect(TokenType.LPAREN)
+        
+        # Event type expression
+        event_type = self.parse_expression()
+        
+        # Payload opcional
+        payload = None
+        if self.match(TokenType.COMMA):
+            payload = self.parse_expression()
+        
+        # Expect closing paren
+        self.expect(TokenType.RPAREN)
+        end = self.peek(-1)
+        
+        return EventEmitStatement(
+            range=self.create_range_from_tokens(start, end),
+            event_type=event_type,
+            payload=payload
+        )
+    
+    def parse_off_statement(self) -> EventOffStatement:
+        """
+        Parsea off statement: off(event_type) o off(event_type, handler)
+        
+        Sintaxis:
+        ```vela
+        off("user.created")  # Remover todos los listeners
+        off("user.created", handleUserCreated)  # Remover listener específico
+        ```
+        """
+        start = self.expect(TokenType.OFF)
+        
+        # Expect opening paren
+        self.expect(TokenType.LPAREN)
+        
+        # Event type expression
+        event_type = self.parse_expression()
+        
+        # Handler opcional
+        handler = None
+        if self.match(TokenType.COMMA):
+            handler = self.parse_expression()
+        
+        # Expect closing paren
+        self.expect(TokenType.RPAREN)
+        end = self.peek(-1)
+        
+        return EventOffStatement(
+            range=self.create_range_from_tokens(start, end),
+            event_type=event_type,
+            handler=handler
         )
     
     def parse_variable_declaration(self) -> VariableDeclaration:
