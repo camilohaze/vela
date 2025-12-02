@@ -25,16 +25,16 @@ Para cada Historia que desarrolles:
 ```python
 # 1. PREPARAR
 - Leer CONTRIBUTING.md
-- Crear rama: feature/VELA-XXX-descripcion
+- Crear UNA RAMA POR HISTORIA: feature/VELA-XXX-descripcion
 - Crear carpeta: docs/features/VELA-XXX/
 
-# 2. POR CADA SUBTASK
+# 2. POR CADA SUBTASK (UN COMMIT POR TAREA)
 - Mover a "En curso" en Jira
 - Generar ADR (si es decisión arquitectónica)
 - Generar código en src/
 - Generar tests en tests/unit/
 - Generar documentación en docs/features/VELA-XXX/
-- Commit con mensaje descriptivo
+- COMMIT con mensaje descriptivo (UN COMMIT POR TAREA)
 - Mover a "Finalizada" en Jira
 
 # 3. COMPLETAR HISTORIA
@@ -51,6 +51,149 @@ Para cada Historia que desarrolles:
 - Crear tag: sprint-N
 - Cerrar Sprint en Jira
 ```
+
+### 2.1. POLÍTICA DE GIT (OBLIGATORIA)
+
+#### ✅ UNA RAMA POR HISTORIA DE USUARIO
+```bash
+# ✅ CORRECTO: Una rama por Historia
+git checkout -b feature/VELA-575-dependency-injection
+
+# ❌ INCORRECTO: Ramas por Subtask
+# git checkout -b feature/VELA-575-task-035e
+# git checkout -b feature/VELA-575-task-035e2
+```
+
+**Regla de Oro**: Todas las Subtasks de una Historia se desarrollan en **LA MISMA RAMA**.
+
+#### ✅ UN COMMIT POR TAREA (SUBTASK)
+```bash
+# ✅ CORRECTO: Commit atómico por Subtask
+git commit -m "feat(VELA-575): TASK-035E @provides decorator + file upload
+
+Implementación completa de factory providers y file upload para DI.
+
+Features:
+- @provides decorator con scopes
+- @file/@upload, @files, @form decorators
+
+Tests: 89 tests pasando
+Refs: VELA-575"
+
+# ❌ INCORRECTO: Commits intermedios sin sentido
+# git commit -m "wip: agregando código"
+# git commit -m "fix: corrección"
+```
+
+**Regla de Oro**: Cada Subtask = 1 commit atómico con entregables completos.
+
+### 2.2. CLARIDAD EN DEFINICIONES (OBLIGATORIO)
+
+#### ⚠️ CADA ÉPICA, HISTORIA Y TAREA DEBE ESTAR COMPLETAMENTE DEFINIDA
+
+**NUNCA dejes vacíos o ambigüedades.** Siempre define:
+
+1. **Objetivo claro**: ¿Qué problema resuelve?
+2. **Alcance técnico**: ¿Qué componentes se desarrollan?
+3. **Criterios de aceptación**: ¿Cómo se valida?
+4. **Dependencias**: ¿Qué necesita para funcionar?
+5. **Referencias**: TypeScript, Java, Flutter, Swift, Angular, NestJS, Spring Boot, etc.
+
+#### 📚 LENGUAJES Y FRAMEWORKS DE REFERENCIA
+
+**Vela se inspira en los mejores lenguajes y frameworks:**
+
+| Lenguaje/Framework | Aspecto que inspira |
+|-------------------|---------------------|
+| **TypeScript** | Sistema de tipos, interfaces, decoradores |
+| **Java** | OOP, annotations, generics |
+| **Flutter** | UI declarativa, widgets, reactividad |
+| **Swift** | Sintaxis moderna, optionals, protocols |
+| **Angular** | DI, modules, decoradores de UI |
+| **NestJS** | DI, decoradores HTTP, arquitectura modular |
+| **Spring Boot** | DI, annotations, controllers |
+| **FastAPI** | Type hints, dependency injection |
+| **React** | Hooks, componentes funcionales |
+| **Vue** | Reactividad, composables |
+
+**Al definir una feature, SIEMPRE pregúntate:**
+- ¿Cómo lo hace TypeScript? (tipos, decoradores)
+- ¿Cómo lo hace Java? (annotations, OOP)
+- ¿Cómo lo hace Flutter? (widgets, reactividad)
+- ¿Cómo lo hace NestJS? (DI, HTTP)
+- ¿Cómo lo hace Angular? (UI, pipes, guards)
+
+**Ejemplo de definición completa:**
+
+```markdown
+# TASK-035E2: Implementar @middleware, @guard y @pipe decorators
+
+## Objetivo
+Agregar decoradores para interceptores HTTP, autorización y transformación de datos.
+
+## Alcance Técnico
+1. **@pipe (HÍBRIDO - Frontend + Backend)**:
+   - Frontend (Angular-style): @pipe(name='currency', pure=True)
+   - Backend (NestJS-style): @pipe(ValidationPipe, TransformPipe)
+   - Auto-detección de contexto por sintaxis
+
+2. **@middleware (Backend Only)**:
+   - Interceptores HTTP (NestJS-style)
+   - Orden de ejecución configurable
+
+3. **@guard (Backend Only)**:
+   - Guards de autorización (NestJS-style)
+   - ExecutionContext interface
+
+## Referencias
+- NestJS: @Injectable(), @UseGuards(), @UsePipes()
+- Angular: @Pipe(), PipeTransform interface
+- Spring Boot: @ControllerAdvice, HandlerInterceptor
+- FastAPI: Depends(), middleware decorators
+
+## Criterios de Aceptación
+- [x] @pipe funciona en frontend (UI templates)
+- [x] @pipe funciona en backend (HTTP)
+- [x] Validaciones de contexto estrictas
+- [x] 65 tests pasando
+```
+
+### 2.3. VELA ES MULTIPLATAFORMA (PALABRAS RESERVADAS HÍBRIDAS)
+
+#### ⚠️ ALGUNOS DECORADORES/KEYWORDS TIENEN FUNCIÓN HÍBRIDA
+
+**Vela soporta múltiples plataformas:** Web, Mobile, Desktop, Backend, Frontend.
+
+**Esto significa que ciertos decoradores sirven para MÚLTIPLES propósitos:**
+
+| Decorador | Contexto Frontend | Contexto Backend |
+|-----------|-------------------|------------------|
+| `@pipe` | UI template pipes (Angular) | HTTP validation pipes (NestJS) |
+| `@component` | UI component (Flutter/React) | DI component (Spring) |
+| `@injectable` | Service inyectable (Angular) | Service inyectable (NestJS) |
+| `@module` | UI module (Angular) | DI module (NestJS) |
+
+**Diseño híbrido: Context-Aware Decorators**
+
+Los decoradores **auto-detectan el contexto** por sintaxis:
+
+```vela
+# FRONTEND: UI Pipe (Angular-style)
+@pipe(name="currency", pure=True)
+pipe CurrencyPipe implements PipeTransform {
+  fn transform(value: Number) -> String { ... }
+}
+
+# BACKEND: HTTP Pipe (NestJS-style)
+@pipe(ValidationPipe, TransformPipe)
+@controller("/users")
+class UserController { ... }
+```
+
+**Regla de Oro**: 
+- Si una feature existe en **Angular Y NestJS** → El decorador debe ser **HÍBRIDO**
+- Si existe solo en backend → El decorador es **backend-only**
+- Si existe solo en frontend → El decorador es **frontend-only**
 
 ### 3. TIPOS DE ENTREGABLES POR SUBTASK
 

@@ -2096,18 +2096,19 @@ repository UserRepository {
 ---
 
 #### `controller`
-**Propósito**: Controlador REST API.
+**Propósito**: Controlador REST API (como NestJS).
 
 **Características obligatorias**:
-- DEBE ser `@injectable`
-- DEBE tener decorador `@controller(path)`
-- Métodos públicos DEBEN tener decorador HTTP (`@get`, `@post`, etc.)
+- **NO necesita** `@injectable` (se registra en `controllers: []`, NO en `providers: []`)
+- DEBE tener decorador `@controller(path)` con path base
+- Métodos públicos DEBEN tener decorador HTTP (`@get`, `@post`, `@put`, `@patch`, `@delete`)
 - DEBE retornar `Response<T>` o `Promise<Response<T>>`
-- NO puede tener lógica de negocio (solo orchestración)
+- PUEDE recibir dependencias con `@inject` en constructor (sin necesitar `@injectable`)
+- NO puede tener lógica de negocio (solo orchestración y delegación a services)
 
 **Uso**:
 ```vela
-@injectable
+# ✅ CORRECTO: Controller NO usa @injectable
 @controller("/api/users")
 controller UserController {
   constructor(@inject private service: UserService) { }
@@ -2609,23 +2610,55 @@ validator EmailValidator {
 ### 🏗️ Architecture
 
 #### `module`
-**Propósito**: Módulo funcional (Angular/NestJS style).
+**Propósito**: Módulo funcional (MULTIPLATAFORMA: Angular + NestJS style).
 
 **Características obligatorias**:
 - DEBE tener decorador `@module({ ... })`
-- DEBE declarar `declarations`, `exports`, `providers`, `imports`
-- `exports` ⊆ `declarations`
+- DEBE declarar `declarations`, `controllers`, `providers`, `imports`, `exports`
+- `declarations`: Widgets, components, services (frontend/general)
+- `controllers`: Controllers REST (backend)
+- `providers`: Services, repositories, guards, middleware, pipes (con `@injectable`)
+- `exports` ⊆ (`declarations` ∪ `providers`) (puede exportar widgets O providers)
 
-**Uso**:
+**Uso (Backend Module)**:
 ```vela
 @module({
-  declarations: [AuthService, LoginWidget],
-  exports: [AuthService],
-  providers: [AuthService],
-  imports: [HttpModule]
+  controllers: [UserController],  # REST endpoints
+  providers: [UserService, UserRepository],  # Business logic
+  imports: [DatabaseModule, HttpModule],  # Otros módulos
+  exports: [UserService]
+})
+module UserModule { }
+```
+
+**Uso (Frontend Module)**:
+```vela
+@module({
+  declarations: [LoginWidget, HeaderWidget],  # UI components
+  providers: [AuthService],  # Shared services
+  imports: [UiModule, FormsModule],  # Otros módulos UI
+  exports: [AuthService, LoginWidget]
 })
 module AuthModule { }
 ```
+
+**Uso (Hybrid Module - TÍPICO EN VELA)**:
+```vela
+@module({
+  declarations: [UserWidget, UserCard],  # UI components
+  controllers: [UserController],  # REST API
+  providers: [UserService, UserRepository],  # Business logic
+  imports: [DatabaseModule],
+  exports: [UserService, UserWidget]  # Exporta AMBOS: service + widget
+})
+module UserModule { }
+```
+
+**⚠️ IMPORTANTE**: 
+- **Vela es MULTIPLATAFORMA**: soporta frontend (declarations) + backend (controllers)
+- **Controllers** se registran en `controllers: []`, NO en `providers: []`
+- **Declarations** para widgets/components (frontend)
+- **Providers** son clases con `@injectable` (services, repositories, guards, middleware, pipes)
 
 ---
 
