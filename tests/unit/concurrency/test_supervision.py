@@ -376,6 +376,9 @@ class TestOneForOneStrategy:
         error = RuntimeError("Test error")
         supervisor.handle_child_failure(child2, error)
         
+        # TASK-043: Esperar restart asíncrono (delay=0.1s + buffer)
+        time.sleep(0.15)
+        
         # Solo child2 debe reiniciarse
         assert child2.actor.restart_count == 1
         assert child1.actor.restart_count == 0
@@ -395,6 +398,9 @@ class TestOneForOneStrategy:
         error = RuntimeError("Test error")
         supervisor.handle_child_failure(child_ref, error)
         
+        # TASK-043: Esperar restart asíncrono (delay=0.1s + buffer)
+        time.sleep(0.15)
+        
         elapsed = time.time() - start_time
         
         # Debe haber esperado al menos initial_delay (0.1s en fixture)
@@ -411,6 +417,9 @@ class TestOneForOneStrategy:
         error = RuntimeError("Test error")
         supervisor.handle_child_failure(child_ref, error)
         
+        # TASK-043: Esperar restart asíncrono (delay=0.1s + buffer)
+        time.sleep(0.15)
+        
         assert stats.failure_count == 1
         assert stats.total_restarts == 1
     
@@ -420,8 +429,13 @@ class TestOneForOneStrategy:
         parent_supervisor = SupervisorActor()
         parent_supervisor.ref = ActorRef(name="parent", actor=parent_supervisor)
         
-        # Policy estricto (1 retry)
-        strict_policy = RestartPolicy(max_retries=1, within_time_window=60.0)
+        # Policy estricto (1 retry, delay corto para tests)
+        strict_policy = RestartPolicy(
+            max_retries=1, 
+            within_time_window=60.0,
+            backoff_strategy=BackoffStrategy.CONSTANT,
+            initial_delay=0.1  # TASK-043: Delay corto para tests
+        )
         strategy = OneForOneStrategy(strict_policy)
         
         supervisor = SupervisorActor(strategy=strategy, parent_supervisor=parent_supervisor)
@@ -434,6 +448,10 @@ class TestOneForOneStrategy:
         
         # Primer fallo → reinicia
         supervisor.handle_child_failure(child_ref, RuntimeError("Error 1"))
+        
+        # TASK-043: Esperar restart asíncrono (delay=0.1s + buffer)
+        time.sleep(0.15)
+        
         assert child_ref.actor.restart_count == 1
         parent_supervisor.handle_child_failure.assert_not_called()
         
@@ -463,6 +481,9 @@ class TestOneForAllStrategy:
         # Child2 falla
         error = RuntimeError("Test error")
         supervisor.handle_child_failure(child2, error)
+        
+        # TASK-043: Esperar restart asíncrono (delay=0.1s + buffer)
+        time.sleep(0.15)
         
         # TODOS deben reiniciarse
         assert child1.actor.restart_count == 1
@@ -518,6 +539,9 @@ class TestRestForOneStrategy:
         error = RuntimeError("Test error")
         supervisor.handle_child_failure(child2, error)
         
+        # TASK-043: Esperar restart asíncrono (delay=0.1s + buffer)
+        time.sleep(0.15)
+        
         assert child1.actor.restart_count == 0  # NO reiniciado
         assert child2.actor.restart_count == 1  # Reiniciado
         assert child3.actor.restart_count == 1  # Reiniciado
@@ -537,6 +561,9 @@ class TestRestForOneStrategy:
         # Child3 (último) falla → solo child3 se reinicia
         error = RuntimeError("Test error")
         supervisor.handle_child_failure(child3, error)
+        
+        # TASK-043: Esperar restart asíncrono (delay=0.1s + buffer)
+        time.sleep(0.15)
         
         assert child1.actor.restart_count == 0
         assert child2.actor.restart_count == 0

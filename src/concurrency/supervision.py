@@ -27,6 +27,7 @@ from enum import Enum
 from typing import Dict, List, Optional, Callable, Any
 import time
 import logging
+import threading
 from datetime import datetime, timedelta
 
 # Imports del proyecto
@@ -456,8 +457,37 @@ class SupervisorActor(Actor):
         self.children_order: List[str] = []  # Para RestForOne
         self.restart_stats: Dict[str, RestartStats] = {}
         
+        # Pending restarts (threading.Timer instances - TASK-043)
+        self._pending_restarts: Dict[str, threading.Timer] = {}  # child_name -> Timer
+        
         # Logger (sin nombre hasta que se asigne ref)
         self.logger = logging.getLogger(f"SupervisorActor")
+    
+    def cancel_pending_restarts(self, child_ref: ActorRef) -> int:
+        """
+        Cancela restart pendiente de un child (TASK-043).
+        
+        Útil cuando:
+        - Se detiene un child antes de que se reinicie
+        - Se quiere cancelar restart manual
+        
+        Args:
+            child_ref: Child cuyo restart se quiere cancelar
+            
+        Returns:
+            Número de restarts cancelados (0 o 1)
+        """
+        child_name = self._get_child_name(child_ref)
+        
+        if not child_name or child_name not in self._pending_restarts:
+            return 0
+        
+        # Cancelar threading.Timer
+        timer = self._pending_restarts[child_name]
+        timer.cancel()
+        del self._pending_restarts[child_name]
+        self.logger.info(f"Cancelled pending restart for child '{child_name}'")
+        return 1
     
     # ------------------------------------------------------------------------
     # CHILD MANAGEMENT
@@ -510,12 +540,17 @@ class SupervisorActor(Actor):
         """
         Detiene un child actor.
         
+        TASK-043: Cancela restart pendiente si existe.
+        
         Args:
             child_ref: Referencia al child a detener
         """
         child_name = self._get_child_name(child_ref)
         
         if child_name:
+            # TASK-043: Cancelar restart pendiente antes de detener
+            self.cancel_pending_restarts(child_ref)
+            
             # Detener el actor
             # (En implementación real, enviaría mensaje PoisonPill al actor)
             child_ref.actor.state = ActorState.STOPPED
@@ -626,6 +661,11 @@ class SupervisorActor(Actor):
         """
         Reinicia un child actor.
         
+        TASK-043: Restart asíncrono con threading.Timer
+        - No bloquea el supervisor
+        - Usa backoff strategy
+        - Permite cancelar restarts pendientes
+        
         Args:
             child_ref: Child a reiniciar
         """
@@ -645,18 +685,34 @@ class SupervisorActor(Actor):
             f"(attempt {stats.failure_count}/{self.strategy.restart_policy.max_retries})"
         )
         
-        # Esperar delay (en implementación real, sería async)
-        time.sleep(delay)
+        # Función de restart
+        def do_restart():
+            """Ejecuta el restart real."""
+            # Hooks de reinicio
+            child_ref.actor.pre_restart(error=None)  # Cleanup
+            child_ref.actor.state = ActorState.RUNNING
+            child_ref.actor.post_restart(error=None)  # Re-init
+            
+            # Registrar reinicio exitoso
+            stats.record_restart()
+            
+            # Remover de pending restarts
+            if child_name in self._pending_restarts:
+                del self._pending_restarts[child_name]
+            
+            self.logger.info(f"Child '{child_name}' restarted successfully")
         
-        # Hooks de reinicio
-        child_ref.actor.pre_restart(error=None)  # Cleanup
-        child_ref.actor.state = ActorState.RUNNING
-        child_ref.actor.post_restart(error=None)  # Re-init
+        # TASK-043: Restart asíncrono con threading.Timer (no bloquea)
+        # Cancelar restart pendiente si existe
+        if child_name in self._pending_restarts:
+            old_timer = self._pending_restarts[child_name]
+            old_timer.cancel()
         
-        # Registrar reinicio exitoso
-        stats.record_restart()
-        
-        self.logger.info(f"Child '{child_name}' restarted successfully")
+        # Schedule restart asíncrono
+        timer = threading.Timer(delay, do_restart)
+        timer.daemon = True  # Daemon thread para que no bloquee shutdown
+        timer.start()
+        self._pending_restarts[child_name] = timer
     
     def escalate_failure(self, child_ref: ActorRef, error: Exception) -> None:
         """
