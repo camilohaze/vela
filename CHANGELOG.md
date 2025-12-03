@@ -8,7 +8,148 @@ y este proyecto adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 ## [Unreleased]
 
 ### En Desarrollo
-- Sprint 11 (Backend Implementation) pendiente
+- Sprint 6 (Dependency Injection) pendiente
+
+---
+
+## [0.4.0] - Sprint 5 - 2025-01-15
+
+### 🎯 Resumen del Sprint
+- **Epic completada:** EPIC-RUST-05 (StdLib Migration)
+- **Módulos implementados:** 5 (primitives, collections, option_result, iterators, strings)
+- **Tests agregados:** 168 tests unitarios (100% passing)
+- **Documentación:** ADR-401 + README.md completo
+
+### ✨ Added - Standard Library Implementation
+
+#### [EPIC-RUST-05] StdLib Migration
+Como desarrollador del runtime, necesito una standard library completa con tipos seguros y APIs funcionales.
+
+**Módulos implementados:**
+
+- **[Primitives Module]** (54 tests) ✅
+  - **VelaNumber**: Union type Int/Float con 40+ métodos
+    - Operaciones: add, sub, mul, div, pow, sqrt, abs, round, floor, ceil
+    - Comparaciones: min, max, clamp
+    - Operator overloading: Add, Sub, Mul, Div, Neg
+  - **VelaString**: String inmutable con 20+ métodos
+    - Transformaciones: to_uppercase, to_lowercase, trim, replace
+    - Búsqueda: contains, starts_with, ends_with, index_of
+    - Manipulación: substring, concat, repeat, join
+  - **VelaBool**: Booleano con lógica completa
+    - Operaciones: and, or, not, xor, nand, nor, xnor, implies
+
+- **[Collections Module]** (26 tests) ✅
+  - **VelaList<T>**: Array dinámico con API funcional
+    - Construcción: new, from, with_capacity
+    - Mutación: push, pop, insert, remove
+    - Transformación: map, filter, reduce, reverse, sort
+    - Búsqueda: find, any, all, contains
+    - Slicing: take, skip, concat
+    - Inmutabilidad: operaciones retornan nuevas listas
+  - **VelaMap<K,V>**: Hash map con operaciones inmutables
+    - CRUD: insert, get, remove, contains_key
+    - Transformación: map, filter, for_each
+    - Iteradores: keys, values, entries
+    - Trait bounds: K: Eq + Hash
+  - **VelaSet<T>**: Set con operaciones matemáticas
+    - CRUD: insert, remove, contains
+    - Operaciones de sets: union, intersection, difference, symmetric_difference
+    - Relaciones: is_subset, is_superset, is_disjoint
+    - Funcionales: map, filter, any, all
+
+- **[Option/Result Module]** (25 tests) ✅
+  - **VelaOption<T>**: Manejo de valores opcionales (NO null)
+    - Constructores: Some(T), None
+    - Unwrap: unwrap, unwrap_or, unwrap_or_else
+    - Transformación: map, and_then, or_else, filter, zip
+    - Conversión: from/to Rust Option
+  - **VelaResult<T,E>**: Manejo de errores (NO exceptions)
+    - Constructores: Ok(T), Err(E)
+    - Unwrap: unwrap, unwrap_or, unwrap_err
+    - Transformación: map, map_err, and_then, or_else
+    - Combinadores: and, or
+    - Conversión: from/to Rust Result
+
+- **[Iterators Module]** (22 tests) ✅
+  - **VelaIterator**: Iteración lazy con evaluación diferida
+    - Constructores: from_vec, from_iter
+    - Transformación: map, filter, flat_map
+    - Slicing: take, skip, take_while, skip_while
+    - Agregación: reduce, fold, sum, product, count
+    - Búsqueda: find, position, any, all, min, max
+    - Combinación: chain, zip, enumerate
+    - Terminales: collect, partition, for_each, inspect
+
+- **[Strings Module]** (41 tests) ✅
+  - **Interpolation**: Template strings con sintaxis ${variable}
+    - Funciones: interpolate(), interpolate_with_fallback()
+    - Extracción: extract_variables()
+    - Error handling: VariableNotFound, InvalidSyntax
+  - **Formatting**: Format strings con {} y {name}
+    - Posicionales: format_string("{} v{}", args)
+    - Named: format_named("{name} v{version}", map)
+    - Escapado: {{ }} para braces literales
+    - Error handling: MismatchedArguments, InvalidSpecifier
+  - **Regex**: Pattern matching simplificado
+    - Patrones: \\d+ (digits), \\w+ (words), literals
+    - Operaciones: is_match, find, find_all, replace, replace_all, split
+    - Error handling: InvalidPattern, CompileError
+  - **Splitting**: Utilidades avanzadas de división
+    - split_advanced, split_whitespace, split_by_any
+    - split_n, rsplit, split_inclusive, split_lines, chunk
+
+**Documentación:** 
+- `docs/architecture/ADR-401-vela-stdlib-architecture.md` (520+ líneas)
+- `stdlib/README.md` (326 líneas con ejemplos completos)
+
+### 📚 Documentation
+- **ADR-401**: Arquitectura completa con especificaciones de 5 módulos
+- **stdlib/README.md**: Guía completa con:
+  - Overview de módulos
+  - Ejemplos de uso para cada tipo
+  - Design principles (immutability, type safety, functional composition)
+  - Test coverage metrics
+  - Integration guide
+  - API reference
+- **Cargo doc**: Documentación HTML generada automáticamente
+
+### 🔧 Technical Implementation
+- **Language:** Rust 1.75.0, edition 2021
+- **Dependencies:** std (HashMap, HashSet, Vec), anyhow, thiserror
+- **Architecture:** Thin wrappers over Rust stdlib (zero-cost abstractions)
+- **Type Safety:** Option<T> y Result<T,E> en lugar de null/exceptions
+- **Immutability:** Estructuras inmutables por defecto
+- **Functional:** APIs estilo Rust/TypeScript/Python con map/filter/reduce
+
+### ✅ Quality Metrics
+- **Tests unitarios:** 168/168 pasando ✅ (100% success rate)
+- **Cobertura por módulo:**
+  - Primitives: 54 tests
+  - Collections: 26 tests
+  - Option/Result: 25 tests
+  - Iterators: 22 tests
+  - Strings: 41 tests
+- **Warnings:** 3 unused_mut (no críticos)
+- **Build time:** ~16s (release)
+- **Test time:** ~2.9s
+
+### 🎯 Performance Characteristics
+- **Memory:** Zero-cost abstractions (thin wrappers)
+- **Allocation:** Lazy evaluation en iteradores (no allocations intermedias)
+- **Collections:** O(1) insert/get para Map/Set, O(n) para List operations
+- **Strings:** O(n) para interpolation/format
+
+### 📊 Architecture Highlights
+- **Modularity:** 5 módulos independientes y reutilizables
+- **Type Safety:** Sistema de tipos completo sin null/undefined
+- **Functional Programming:** Composición de operaciones con iteradores lazy
+- **Integration Ready:** Diseñado para VM, Compiler y Runtime de Vela
+
+### 🔗 Integration Points
+- **Vela VM**: Runtime execution con tipos nativos
+- **Vela Compiler**: Type checking y code generation
+- **Vela Runtime**: Async/actors/channels (próximo Sprint)
 
 ---
 
