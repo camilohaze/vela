@@ -10,12 +10,16 @@ tokio = { version = "1.0", features = ["full"] }
 futures = "0.3"
 async-trait = "0.1"
 serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
 thiserror = "1.0"
 tracing = "0.1"
-hyper = { version = "0.14", features = ["full"] }
-tower = "0.4"
-tower-http = "0.4"
-bytes = "1.0"
+hyper = { version = "1.0", features = ["full"] }
+hyper-util = { version = "0.1", features = ["full"] }
+http-body-util = "0.1"
+reqwest = { version = "0.12", features = ["json", "stream"] }
+http = "1.0"
+bytes = "1.5"
+regex = "1.10"
 num_cpus = "1.16"
 
 [dev-dependencies]

@@ -356,7 +356,6 @@ pub mod utils {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tokio::test;
 
     #[tokio::test]
     async fn test_basic_send_recv() {
@@ -433,9 +432,12 @@ mod tests {
 
     #[tokio::test]
     async fn test_send_with_timeout() {
-        let (tx, mut rx) = VelaChannel::<i32>::new(0).split(); // Zero capacity
+        let (tx, _rx) = VelaChannel::<i32>::new(1).split(); // Bounded capacity
 
-        // This should timeout since channel is full and no receiver
+        // Fill the channel
+        tx.send(1).await.unwrap();
+
+        // This should timeout since channel is full
         let result = utils::send_with_timeout(&tx, 42, Duration::from_millis(10)).await;
         assert!(matches!(result, Err(ChannelError::SendTimeout)));
     }
