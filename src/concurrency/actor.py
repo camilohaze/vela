@@ -14,8 +14,11 @@ Implementación de Actor instances con:
 """
 
 from abc import ABC, abstractmethod
-from typing import Any, Optional, Dict, Callable
+from typing import Any, Optional, Dict, Callable, TYPE_CHECKING
 from enum import Enum
+
+if TYPE_CHECKING:
+    from .supervision import SupervisorActor
 
 
 class ActorState(Enum):
@@ -307,19 +310,21 @@ class ActorRef:
         ref.send(MyMessage())
     """
     
-    def __init__(self, name: str, actor: Actor):
+    def __init__(self, name: str, actor: Actor, supervisor: Optional['SupervisorActor'] = None):
         """
         Crear ActorRef.
         
         Args:
             name: Nombre único del actor
             actor: Instancia del actor
+            supervisor: Supervisor del actor (opcional)
         
         Nota: Normalmente no se crea directamente, usar spawn()
         """
         self._name = name
         self._actor = actor
         self._stopped = False
+        self._supervisor = supervisor
         
         # Set reference en el actor
         actor._set_actor_ref(self)
@@ -381,8 +386,17 @@ class ActorRef:
         
         # Temporalmente llamar receive directamente
         # En TASK-038 esto irá al mailbox
-        self._actor.receive(message)
-        self._actor._increment_message_count()
+        try:
+            self._actor.receive(message)
+            self._actor._increment_message_count()
+        except Exception as error:
+            # TASK-044: Notificar supervisor si existe
+            self._actor._increment_error_count()
+            if self._supervisor:
+                self._supervisor.handle_child_failure(self, error)
+            else:
+                # Re-lanzar si no hay supervisor
+                raise
     
     def tell(self, message: Any) -> None:
         """
