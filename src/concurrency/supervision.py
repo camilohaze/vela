@@ -521,8 +521,8 @@ class SupervisorActor(Actor):
         # Crear child actor
         child_actor = actor_class(*args, **kwargs)
         
-        # Crear ActorRef para el child
-        child_ref = ActorRef(name=name, actor=child_actor)
+        # Crear ActorRef para el child (TASK-044: con supervisor)
+        child_ref = ActorRef(name=name, actor=child_actor, supervisor=self)
         child_actor.state = ActorState.RUNNING
         
         # Registrar como child
