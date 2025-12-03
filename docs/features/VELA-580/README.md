@@ -69,22 +69,31 @@ Implementación completa de async/await en Vela para programación asíncrona mo
 
 ---
 
-### ⏳ TASK-047: Implementar Future<T> y Promise<T> (48h) - PENDIENTE
-**Estado**: ⏸️ No Iniciada  
+### ✅ TASK-047: Implementar Future<T> y Promise<T> (48h) - COMPLETADA
+**Estado**: ✅ Finalizada  
+**Fecha**: 2025-01-30
 **Dependencia**: TASK-046 ✅
 
 **Objetivos**:
-- Implementar `Future<T>` trait en runtime
-- Implementar `Promise<T>` class
-- Waker system (despertadores)
-- Combinadores (map, flatMap, then, catch)
-- Future.all(), Future.race(), Future.timeout()
+- ✅ Implementar `Future<T>` trait en runtime
+- ✅ Implementar `Promise<T>` class
+- ✅ Waker system (despertadores)
+- ✅ Combinadores (map, flatMap, then, catch)
+- ✅ Future.all(), Future.race(), Future.timeout()
 
-**Entregables Esperados**:
-- Código en `src/runtime/async/future.rs`
-- Código en `src/runtime/async/promise.rs`
-- Código en `src/runtime/async/waker.rs`
-- Tests unitarios de Future/Promise
+**Entregables**:
+- ✅ Código en `src/runtime/async_runtime/__init__.py` (35 líneas)
+- ✅ Código en `src/runtime/async_runtime/poll.py` (125 líneas)
+- ✅ Código en `src/runtime/async_runtime/waker.py` (113 líneas)
+- ✅ Código en `src/runtime/async_runtime/future.py` (415 líneas)
+- ✅ Código en `src/runtime/async_runtime/promise.py` (246 líneas)
+- ✅ Tests unitarios en `tests/unit/runtime/test_async.py` (419 líneas)
+- ✅ 38 tests pasando (100%)
+- ✅ 11 implementaciones concretas de Future
+- ✅ Thread-safe con Lock
+- ✅ Documentación completa
+
+**Ver**: [TASK-047.md](TASK-047.md)
 
 ---
 
@@ -235,7 +244,7 @@ actor AsyncWorker {
 
 - [x] ✅ TASK-045: Diseño completo (ADR + Spec) ✅
 - [x] ✅ TASK-046: Transformación CPS implementada ✅
-- [ ] ⏳ TASK-047: Future<T> y Promise<T> implementados
+- [x] ✅ TASK-047: Future<T> y Promise<T> implementados ✅
 - [ ] ⏳ TASK-048: Executor funcionando
 - [ ] ⏳ TASK-049: Tests completos (>= 95% cobertura)
 - [ ] ⏳ Documentación actualizada
@@ -258,26 +267,26 @@ actor AsyncWorker {
 
 ## 📈 Progreso
 
-**Total**: 96 / 240 horas completadas (40%)
+**Total**: 144 / 240 horas completadas (60%)
 
 ```
-[████████░░░░░░░░░░░░] 40%
+[████████████░░░░░░░░] 60%
 ```
 
 **Por Tarea**:
 - ✅ TASK-045: 16/16h (100%) ✅
 - ✅ TASK-046: 80/80h (100%) ✅
-- ⏳ TASK-047: 0/48h (0%)
+- ✅ TASK-047: 48/48h (100%) ✅
 - ⏳ TASK-048: 0/56h (0%)
 - ⏳ TASK-049: 0/40h (0%)
 
 ## 🎯 Próximo Paso
 
-**TASK-047**: Implementar Future<T> y Promise<T> en runtime (48h)
+**TASK-048**: Implementar Executor (event loop) para ejecutar Futures (56h)
 
-**Inicio Estimado**: Inmediato (TASK-046 completada)
+**Inicio Estimado**: Inmediato (TASK-047 completada)
 
 ---
 
-**Última Actualización**: 2025-12-02  
-**Estado**: TASK-045 ✅ | TASK-046 ✅ | 40% completado
+**Última Actualización**: 2025-01-30  
+**Estado**: TASK-045 ✅ | TASK-046 ✅ | TASK-047 ✅ | 60% completado
