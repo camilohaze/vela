@@ -15,6 +15,7 @@
 //! - `inference`: Algoritmo de inferencia de tipos
 //! - `checker`: Verificación de tipos
 
+pub mod checker;
 pub mod context;
 pub mod error;
 pub mod inference;
@@ -27,3 +28,4 @@ pub type TypeResult<T> = Result<T, error::TypeError>;
 pub use types::{Type, TypeVar, TypeScheme};
 pub use context::TypeContext;
 pub use error::TypeError;
+pub use checker::TypeChecker;
