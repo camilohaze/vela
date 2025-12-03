@@ -1,0 +1,20 @@
+[package]
+name = "vela-concurrency"
+version = "0.1.0"
+edition = "2021"
+authors = ["Vela Team"]
+description = "Concurrency system for Vela (Actor Model + Worker Pools + Channels)"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/camilohaze/vela"
+
+[dependencies]
+tokio = { version = "1.35", features = ["full"] }
+rayon = "1.8"
+num_cpus = "1.16"
+thiserror = "1.0"
+tracing = "0.1"
+parking_lot = "0.12"
+
+[dev-dependencies]
+tokio-test = "0.4"
+criterion = "0.5"

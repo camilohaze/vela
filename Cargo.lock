@@ -2170,6 +2170,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "vela-concurrency"
+version = "0.1.0"
+dependencies = [
+ "criterion",
+ "num_cpus",
+ "parking_lot",
+ "rayon",
+ "thiserror",
+ "tokio",
+ "tokio-test",
+ "tracing",
+]
+
+[[package]]
 name = "vela-devtools"
 version = "0.1.0"
 dependencies = [
