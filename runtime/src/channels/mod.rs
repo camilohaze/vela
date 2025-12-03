@@ -411,7 +411,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_channel_close() {
-        let (tx, mut rx) = VelaChannel::unbounded().split();
+        let (tx, mut rx) = VelaChannel::<i32>::unbounded().split();
 
         drop(tx); // Close sender
 
@@ -420,7 +420,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_try_recv() {
-        let (tx, mut rx) = VelaChannel::unbounded().split();
+        let (tx, mut rx) = VelaChannel::<i32>::unbounded().split();
 
         // No message available
         assert_eq!(rx.try_recv().unwrap(), None);
@@ -433,7 +433,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_send_with_timeout() {
-        let (tx, mut rx) = VelaChannel::new(0).split(); // Zero capacity
+        let (tx, mut rx) = VelaChannel::<i32>::new(0).split(); // Zero capacity
 
         // This should timeout since channel is full and no receiver
         let result = utils::send_with_timeout(&tx, 42, Duration::from_millis(10)).await;

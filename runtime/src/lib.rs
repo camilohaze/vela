@@ -15,7 +15,7 @@ pub mod r#async;
 pub mod channels;
 pub mod concurrency;
 pub mod di;
-pub mod events;
+pub mod event;
 pub mod http;
 
 /// Resultado común para operaciones del runtime
