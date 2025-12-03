@@ -4,13 +4,15 @@
 //!
 //! Este crate proporciona el núcleo de ejecución con:
 //! - Async runtime (Tokio-based)
-//! - Concurrencia (channels, actores)
+//! - Channels para comunicación asíncrona
+//! - Concurrencia (actores)
 //! - DI container
 //! - Event system
 //! - HTTP framework
 
 pub mod core;
 pub mod r#async;
+pub mod channels;
 pub mod concurrency;
 pub mod di;
 pub mod events;
