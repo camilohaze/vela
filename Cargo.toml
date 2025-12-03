@@ -8,7 +8,7 @@ members = [
     "lsp",
     "devtools",
     "reactive",
-    "vela-types",
+    "types",
 ]
 
 [workspace.package]
