@@ -1,10 +1,9 @@
 # TASK-050: Implementar Worker API
 
 ## 📋 Información General
-- **Historia:** VELA-580
-- **Épica:** Workers y Channels
+- **Historia:** VELA-580 - Workers y Channels (Sprint 19)
 - **Estado:** Completada ✅
-- **Fecha:** 2024-12-02
+- **Fecha:** 2025-01-XX
 - **Tiempo estimado:** 40h
 - **Tiempo real:** ~35h
 

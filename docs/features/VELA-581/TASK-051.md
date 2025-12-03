@@ -1,8 +1,7 @@
 # TASK-051: Implementar Channel<T>
 
 ## 📋 Información General
-- **Historia:** VELA-580
-- **Épica:** Workers y Channels
+- **Historia:** VELA-580 - Sprint 19: Workers y Channels
 - **Estado:** Completada ✅
 - **Fecha:** 2024-12-02
 - **Tiempo:** ~8 horas
