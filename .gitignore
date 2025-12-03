@@ -26,53 +26,7 @@ env/
 ENV/
 .venv
 
-# IDEs
-.vscode/
-.idea/
-*.swp
-*.swo
-*~
-
-# OS
-.DS_Store
-Thumbs.db
-
-# Testing
-.pytest_cache/
-.coverage
-htmlcov/
-*.cover
-
-# Jira credentials (IMPORTANTE)
-jira-import/*.py
-!jira-import/develop_historia_v2.py
-!jira-import/README.md
-
-# Temporary files
-*.tmp
-*.log
-*.bak
-*.swp
-*.swo
-*~
-.cache/
-.tmp/
-
-# Rust specific
-target/
-Cargo.lock
-**/*.rs.bk
-*.pdb
-
-# Build artifacts
-*.o
-*.a
-*.exe
-*.dll
-*.so
-*.dylib
-
-# IDEs and editors
+# IDEs and Editors
 .vscode/
 .idea/
 *.swp
@@ -81,7 +35,7 @@ Cargo.lock
 .vscode/settings.json
 .vscode/launch.json
 
-# OS generated files
+# OS Generated Files
 .DS_Store
 .DS_Store?
 ._*
@@ -91,61 +45,65 @@ ehthumbs.db
 Thumbs.db
 desktop.ini
 
-# Logs and databases
-*.log
-*.sqlite
-*.sqlite3
-*.db
-
-# Backup files
-*.bak
-*.backup
-*.orig
-*.rej
-
-# Python bytecode and cache
-__pycache__/
-*.py[cod]
-*$py.class
-*.so
-.Python
-
-# Virtual Environment
-venv/
-env/
-ENV/
-.venv
-
-# Testing
+# Testing and Coverage
 .pytest_cache/
 .coverage
 htmlcov/
 *.cover
 coverage.xml
-*.cover
 
-# Documentation build
+# Temporary Files and Cache
+*.tmp
+*.log
+*.bak
+*.backup
+*.orig
+*.rej
+.cache/
+.tmp/
+
+# Rust Specific
+target/
+Cargo.lock
+**/*.rs.bk
+*.pdb
+
+# Build Artifacts
+*.o
+*.a
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Logs and Databases
+*.log
+*.sqlite
+*.sqlite3
+*.db
+
+# Documentation Build
 docs/_build/
 site/
 
-# Environment variables
+# Environment Variables
 .env
 .env.local
 .env.*.local
 
-# Node.js (si se usa)
+# Node.js (if used)
 node_modules/
 package-lock.json
 yarn.lock
 
-# Java (si se usa)
+# Java (if used)
 *.class
 *.jar
 *.war
 *.ear
 target/
 
-# Jira credentials (IMPORTANTE)
+# Jira Credentials (IMPORTANT)
 jira-import/*.py
 !jira-import/develop_historia_v2.py
 !jira-import/README.md
