@@ -10,7 +10,7 @@
 //! - HTTP framework
 
 pub mod core;
-pub mod async_runtime;
+pub mod r#async;
 pub mod concurrency;
 pub mod di;
 pub mod events;
