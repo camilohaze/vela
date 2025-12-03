@@ -1,0 +1,54 @@
+# Criterion.rs Configuration for Type System Benchmarks
+# This configuration sets up performance baselines and comparison targets
+
+# Baseline configuration
+baseline = "rust-baseline"
+
+# Comparison targets (Python performance baselines)
+comparison = [
+    { name = "python-baseline", path = ".criterion/python-baseline" }
+]
+
+# Benchmark configuration
+[profile.default]
+# Statistical significance threshold
+significance_level = 0.05
+
+# Minimum number of samples to collect
+nresamples = 100_000
+
+# Number of iterations per benchmark
+measurement_time = "5s"
+
+# Warm-up time before measurements
+warm_up_time = "1s"
+
+# Number of samples to collect
+sample_size = 100
+
+# Noise threshold for detecting performance changes
+noise_threshold = 0.01
+
+# Enable HTML reports
+html_reports = true
+
+# Enable CSV output for external analysis
+csv_reports = true
+
+# Enable plot generation
+plots = true
+
+# Output directory for reports
+output_directory = "target/criterion"
+
+# Custom measurement settings for type system benchmarks
+[profile.type-system]
+measurement_time = "10s"
+sample_size = 200
+warm_up_time = "2s"
+
+# Profile for CI/CD (faster but less accurate)
+[profile.ci]
+measurement_time = "1s"
+sample_size = 10
+warm_up_time = "0.5s"
