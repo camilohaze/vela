@@ -63,10 +63,11 @@ impl Compiler {
 
         // Phase 1: Lexical Analysis
         let mut lexer = Lexer::new(source, source_path);
-        let tokens = lexer.tokenize()?;
+        let lex_result = lexer.tokenize()?;
+        self.diagnostics.extend_from_lexer(&lex_result.errors);
 
         // Phase 2: Parsing
-        let mut parser = Parser::new(tokens, source_path);
+        let mut parser = Parser::new(lex_result.tokens, source_path);
         let ast = parser.parse()?;
 
         // Phase 3: Semantic Analysis

@@ -251,6 +251,33 @@ impl Diagnostics {
     pub fn is_empty(&self) -> bool {
         self.diagnostics.is_empty()
     }
+
+    /// Extend diagnostics from lexer errors
+    pub fn extend_from_lexer(&mut self, lexer_errors: &[crate::lexer::LexError]) {
+        for error in lexer_errors {
+            let location = match error {
+                crate::lexer::LexError::UnexpectedCharacter(_, pos) |
+                crate::lexer::LexError::UnterminatedString(pos) |
+                crate::lexer::LexError::InvalidEscapeSequence(_, pos) |
+                crate::lexer::LexError::InvalidNumberLiteral(_, pos) => {
+                    SourceLocation::new(pos.line, pos.column, 0) // offset not tracked in lexer
+                }
+            };
+
+            let message = match error {
+                crate::lexer::LexError::UnexpectedCharacter(c, _) =>
+                    format!("Unexpected character: '{}'", c),
+                crate::lexer::LexError::UnterminatedString(_) =>
+                    "Unterminated string literal".to_string(),
+                crate::lexer::LexError::InvalidEscapeSequence(seq, _) =>
+                    format!("Invalid escape sequence: {}", seq),
+                crate::lexer::LexError::InvalidNumberLiteral(num, _) =>
+                    format!("Invalid number literal: {}", num),
+            };
+
+            self.add(Diagnostic::new(Severity::Error, message, location));
+        }
+    }
 }
 
 #[cfg(test)]
