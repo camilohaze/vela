@@ -1,0 +1,35 @@
+[package]
+name = "vela-vm"
+version = "0.1.0"
+edition = "2021"
+description = "VelaVM - bytecode interpreter and runtime"
+authors = ["Vela Core Team <hello@velalang.org>"]
+license = "Apache-2.0 OR MIT"
+repository = "https://github.com/velalang/vela"
+homepage = "https://velalang.org"
+documentation = "https://docs.velalang.org"
+
+[dependencies]
+anyhow.workspace = true
+thiserror.workspace = true
+serde.workspace = true
+tracing.workspace = true
+bincode = "1.3"
+
+[dev-dependencies]
+criterion.workspace = true
+proptest.workspace = true
+
+[features]
+default = []
+debug_execution = []
+gc_debug = []
+performance = ["debug_execution"]
+
+[[bench]]
+name = "vm_benchmark"
+harness = false
+
+[[bench]]
+name = "gc_benchmark"
+harness = false

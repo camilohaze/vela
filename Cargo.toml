@@ -1,48 +1,55 @@
 [workspace]
 resolver = "2"
 members = [
-    "crates/vela-compiler",
-    "crates/vela-parser",
-    "crates/vela-ast",
-    "crates/vela-codegen",
-    "crates/vela-runtime",
-    "crates/vela-cli",
+    "compiler",
+    "vm",
+    "stdlib",
+    "cli",
+    "lsp",
+    "devtools",
     "reactive",
-    "src/prototypes",  # Phase 0 prototypes (Sprint 4)
 ]
 
 [workspace.package]
 version = "0.1.0"
 edition = "2021"
 rust-version = "1.75.0"
-authors = ["Vela Contributors"]
+authors = ["Vela Core Team <hello@velalang.org>"]
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/velalang/vela"
-homepage = "https://velalang.github.io/vela/"
-documentation = "https://docs.rs/vela"
+homepage = "https://velalang.org"
+documentation = "https://docs.velalang.org"
 
 [workspace.dependencies]
-# Internal crates
-vela-ast = { path = "crates/vela-ast" }
-vela-parser = { path = "crates/vela-parser" }
-vela-codegen = { path = "crates/vela-codegen" }
-vela-runtime = { path = "crates/vela-runtime" }
-
-# External dependencies
-clap = { version = "4.4", features = ["derive"] }
+# Core dependencies
 anyhow = "1.0"
 thiserror = "1.0"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 tracing = "0.1"
-tracing-subscriber = "0.3"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+regex = "1.10"
+nom = "7.1"
+clap = { version = "4.4", features = ["derive"] }
+
+# Testing and benchmarking
+criterion = "0.5"
+proptest = "1.4"
 
 [profile.release]
 opt-level = 3
 lto = "fat"
 codegen-units = 1
 strip = true
+debug = false
+panic = "abort"
 
 [profile.dev]
 opt-level = 0
 debug = true
+overflow-checks = true
+
+[profile.bench]
+opt-level = 3
+debug = false
+lto = "fat"

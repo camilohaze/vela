@@ -26,47 +26,84 @@ env/
 ENV/
 .venv
 
-# IDEs
+# IDEs and Editors
 .vscode/
 .idea/
 *.swp
 *.swo
 *~
+.vscode/settings.json
+.vscode/launch.json
 
-# OS
+# OS Generated Files
 .DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
 Thumbs.db
+desktop.ini
 
-# Testing
+# Testing and Coverage
 .pytest_cache/
 .coverage
 htmlcov/
 *.cover
+coverage.xml
 
-# Jira credentials (IMPORTANTE)
-jira-import/*.py
-!jira-import/develop_historia_v2.py
-!jira-import/README.md
-
-# Temporary files
+# Temporary Files and Cache
 *.tmp
 *.log
 *.bak
+*.backup
+*.orig
+*.rej
+.cache/
+.tmp/
 
-# Build artifacts
+# Rust Specific
+target/
+Cargo.lock
+**/*.rs.bk
+*.pdb
+
+# Build Artifacts
 *.o
 *.a
 *.exe
 *.dll
+*.so
+*.dylib
 
-# Documentation build
+# Logs and Databases
+*.log
+*.sqlite
+*.sqlite3
+*.db
+
+# Documentation Build
 docs/_build/
 site/
 
-# Environment variables
+# Environment Variables
 .env
 .env.local
+.env.*.local
 
-# Node (si se usa)
+# Node.js (if used)
 node_modules/
 package-lock.json
+yarn.lock
+
+# Java (if used)
+*.class
+*.jar
+*.war
+*.ear
+target/
+
+# Jira Credentials (IMPORTANT)
+jira-import/*.py
+!jira-import/develop_historia_v2.py
+!jira-import/README.md

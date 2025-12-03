@@ -1,0 +1,28 @@
+[package]
+name = "vela-stdlib"
+version = "0.1.0"
+edition = "2021"
+description = "Vela standard library"
+authors = ["Vela Core Team <hello@velalang.org>"]
+license = "Apache-2.0 OR MIT"
+repository = "https://github.com/velalang/vela"
+homepage = "https://velalang.org"
+documentation = "https://docs.velalang.org"
+
+[dependencies]
+anyhow.workspace = true
+thiserror.workspace = true
+serde.workspace = true
+tracing.workspace = true
+vela-vm = { path = "../vm" }
+
+[dev-dependencies]
+criterion.workspace = true
+
+[features]
+default = []
+full_stdlib = []
+
+[[bench]]
+name = "stdlib_benchmark"
+harness = false
