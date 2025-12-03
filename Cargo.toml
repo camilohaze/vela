@@ -9,6 +9,7 @@ members = [
     "devtools",
     "reactive",
     "types",
+    "runtime",
 ]
 
 [workspace.package]
