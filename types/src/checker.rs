@@ -367,25 +367,33 @@ impl TypeChecker {
 
         self.inference.unify(&callee_ty, &func_ty)?;
 
-        Ok(ret_ty)
+        // Aplicar la sustitución al tipo de retorno
+        let result_ty = self.inference.apply_subst(ret_ty);
+
+        Ok(result_ty)
     }
 
     /// Inferir tipo de acceso a miembro
     fn infer_member_access(&mut self, member: &MemberAccessExpression) -> Result<Type> {
         let object_ty = self.infer_expression(&member.object)?;
 
-        // Para acceso a miembros, necesitamos saber el tipo del objeto
-        // Por simplicidad, asumimos que es un record con campos
-        let field_ty = self.context.fresh_type_var();
-
-        // Crear un tipo record con el campo que estamos accediendo
-        let mut fields = HashMap::new();
-        fields.insert(member.member.clone(), Type::Var(field_ty));
-
-        let record_ty = Type::Record(fields);
-        self.inference.unify(&object_ty, &record_ty)?;
-
-        Ok(Type::Var(field_ty))
+        // El objeto debe ser un record
+        match object_ty {
+            Type::Record(fields) => {
+                // Buscar el campo en el record
+                match fields.get(&member.member) {
+                    Some(field_ty) => Ok(field_ty.clone()),
+                    None => Err(TypeError::FieldNotFound {
+                        field: member.member.clone(),
+                        ty: Type::Record(fields),
+                    }),
+                }
+            }
+            _ => Err(TypeError::UnificationError {
+                lhs: object_ty,
+                rhs: Type::Record(HashMap::new()), // Placeholder - should be more specific
+            }),
+        }
     }
 
     /// Inferir tipo de acceso por índice

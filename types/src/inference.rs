@@ -45,6 +45,11 @@ impl TypeInference {
         &self.substitution
     }
 
+    /// Obtener la sustitución mutable (para tests)
+    pub fn substitution_mut(&mut self) -> &mut Substitution {
+        &mut self.substitution
+    }
+
     /// Aplicar la sustitución acumulada a un tipo
     pub fn apply_subst(&self, mut ty: Type) -> Type {
         ty.apply_subst(&self.substitution);
@@ -493,7 +498,7 @@ impl TypeInference {
     }
 
     /// Crear una nueva variable de tipo fresca
-    fn fresh_type_var(&mut self) -> Type {
+    pub fn fresh_type_var(&mut self) -> Type {
         // En una implementación real, esto debería generar variables únicas
         // Por simplicidad, usamos un contador global
         static mut COUNTER: usize = 0;
@@ -562,7 +567,8 @@ pub fn algorithm_w(context: &TypeContext, expr: &vela_compiler::ast::Expression)
     let mut inference = TypeInference::new(context.clone());
 
     let ty = inference.infer_expression(expr)?;
-    Ok((ty, inference.substitution))
+    let final_ty = inference.apply_subst(ty);
+    Ok((final_ty, inference.substitution))
 }
 
 #[cfg(test)]
