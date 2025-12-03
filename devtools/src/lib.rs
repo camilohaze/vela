@@ -5,15 +5,16 @@ Development tools for Vela including UI Inspector, Signal Graph visualizer,
 performance profiler, and debugging utilities.
 */
 
-pub mod inspector;
-pub mod profiler;
-pub mod debugger;
-pub mod signal_graph;
+// TODO: Implement these modules
+// pub mod inspector;
+// pub mod profiler;
+// pub mod debugger;
+// pub mod signal_graph;
 
-/// Re-export main tools
-pub use inspector::UIInspector;
-pub use profiler::Profiler;
-pub use debugger::Debugger;
+// Re-export main tools (TODO: uncomment when modules are implemented)
+// pub use inspector::UIInspector;
+// pub use profiler::Profiler;
+// pub use debugger::Debugger;
 
 /// Initialize DevTools
 pub fn init() {
@@ -23,6 +24,8 @@ pub fn init() {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+    
     #[test]
     fn test_devtools_init() {
         init(); // Should not panic
