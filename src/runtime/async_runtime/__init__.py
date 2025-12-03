@@ -22,7 +22,9 @@ Inspirado en:
 from .poll import Poll, PollState
 from .waker import Waker
 from .future import Future
-from .promise import Promise
+from .promise import Promise, promise_from_callback, promise_from_error_callback
+from .task import Task, TaskHandle, TaskId, TaskState
+from .executor import Executor, Runtime, block_on
 
 __all__ = [
     'Poll',
@@ -30,4 +32,13 @@ __all__ = [
     'Waker',
     'Future',
     'Promise',
+    'promise_from_callback',
+    'promise_from_error_callback',
+    'Task',
+    'TaskHandle',
+    'TaskId',
+    'TaskState',
+    'Executor',
+    'Runtime',
+    'block_on',
 ]
