@@ -67,7 +67,7 @@ impl Compiler {
         self.diagnostics.extend_from_lexer(&lex_result.errors);
 
         // Phase 2: Parsing
-        let mut parser = Parser::new(lex_result.tokens, source_path);
+        let mut parser = Parser::new(lex_result.tokens);
         let ast = parser.parse()?;
 
         // Phase 3: Semantic Analysis
