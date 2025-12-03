@@ -25,6 +25,7 @@ Inspiración:
 
 import time
 import threading
+import heapq
 from typing import Dict, Any, Optional, Type, List, Callable
 from enum import Enum
 from dataclasses import dataclass
@@ -67,6 +68,29 @@ class ActorMetrics:
         if uptime > 0:
             return self.messages_processed / uptime
         return 0.0
+
+
+@dataclass
+class ScheduledTask:
+    """
+    Tarea programada para ejecución diferida.
+    
+    Usado por SupervisorActor para restart logic asíncrono (TASK-043).
+    """
+    task_id: str
+    callback: Callable[[], None]
+    scheduled_at: float        # timestamp cuando se creó
+    execute_at: float          # timestamp cuando debe ejecutarse
+    delay: float              # delay original (para debug)
+    cancelled: bool = False   # flag de cancelación
+    
+    def __lt__(self, other: 'ScheduledTask') -> bool:
+        """Comparación para heapq (min-heap por execute_at)."""
+        return self.execute_at < other.execute_at
+    
+    def is_ready(self) -> bool:
+        """Check si está listo para ejecutar."""
+        return time.time() >= self.execute_at and not self.cancelled
 
 
 class ActorScheduler:
@@ -179,6 +203,9 @@ class ActorScheduler:
             remaining_timeout = timeout - (time.time() - start_time)
             if remaining_timeout > 0:
                 time.sleep(min(remaining_timeout, 0.5))
+        
+        # Detener timer thread si existe
+        self._stop_timer_thread()
         
         # Actualizar estado
         with self.state_lock:
@@ -508,6 +535,212 @@ class PriorityActorScheduler(ActorScheduler):
                 "normal": len(self.normal_priority_actors),
                 "low": len(self.low_priority_actors)
             }
+    
+    # ========================================================================
+    # SCHEDULED TASKS (TASK-043)
+    # ========================================================================
+    
+    def schedule_delayed(
+        self, 
+        callback: Callable[[], None], 
+        delay_seconds: float,
+        task_id: Optional[str] = None
+    ) -> str:
+        """
+        Programar callback para ejecución después de un delay.
+        
+        Args:
+            callback: Función a ejecutar
+            delay_seconds: Delay en segundos
+            task_id: ID opcional para la tarea
+            
+        Returns:
+            Task ID (para cancelación o tracking)
+            
+        Example:
+            # Schedule restart después de 5 segundos
+            task_id = scheduler.schedule_delayed(
+                lambda: restart_actor(actor_ref),
+                delay_seconds=5.0
+            )
+            
+            # Cancelar si es necesario
+            scheduler.cancel_scheduled_task(task_id)
+        """
+        # Generar task_id único si no se proveyó
+        if task_id is None:
+            timestamp = int(time.time() * 1000)
+            with self.actors_lock:
+                counter = len(getattr(self, '_scheduled_tasks', {}))
+            task_id = f"task-{timestamp}-{counter}"
+        
+        # Crear scheduled task
+        now = time.time()
+        task = ScheduledTask(
+            task_id=task_id,
+            callback=callback,
+            scheduled_at=now,
+            execute_at=now + delay_seconds,
+            delay=delay_seconds,
+            cancelled=False
+        )
+        
+        # Agregar a pending tasks
+        if not hasattr(self, '_scheduled_tasks'):
+            self._scheduled_tasks: Dict[str, ScheduledTask] = {}
+            self._scheduled_tasks_heap: List[ScheduledTask] = []
+            self._scheduled_tasks_lock = threading.Lock()
+            self._scheduled_tasks_executed = 0
+            self._scheduled_tasks_cancelled = 0
+            self._scheduled_tasks_failed = 0
+            
+            # Iniciar timer thread
+            self._start_timer_thread()
+        
+        with self._scheduled_tasks_lock:
+            self._scheduled_tasks[task_id] = task
+            import heapq
+            heapq.heappush(self._scheduled_tasks_heap, task)
+        
+        return task_id
+    
+    def cancel_scheduled_task(self, task_id: str) -> bool:
+        """
+        Cancelar una tarea programada.
+        
+        Args:
+            task_id: ID de la tarea a cancelar
+            
+        Returns:
+            True si fue cancelada, False si no existe o ya ejecutó
+        """
+        if not hasattr(self, '_scheduled_tasks'):
+            return False
+        
+        with self._scheduled_tasks_lock:
+            task = self._scheduled_tasks.get(task_id)
+            if task and not task.cancelled:
+                task.cancelled = True
+                self._scheduled_tasks_cancelled += 1
+                return True
+        
+        return False
+    
+    def get_pending_tasks(self) -> List[ScheduledTask]:
+        """
+        Obtener lista de tareas pendientes.
+        
+        Returns:
+            Lista de ScheduledTask no ejecutadas ni canceladas
+        """
+        if not hasattr(self, '_scheduled_tasks'):
+            return []
+        
+        with self._scheduled_tasks_lock:
+            return [
+                task for task in self._scheduled_tasks.values()
+                if not task.cancelled and task.execute_at > time.time()
+            ]
+    
+    def get_scheduled_task_metrics(self) -> Dict[str, Any]:
+        """
+        Obtener métricas de scheduled tasks.
+        
+        Returns:
+            Dict con métricas de tasks
+        """
+        if not hasattr(self, '_scheduled_tasks'):
+            return {
+                "pending_tasks": 0,
+                "executed_tasks": 0,
+                "cancelled_tasks": 0,
+                "failed_tasks": 0,
+                "avg_delay": 0.0,
+                "max_delay": 0.0,
+                "oldest_pending": 0.0
+            }
+        
+        with self._scheduled_tasks_lock:
+            pending = self.get_pending_tasks()
+            
+            # Calcular avg_delay y max_delay de pending tasks
+            delays = [task.delay for task in pending]
+            avg_delay = sum(delays) / len(delays) if delays else 0.0
+            max_delay = max(delays) if delays else 0.0
+            
+            # Oldest pending task
+            now = time.time()
+            ages = [now - task.scheduled_at for task in pending]
+            oldest_pending = max(ages) if ages else 0.0
+            
+            return {
+                "pending_tasks": len(pending),
+                "executed_tasks": self._scheduled_tasks_executed,
+                "cancelled_tasks": self._scheduled_tasks_cancelled,
+                "failed_tasks": self._scheduled_tasks_failed,
+                "avg_delay": avg_delay,
+                "max_delay": max_delay,
+                "oldest_pending": oldest_pending
+            }
+    
+    def _start_timer_thread(self) -> None:
+        """Iniciar thread que ejecuta scheduled tasks."""
+        self._timer_thread_running = True
+        self._timer_thread = threading.Thread(
+            target=self._timer_loop,
+            daemon=True,
+            name="ScheduledTasksTimer"
+        )
+        self._timer_thread.start()
+    
+    def _timer_loop(self) -> None:
+        """Loop principal del timer thread (ejecuta tasks ready)."""
+        import heapq
+        
+        while self._timer_thread_running:
+            try:
+                # Dormir 100ms antes de check
+                time.sleep(0.1)
+                
+                # Check scheduled tasks
+                with self._scheduled_tasks_lock:
+                    # Procesar tasks que están ready
+                    while self._scheduled_tasks_heap:
+                        # Peek task más próximo
+                        task = self._scheduled_tasks_heap[0]
+                        
+                        # Si está cancelado, remover
+                        if task.cancelled:
+                            heapq.heappop(self._scheduled_tasks_heap)
+                            del self._scheduled_tasks[task.task_id]
+                            continue
+                        
+                        # Si no está ready, break (heap ordenado por execute_at)
+                        if not task.is_ready():
+                            break
+                        
+                        # Remover del heap y dict
+                        heapq.heappop(self._scheduled_tasks_heap)
+                        del self._scheduled_tasks[task.task_id]
+                        
+                        # Ejecutar callback (fuera del lock)
+                        try:
+                            task.callback()
+                            self._scheduled_tasks_executed += 1
+                        except Exception as e:
+                            self._scheduled_tasks_failed += 1
+                            # Log error pero no crashear timer thread
+                            print(f"ScheduledTask {task.task_id} failed: {e}")
+            
+            except Exception as e:
+                # Log pero continuar timer loop
+                print(f"Timer loop error: {e}")
+        
+    def _stop_timer_thread(self) -> None:
+        """Detener timer thread."""
+        if hasattr(self, '_timer_thread') and self._timer_thread_running:
+            self._timer_thread_running = False
+            self._timer_thread.join(timeout=1.0)
 
 
 # Helper function para crear scheduler con configuración común
@@ -622,3 +855,8 @@ if __name__ == "__main__":
     executor.shutdown()
     
     print("Done!")
+
+
+# ============================================================================
+# SCHEDULED TASKS SYSTEM (TASK-043)
+# ============================================================================

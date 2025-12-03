@@ -14,8 +14,11 @@ Implementación de Actor instances con:
 """
 
 from abc import ABC, abstractmethod
-from typing import Any, Optional, Dict, Callable
+from typing import Any, Optional, Dict, Callable, TYPE_CHECKING
 from enum import Enum
+
+if TYPE_CHECKING:
+    from .supervision import SupervisorActor
 
 
 class ActorState(Enum):
@@ -100,12 +103,12 @@ class Actor(ABC):
         """
         pass
     
-    def pre_restart(self, error: Exception) -> None:
+    def pre_restart(self, error: Optional[Exception] = None) -> None:
         """
         Lifecycle hook: Llamado antes de reiniciar por error.
         
         Args:
-            error: Excepción que causó el restart
+            error: Excepción que causó el restart (None si restart manual)
         
         Útil para:
         - Log del error
@@ -116,12 +119,12 @@ class Actor(ABC):
         """
         pass
     
-    def post_restart(self, error: Exception) -> None:
+    def post_restart(self, error: Optional[Exception] = None) -> None:
         """
         Lifecycle hook: Llamado después de reiniciar.
         
         Args:
-            error: Excepción que causó el restart
+            error: Excepción que causó el restart (None si restart manual)
         
         Útil para:
         - Reinicializar estado
@@ -163,9 +166,38 @@ class Actor(ABC):
     # ACTOR REFERENCE
     # ========================================================================
     
+    @property
+    def ref(self) -> 'ActorRef':
+        """
+        Referencia al propio actor.
+        
+        Returns:
+            ActorRef: Referencia a este actor
+        
+        Útil para:
+        - Pasarse a sí mismo como sender en mensajes
+        - Auto-enviarse mensajes (recursión)
+        
+        Example:
+            other_actor.send(GetValue(sender=self.ref))
+        """
+        if self._actor_ref is None:
+            raise RuntimeError("Actor not initialized (no ActorRef)")
+        return self._actor_ref
+    
+    @ref.setter
+    def ref(self, ref: 'ActorRef') -> None:
+        """
+        Set actor reference (usado principalmente en tests).
+        
+        Args:
+            ref: ActorRef para este actor
+        """
+        self._actor_ref = ref
+    
     def self(self) -> 'ActorRef':
         """
-        Obtener referencia al propio actor.
+        Obtener referencia al propio actor (deprecated - usar property 'ref').
         
         Returns:
             ActorRef: Referencia a este actor
@@ -194,9 +226,29 @@ class Actor(ABC):
     # STATE MANAGEMENT
     # ========================================================================
     
+    @property
+    def state(self) -> ActorState:
+        """
+        Estado actual del actor.
+        
+        Returns:
+            ActorState: Estado actual
+        """
+        return self._actor_state
+    
+    @state.setter
+    def state(self, state: ActorState) -> None:
+        """
+        Set actor state.
+        
+        Args:
+            state: Nuevo estado
+        """
+        self._actor_state = state
+    
     def get_state(self) -> ActorState:
         """
-        Obtener estado actual del actor.
+        Obtener estado actual del actor (deprecated - usar property 'state').
         
         Returns:
             ActorState: Estado actual
@@ -205,7 +257,7 @@ class Actor(ABC):
     
     def _set_state(self, state: ActorState) -> None:
         """
-        Set actor state (internal use only).
+        Set actor state (internal use only - deprecated).
         
         Args:
             state: Nuevo estado
@@ -258,19 +310,21 @@ class ActorRef:
         ref.send(MyMessage())
     """
     
-    def __init__(self, name: str, actor: Actor):
+    def __init__(self, name: str, actor: Actor, supervisor: Optional['SupervisorActor'] = None):
         """
         Crear ActorRef.
         
         Args:
             name: Nombre único del actor
             actor: Instancia del actor
+            supervisor: Supervisor del actor (opcional)
         
         Nota: Normalmente no se crea directamente, usar spawn()
         """
         self._name = name
         self._actor = actor
         self._stopped = False
+        self._supervisor = supervisor
         
         # Set reference en el actor
         actor._set_actor_ref(self)
@@ -284,6 +338,18 @@ class ActorRef:
             str: Nombre único
         """
         return self._name
+    
+    @property
+    def actor(self) -> Actor:
+        """
+        Instancia del actor.
+        
+        Returns:
+            Actor: Instancia del actor referenciado
+        
+        Nota: Usado principalmente por supervisores para acceso directo
+        """
+        return self._actor
     
     @property
     def path(self) -> str:
@@ -320,8 +386,17 @@ class ActorRef:
         
         # Temporalmente llamar receive directamente
         # En TASK-038 esto irá al mailbox
-        self._actor.receive(message)
-        self._actor._increment_message_count()
+        try:
+            self._actor.receive(message)
+            self._actor._increment_message_count()
+        except Exception as error:
+            # TASK-044: Notificar supervisor si existe
+            self._actor._increment_error_count()
+            if self._supervisor:
+                self._supervisor.handle_child_failure(self, error)
+            else:
+                # Re-lanzar si no hay supervisor
+                raise
     
     def tell(self, message: Any) -> None:
         """
