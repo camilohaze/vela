@@ -1,7 +1,7 @@
 # TASK-050: Implementar Worker API
 
 ## 📋 Información General
-- **Historia:** VELA-580 - Workers y Channels (Sprint 19)
+- **Historia:** VELA-581 - Sprint 19: Workers y Channels
 - **Estado:** Completada ✅
 - **Fecha:** 2025-01-XX
 - **Tiempo estimado:** 40h
@@ -356,7 +356,7 @@ $ pytest tests/unit/runtime/workers/ -v
 
 - **ADR-013:** `docs/architecture/ADR-013-worker-api-design.md`
 - **Specification:** `docs/specifications/worker-api-spec.md`
-- **Jira:** [VELA-580](https://velalang.atlassian.net/browse/VELA-580)
+- **Jira:** [VELA-581](https://velalang.atlassian.net/browse/VELA-581)
 - **Sprint:** Sprint 19 - Workers y Channels
 
 ## 🎓 Lecciones Aprendidas

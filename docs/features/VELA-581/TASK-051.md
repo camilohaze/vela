@@ -1,7 +1,7 @@
 # TASK-051: Implementar Channel<T>
 
 ## 📋 Información General
-- **Historia:** VELA-580 - Sprint 19: Workers y Channels
+- **Historia:** VELA-581 - Sprint 19: Workers y Channels
 - **Estado:** Completada ✅
 - **Fecha:** 2024-12-02
 - **Tiempo:** ~8 horas
@@ -449,7 +449,7 @@ sender, receiver1, receiver2 = Channel.broadcast()
 
 ## 🔗 Referencias
 
-- **Jira:** [VELA-580](https://velalang.atlassian.net/browse/VELA-580)
+- **Jira:** [VELA-581](https://velalang.atlassian.net/browse/VELA-581)
 - **ADR:** `docs/architecture/ADR-014-channel-api-design.md`
 - **Spec:** `docs/specifications/channel-api-spec.md`
 - **Commits:** 
