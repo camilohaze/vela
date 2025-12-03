@@ -19,6 +19,7 @@ anyhow = "1.0"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 num_cpus = "1.16"
+vela-vm = { path = "../vm" }
 
 [dev-dependencies]
 criterion = "0.5"

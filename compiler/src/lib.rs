@@ -75,8 +75,8 @@ impl Compiler {
         analyzer.analyze(&ast)?;
 
         // Phase 4: Code Generation
-        let mut codegen = CodeGenerator::new(&self.config);
-        let bytecode = codegen.generate(&ast)?;
+        let mut codegen = CodeGenerator::new();
+        let bytecode = codegen.generate_program(&ast)?;
 
         Ok(bytecode.into_bytes())
     }

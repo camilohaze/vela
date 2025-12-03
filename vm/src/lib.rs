@@ -18,7 +18,7 @@ pub mod profiler;
 
 /// Re-export main types
 pub use vm::VM;
-pub use bytecode::Bytecode;
+pub use bytecode::{Bytecode, Instruction, Value, Function};
 
 /// Version information
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
