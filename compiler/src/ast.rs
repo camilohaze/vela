@@ -165,6 +165,7 @@ pub enum Declaration {
     Struct(StructDeclaration),
     Enum(EnumDeclaration),
     TypeAlias(TypeAliasDeclaration),
+    Variable(VariableDeclaration),
     Interface(InterfaceDeclaration),
     Class(ClassDeclaration),
     Service(ServiceDeclaration),

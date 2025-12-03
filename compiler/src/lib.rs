@@ -71,7 +71,7 @@ impl Compiler {
         let ast = parser.parse()?;
 
         // Phase 3: Semantic Analysis
-        let mut analyzer = SemanticAnalyzer::new(&self.config);
+        let mut analyzer = SemanticAnalyzer::new();
         analyzer.analyze(&ast)?;
 
         // Phase 4: Code Generation

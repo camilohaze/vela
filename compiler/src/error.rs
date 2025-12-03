@@ -78,15 +78,110 @@ impl fmt::Display for ParseError {
 
 /// Semantic analysis errors
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct SemanticError {
-    pub message: String,
-    pub location: SourceLocation,
-    pub error_code: Option<String>,
+pub enum SemanticError {
+    /// Undefined symbol
+    UndefinedSymbol { name: String, location: SourceLocation },
+    /// Duplicate symbol declaration
+    DuplicateSymbol { name: String, location: SourceLocation },
+    /// Type mismatch in assignment or operation
+    TypeMismatch { expected: Type, actual: Type, location: SourceLocation },
+    /// Invalid type usage
+    InvalidType { name: String, location: SourceLocation },
+    /// Undefined type
+    UndefinedType { name: String, location: SourceLocation },
+    /// Invalid symbol usage (e.g., using function as variable)
+    InvalidSymbolUsage { name: String, location: SourceLocation },
+    /// Invalid binary operation
+    InvalidBinaryOperation { operator: String, left_type: Type, right_type: Type, location: SourceLocation },
+    /// Invalid unary operation
+    InvalidUnaryOperation { operator: String, operand_type: Type, location: SourceLocation },
+    /// Unknown operator
+    UnknownOperator { operator: String, location: SourceLocation },
+    /// Type inference failed
+    TypeInferenceFailed { location: SourceLocation, message: String },
+    /// Missing return statement
+    MissingReturn { function: String, location: SourceLocation },
+    /// Unreachable code
+    UnreachableCode { location: SourceLocation },
+}
+
+/// Type information for semantic errors
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Type {
+    Primitive(String),
+    Struct(String),
+    Enum(String),
+    Function(Vec<Type>, Box<Type>),
+    Array(Box<Type>),
+    Tuple(Vec<Type>),
+    Generic(String, Vec<Type>),
+    Unknown,
 }
 
 impl fmt::Display for SemanticError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{} at {}", self.message, self.location)
+        match self {
+            SemanticError::UndefinedSymbol { name, .. } =>
+                write!(f, "Undefined symbol: '{}'", name),
+            SemanticError::DuplicateSymbol { name, .. } =>
+                write!(f, "Duplicate symbol: '{}'", name),
+            SemanticError::TypeMismatch { expected, actual, .. } =>
+                write!(f, "Type mismatch: expected {}, got {}", expected, actual),
+            SemanticError::InvalidType { name, .. } =>
+                write!(f, "Invalid type: '{}'", name),
+            SemanticError::UndefinedType { name, .. } =>
+                write!(f, "Undefined type: '{}'", name),
+            SemanticError::InvalidSymbolUsage { name, .. } =>
+                write!(f, "Invalid symbol usage: '{}'", name),
+            SemanticError::InvalidBinaryOperation { operator, left_type, right_type, .. } =>
+                write!(f, "Invalid binary operation '{}' between {} and {}", operator, left_type, right_type),
+            SemanticError::InvalidUnaryOperation { operator, operand_type, .. } =>
+                write!(f, "Invalid unary operation '{}' on {}", operator, operand_type),
+            SemanticError::UnknownOperator { operator, .. } =>
+                write!(f, "Unknown operator: '{}'", operator),
+            SemanticError::TypeInferenceFailed { message, .. } =>
+                write!(f, "Type inference failed: {}", message),
+            SemanticError::MissingReturn { function, .. } =>
+                write!(f, "Missing return statement in function '{}'", function),
+            SemanticError::UnreachableCode { .. } =>
+                write!(f, "Unreachable code"),
+        }
+    }
+}
+
+impl fmt::Display for Type {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Type::Primitive(name) => write!(f, "{}", name),
+            Type::Struct(name) => write!(f, "{}", name),
+            Type::Enum(name) => write!(f, "{}", name),
+            Type::Function(params, ret) => {
+                write!(f, "fn(")?;
+                for (i, param) in params.iter().enumerate() {
+                    if i > 0 { write!(f, ", ")?; }
+                    write!(f, "{}", param)?;
+                }
+                write!(f, ") -> {}", ret)
+            }
+            Type::Array(elem) => write!(f, "[{}]", elem),
+            Type::Tuple(elems) => {
+                write!(f, "(")?;
+                for (i, elem) in elems.iter().enumerate() {
+                    if i > 0 { write!(f, ", ")?; }
+                    write!(f, "{}", elem)?;
+                }
+                write!(f, ")")
+            }
+            Type::Generic(name, args) => {
+                write!(f, "{}<", name)?;
+                for (i, arg) in args.iter().enumerate() {
+                    if i > 0 { write!(f, ", ")?; }
+                    write!(f, "{}", arg)?;
+                }
+                write!(f, ">")
+            }
+            Type::Unknown => write!(f, "unknown"),
+        }
     }
 }
 

@@ -27,6 +27,11 @@ impl Parser {
 
         // Parsear declaraciones hasta el final
         while !self.is_at_end() {
+            // Skip semicolons between declarations
+            if self.check(TokenKind::Semicolon) {
+                self.advance();
+                continue;
+            }
             declarations.push(self.parse_declaration()?);
         }
 
@@ -85,6 +90,10 @@ impl Parser {
             self.parse_enum_declaration(is_public)
         } else if self.check(TokenKind::Type) {
             self.parse_type_alias_declaration(is_public)
+        } else if self.check(TokenKind::State) {
+            // Variable declarations at top level
+            let var_decl = self.parse_variable_declaration()?;
+            Ok(Declaration::Variable(var_decl))
         } else {
             Err(CompileError::Parse(self.error("Expected declaration")))
         }
@@ -497,7 +506,7 @@ impl Parser {
         } else {
             None
         };
-        let initializer = if self.check(TokenKind::Equal) {
+        let initializer = if self.check(TokenKind::Assign) {
             self.advance();
             Some(self.parse_expression()?)
         } else {
