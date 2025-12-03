@@ -47,9 +47,8 @@ class PromiseFuture(Future[T]):
         with self._lock:
             if self._completed:
                 if self._error:
-                    # TODO: En una implementación real, lanzar excepción
-                    # Por ahora, retornar Poll.pending()
-                    return Poll.pending()
+                    # Lanzar excepción capturada
+                    raise self._error
                 return Poll.ready(self._value)
             
             # Guardar waker para notificar cuando se resuelva
@@ -84,6 +83,23 @@ class PromiseFuture(Future[T]):
         """Verifica si el Future se completó"""
         with self._lock:
             return self._completed
+    
+    def cancel(self) -> bool:
+        """
+        Cancel el Future si es posible.
+        
+        For worker futures, delegates to WorkerHandle.cancel().
+        Otherwise, this is a no-op (most Futures can't be cancelled).
+        
+        Returns:
+            True if cancellation succeeded, False otherwise
+        """
+        # Si hay worker handle attached, delegar cancellation
+        if hasattr(self, '_worker_handle'):
+            return self._worker_handle.cancel()
+        
+        # Por defecto, no se puede cancelar
+        return False
 
 
 class Promise(Generic[T]):
