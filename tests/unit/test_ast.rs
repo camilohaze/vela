@@ -346,8 +346,9 @@ mod tests {
     #[test]
     fn test_block_statement_creation() {
         let range = create_range(1, 1, 3, 2);
-        let block = BlockStatement::new(range, vec![]);
+        let block = BlockStatement::new(range.clone(), vec![]);
         assert_eq!(block.statements.len(), 0);
+        assert_eq!(block.node.range, range);
     }
 
     #[test]
@@ -455,8 +456,9 @@ mod tests {
     #[test]
     fn test_identifier_expression() {
         let range = create_range(1, 1, 1, 3);
-        let ident = Identifier::new(range, "var".to_string());
+        let ident = Identifier::new(range.clone(), "var".to_string());
         assert_eq!(ident.name, "var");
+        assert_eq!(ident.node.range, range);
     }
 
     #[test]
@@ -464,8 +466,9 @@ mod tests {
         let range = create_range(1, 1, 1, 5);
         let left = Expression::Identifier(Identifier::new(create_range(1, 1, 1, 1), "a".to_string()));
         let right = Expression::Identifier(Identifier::new(create_range(1, 5, 1, 5), "b".to_string()));
-        let binary = BinaryExpression::new(range, left, "+".to_string(), right);
+        let binary = BinaryExpression::new(range.clone(), left, "+".to_string(), right);
         assert_eq!(binary.operator, "+");
+        assert_eq!(binary.node.range, range);
     }
 
     #[test]
@@ -629,8 +632,9 @@ mod tests {
             Expression::Identifier(Identifier::new(create_range(1, 7, 1, 10), "get".to_string())),
             vec![],
         ));
-        let await_expr = AwaitExpression::new(range, inner_expr);
+        let await_expr = AwaitExpression::new(range.clone(), inner_expr);
         assert!(matches!(await_expr.expression.as_ref(), Expression::Call(_)));
+        assert_eq!(await_expr.node.range, range);
     }
 
     // ===================================================================
@@ -691,9 +695,9 @@ mod tests {
     #[test]
     fn test_wildcard_pattern() {
         let range = create_range(1, 1, 1, 1);
-        let wildcard = WildcardPattern::new(range);
+        let wildcard = WildcardPattern::new(range.clone());
         // Wildcard pattern has no additional fields to test
-        assert!(true); // Just ensure it can be created
+        assert_eq!(wildcard.node.range, range);
     }
 
     // ===================================================================
@@ -714,8 +718,9 @@ mod tests {
             create_range(1, 1, 1, 6),
             "String".to_string(),
         ));
-        let array_type = ArrayType::new(range, element_type);
+        let array_type = ArrayType::new(range.clone(), element_type);
         assert!(matches!(array_type.element_type.as_ref(), TypeAnnotation::Primitive(_)));
+        assert_eq!(array_type.node.range, range);
     }
 
     #[test]
@@ -780,8 +785,9 @@ mod tests {
             create_range(1, 1, 1, 6),
             "String".to_string(),
         ));
-        let optional_type = OptionalType::new(range, inner_type);
+        let optional_type = OptionalType::new(range.clone(), inner_type);
         assert!(matches!(optional_type.inner_type.as_ref(), TypeAnnotation::Primitive(_)));
+        assert_eq!(optional_type.node.range, range);
     }
 
     // ===================================================================

@@ -1,0 +1,28 @@
+[package]
+name = "vela-cli"
+version = "0.1.0"
+edition = "2021"
+description = "Vela CLI tool"
+authors = ["Vela Core Team <hello@velalang.org>"]
+license = "Apache-2.0 OR MIT"
+repository = "https://github.com/velalang/vela"
+homepage = "https://velalang.org"
+documentation = "https://docs.velalang.org"
+
+[[bin]]
+name = "vela"
+path = "src/main.rs"
+
+[dependencies]
+clap.workspace = true
+anyhow.workspace = true
+thiserror.workspace = true
+serde.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+vela-compiler = { path = "../compiler" }
+vela-vm = { path = "../vm" }
+
+[dev-dependencies]
+assert_cmd = "2.0"
+predicates = "3.0"

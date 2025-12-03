@@ -2959,11 +2959,11 @@ mod tests {
         let param = Parameter::new(
             "x".to_string(),
             Some(TypeAnnotation::Primitive(PrimitiveType::new(
-                param_range,
+                param_range.clone(),
                 "Number".to_string(),
             ))),
             None,
-            param_range,
+            param_range.clone(),
         );
 
         let func = FunctionDeclaration::new(
@@ -3024,11 +3024,11 @@ mod tests {
         let field = StructField::new(
             "name".to_string(),
             TypeAnnotation::Primitive(PrimitiveType::new(
-                field_range,
+                field_range.clone(),
                 "String".to_string(),
             )),
             true,
-            field_range,
+            field_range.clone(),
         );
 
         let struct_decl = StructDeclaration::new(
@@ -3114,7 +3114,7 @@ mod tests {
     #[test]
     fn test_block_statement_creation() {
         let range = create_range(1, 1, 5, 2);
-        let block = BlockStatement::new(range, vec![]);
+        let block = BlockStatement::new(range.clone(), vec![]);
         assert_eq!(block.statements.len(), 0);
         assert_eq!(block.node.range, range);
     }
@@ -3123,11 +3123,11 @@ mod tests {
     fn test_expression_statement_creation() {
         let range = create_range(1, 1, 1, 10);
         let expr = Expression::Literal(Literal::new(
-            range,
+            range.clone(),
             serde_json::json!(42),
             "number".to_string(),
         ));
-        let stmt = ExpressionStatement::new(range, expr);
+        let stmt = ExpressionStatement::new(range.clone(), expr);
 
         assert_eq!(stmt.node.range, range);
         match &stmt.expression {
@@ -3197,7 +3197,7 @@ mod tests {
             "number".to_string(),
         ));
 
-        let assignment = AssignmentStatement::new(range, target, value);
+        let assignment = AssignmentStatement::new(range.clone(), target, value);
         assert_eq!(assignment.node.range, range);
     }
 
@@ -3275,7 +3275,7 @@ mod tests {
     #[test]
     fn test_identifier_expression() {
         let range = create_range(1, 1, 1, 5);
-        let ident = Identifier::new(range, "variable".to_string());
+        let ident = Identifier::new(range.clone(), "variable".to_string());
         assert_eq!(ident.name, "variable");
         assert_eq!(ident.node.range, range);
     }
@@ -3285,7 +3285,7 @@ mod tests {
         let range = create_range(1, 1, 1, 5);
         let left = Expression::Identifier(Identifier::new(create_range(1, 1, 1, 1), "a".to_string()));
         let right = Expression::Identifier(Identifier::new(create_range(1, 5, 1, 5), "b".to_string()));
-        let binary = BinaryExpression::new(range, left, "+".to_string(), right);
+        let binary = BinaryExpression::new(range.clone(), left, "+".to_string(), right);
 
         assert_eq!(binary.operator, "+");
         assert_eq!(binary.node.range, range);
@@ -3338,7 +3338,7 @@ mod tests {
         let range = create_range(1, 1, 1, 8);
         let object = Expression::Identifier(Identifier::new(create_range(1, 1, 1, 5), "array".to_string()));
         let index = Expression::Literal(Literal::new(create_range(1, 7, 1, 7), serde_json::json!(0), "number".to_string()));
-        let index_access = IndexAccessExpression::new(range, object, index);
+        let index_access = IndexAccessExpression::new(range.clone(), object, index);
 
         assert_eq!(index_access.node.range, range);
     }
@@ -3421,7 +3421,7 @@ mod tests {
         let then_branch = Expression::Literal(Literal::new(create_range(1, 13, 1, 17), serde_json::json!("yes"), "string".to_string()));
         let else_branch = Expression::Literal(Literal::new(create_range(1, 21, 1, 25), serde_json::json!("no"), "string".to_string()));
 
-        let if_expr = IfExpression::new(range, condition, then_branch, else_branch);
+        let if_expr = IfExpression::new(range.clone(), condition, then_branch, else_branch);
         assert_eq!(if_expr.node.range, range);
     }
 
@@ -3434,7 +3434,7 @@ mod tests {
             vec![],
         ));
 
-        let await_expr = AwaitExpression::new(range, inner_expr);
+        let await_expr = AwaitExpression::new(range.clone(), inner_expr);
         assert_eq!(await_expr.node.range, range);
     }
 
@@ -3505,7 +3505,7 @@ mod tests {
     #[test]
     fn test_wildcard_pattern() {
         let range = create_range(1, 1, 1, 1);
-        let wildcard = WildcardPattern::new(range);
+        let wildcard = WildcardPattern::new(range.clone());
         assert_eq!(wildcard.node.range, range);
     }
 
@@ -3527,7 +3527,7 @@ mod tests {
             create_range(1, 6, 1, 10),
             "String".to_string(),
         ));
-        let array_type = ArrayType::new(range, element_type);
+        let array_type = ArrayType::new(range.clone(), element_type);
         assert_eq!(array_type.node.range, range);
     }
 
@@ -3590,7 +3590,7 @@ mod tests {
             create_range(1, 1, 1, 6),
             "String".to_string(),
         ));
-        let optional_type = OptionalType::new(range, inner_type);
+        let optional_type = OptionalType::new(range.clone(), inner_type);
         assert_eq!(optional_type.node.range, range);
     }
 
@@ -3711,7 +3711,7 @@ mod tests {
             vec![],
         ));
 
-        let dispatch = DispatchStatement::new(range, action);
+        let dispatch = DispatchStatement::new(range.clone(), action);
         assert_eq!(dispatch.node.range, range);
     }
 
