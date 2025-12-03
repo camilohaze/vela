@@ -2,8 +2,18 @@
 VelaVM - Virtual Machine Implementation
 
 This module implements the core virtual machine that executes Vela bytecode.
+
+TODO: Complete refactoring according to ADR-801:
+- Implement CallFrame struct
+- Implement fetch-decode-execute loop
+- Support all 40+ instructions from ADR-801
+- Add exception handling
 */
 
+// Temporarily commented out old implementation
+// Will be replaced with ADR-801 design
+
+/*
 use crate::bytecode::{Bytecode, Instruction, Value};
 use std::collections::HashMap;
 
@@ -101,3 +111,4 @@ mod tests {
         // TODO: Verificar resultado cuando esté implementado
     }
 }
+*/

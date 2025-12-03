@@ -2,9 +2,20 @@
 Garbage Collector for VelaVM
 
 This module implements garbage collection for the Vela Virtual Machine.
-Uses a mark-and-sweep algorithm with generational collection.
+
+TODO: Complete implementation according to ADR-801:
+- GcHeap struct with object pool
+- GcObject enum (Int, Float, String, List, Dict, Function, Closure)
+- Reference counting (Rc<RefCell<T>>)
+- Cycle detection (mark-and-sweep on cycle_buffer)
+- Generational GC (Phase 2)
+- GC statistics tracking
 */
 
+// Temporarily commented out old implementation
+// Will be replaced with ADR-801 design
+
+/*
 use crate::bytecode::Value;
 use std::collections::HashSet;
 
@@ -160,9 +171,9 @@ mod tests {
         let mut gc = GC::new();
 
         // Allocate some objects
-        let id1 = gc.allocate(Value::Int(1));
-        let id2 = gc.allocate(Value::Int(2));
-        let _id3 = gc.allocate(Value::Int(3));
+        let id1 = gc.allocate(Value::int(1));
+        let id2 = gc.allocate(Value::int(2));
+        let _id3 = gc.allocate(Value::int(3));
 
         // Mark one as root
         gc.mark_root(id1);
@@ -174,3 +185,4 @@ mod tests {
         assert!(gc.get_object(id2).is_none()); // Should be collected
     }
 }
+*/

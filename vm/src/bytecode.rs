@@ -1,212 +1,665 @@
-/*
-Bytecode format for VelaVM
+/*!
+Bytecode format for Vela VM
 
-This module defines the bytecode instructions and format used by the Vela Virtual Machine.
-The bytecode is stack-based and designed for functional programming with reactivity.
+This module implements the bytecode instruction set and data structures
+as defined in ADR-801.
+
+## Instruction Set
+
+The VM supports 256 opcodes organized into categories:
+- Stack operations (0x00-0x0F)
+- Arithmetic (0x10-0x1F)
+- Comparison (0x20-0x2F)
+- Logical (0x30-0x3F)
+- Control flow (0x40-0x4F)
+- Functions (0x50-0x5F)
+- Collections (0x60-0x6F)
+- Subscript (0x70-0x7F)
+- Iteration (0x80-0x8F)
+- Exception handling (0x90-0x9F)
+- Imports (0xA0-0xAF)
+- Debug (0xF0-0xFF)
 */
 
 use serde::{Deserialize, Serialize};
 use std::fmt;
+use indexmap::IndexMap;
 
-/// Bytecode instruction set
+/// Bytecode instruction set (ADR-801)
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[repr(u8)]
 pub enum Instruction {
-    // Stack operations
-    Push(i64),           // Push integer literal
-    PushFloat(f64),      // Push float literal
-    PushString(String),  // Push string literal
-    PushBool(bool),      // Push boolean literal
-    Pop,                 // Pop top of stack
+    // Stack operations (0x00 - 0x0F)
+    LoadConst(u16) = 0x00,      // Push constant from pool
+    LoadLocal(u16) = 0x01,      // Push local variable
+    StoreLocal(u16) = 0x02,     // Pop to local variable
+    LoadGlobal(u16) = 0x03,     // Push global variable
+    StoreGlobal(u16) = 0x04,    // Pop to global variable
+    LoadAttr(u16) = 0x05,       // Load attribute (obj.attr)
+    StoreAttr(u16) = 0x06,      // Store attribute
+    Pop = 0x07,                 // Pop top of stack
+    Dup = 0x08,                 // Duplicate top of stack
 
-    // Arithmetic operations
-    Add,                 // Add top two values
-    Sub,                 // Subtract top two values
-    Mul,                 // Multiply top two values
-    Div,                 // Divide top two values
+    // Arithmetic (0x10 - 0x1F)
+    Add = 0x10,                 // a + b
+    Sub = 0x11,                 // a - b
+    Mul = 0x12,                 // a * b
+    Div = 0x13,                 // a / b
+    Mod = 0x14,                 // a % b
+    Pow = 0x15,                 // a ** b
+    Neg = 0x16,                 // -a
 
-    // Comparison operations
-    Eq,                  // Equal
-    Ne,                  // Not equal
-    Lt,                  // Less than
-    Le,                  // Less or equal
-    Gt,                  // Greater than
-    Ge,                  // Greater or equal
+    // Comparison (0x20 - 0x2F)
+    Eq = 0x20,                  // a == b
+    Ne = 0x21,                  // a != b
+    Lt = 0x22,                  // a < b
+    Le = 0x23,                  // a <= b
+    Gt = 0x24,                  // a > b
+    Ge = 0x25,                  // a >= b
 
-    // Control flow
-    Jump(usize),         // Unconditional jump to address
-    JumpIf(usize),       // Jump if top of stack is true
-    Call(usize),         // Call function at address
-    Return,              // Return from function
+    // Logical (0x30 - 0x3F)
+    And = 0x30,                 // a && b
+    Or = 0x31,                  // a || b
+    Not = 0x32,                 // !a
 
-    // Variable operations
-    Load(usize),         // Load variable from environment
-    Store(usize),        // Store to variable in environment
+    // Control flow (0x40 - 0x4F)
+    Jump(i32) = 0x40,           // Unconditional jump
+    JumpIfFalse(i32) = 0x41,    // Jump if top is false
+    JumpIfTrue(i32) = 0x42,     // Jump if top is true
 
-    // Reactive operations
-    SignalNew,           // Create new signal
-    SignalGet,           // Get signal value
-    SignalSet,           // Set signal value
-    ComputedNew(usize),  // Create computed with body at address
-    EffectNew(usize),    // Create effect with body at address
+    // Functions (0x50 - 0x5F)
+    Call(u8) = 0x50,            // Call function with N args
+    Return = 0x51,              // Return from function
+    MakeFunction(u16) = 0x52,   // Create function object
+    MakeClosure(u16, u8) = 0x53,// Create closure
 
-    // Function operations
-    FnNew(usize),        // Create function with body at address
-    ClosureNew(usize),   // Create closure
+    // Collections (0x60 - 0x6F)
+    BuildList(u16) = 0x60,      // Build list from N items
+    BuildDict(u16) = 0x61,      // Build dict from N*2 items
+    BuildSet(u16) = 0x62,       // Build set from N items
+    BuildTuple(u16) = 0x63,     // Build tuple from N items
 
-    // Data structure operations
-    ListNew,             // Create new list
-    ListPush,            // Push to list
-    DictNew,             // Create new dict
-    DictSet,             // Set dict key-value
+    // Subscript (0x70 - 0x7F)
+    LoadSubscript = 0x70,       // obj[key]
+    StoreSubscript = 0x71,      // obj[key] = value
+    DeleteSubscript = 0x72,     // del obj[key]
 
-    // Pattern matching
-    Match,               // Start pattern match
-    Case(usize),         // Case branch
-    Wildcard,            // Wildcard pattern
+    // Iteration (0x80 - 0x8F)
+    GetIter = 0x80,             // Get iterator
+    ForIter(i32) = 0x81,        // Iterate (jump if exhausted)
 
-    // Error handling
-    Try(usize),          // Try block
-    Catch(usize),        // Catch block
-    Throw,               // Throw exception
+    // Exception handling (0x90 - 0x9F)
+    SetupExcept(i32) = 0x90,    // Setup exception handler
+    PopExcept = 0x91,           // Pop exception handler
+    Raise = 0x92,               // Raise exception
 
-    // Built-in functions
-    Print,               // Print top of stack
-    Len,                 // Length of collection
-    TypeOf,              // Get type of value
+    // Imports (0xA0 - 0xAF)
+    ImportName(u16) = 0xA0,     // Import module
+    ImportFrom(u16) = 0xA1,     // Import from module
 
-    // Module operations
-    Import(String),      // Import module
-    Export(String),      // Export symbol
-
-    // Debug
-    Nop,                 // No operation
+    // Debug (0xF0 - 0xFF)
+    Nop = 0xF0,                 // No operation
+    Breakpoint = 0xF1,          // Debugger breakpoint
 }
 
-/// Compiled bytecode with metadata
+/// Constant in constant pool
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub enum Constant {
+    Null,
+    Bool(bool),
+    Int(i64),
+    Float(f64),
+    String(u16),       // Index to string table
+    Code(u16),         // Index to code object
+}
+
+/// Code object (function/module bytecode)
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct CodeObject {
+    pub name: u16,              // String table index
+    pub filename: u16,          // String table index
+    pub arg_count: u16,
+    pub local_count: u16,
+    pub stack_size: u16,        // Max stack depth
+    pub flags: u16,             // IS_GENERATOR, etc.
+    pub bytecode: Vec<u8>,
+    pub constants: Vec<Constant>,
+    pub names: Vec<u16>,        // Variable names
+    pub line_numbers: Vec<(u32, u32)>, // (bytecode_offset, line_number)
+}
+
+impl CodeObject {
+    pub fn new(name: u16, filename: u16) -> Self {
+        Self {
+            name,
+            filename,
+            arg_count: 0,
+            local_count: 0,
+            stack_size: 0,
+            flags: 0,
+            bytecode: Vec::new(),
+            constants: Vec::new(),
+            names: Vec::new(),
+            line_numbers: Vec::new(),
+        }
+    }
+}
+
+/// Complete bytecode file
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Bytecode {
-    pub instructions: Vec<Instruction>,
-    pub constants: Vec<Value>,  // Constant pool
-    pub functions: Vec<Function>, // Function definitions
-    pub symbols: Vec<String>,   // Symbol table
+    pub magic: u32,             // 0x56454C41 ("VELA")
+    pub version: (u8, u8, u8),  // Major.Minor.Patch
+    pub timestamp: u64,
+    pub constants: Vec<Constant>,
+    pub strings: Vec<String>,   // String table
+    pub code_objects: Vec<CodeObject>,
+    pub metadata: IndexMap<String, Vec<u8>>,
 }
 
 impl Bytecode {
+    pub const MAGIC: u32 = 0x56454C41; // "VELA"
+
     pub fn new() -> Self {
         Self {
-            instructions: Vec::new(),
+            magic: Self::MAGIC,
+            version: (0, 1, 0),
+            timestamp: std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_secs(),
             constants: Vec::new(),
-            functions: Vec::new(),
-            symbols: Vec::new(),
+            strings: Vec::new(),
+            code_objects: Vec::new(),
+            metadata: IndexMap::new(),
         }
     }
 
-    pub fn push_instruction(&mut self, instruction: Instruction) {
-        self.instructions.push(instruction);
+    pub fn push(&mut self, instruction: Instruction) {
+        if let Some(code) = self.code_objects.last_mut() {
+            Self::encode_instruction_static(&instruction, &mut code.bytecode);
+        }
     }
 
-    pub fn add_constant(&mut self, value: Value) -> usize {
-        self.constants.push(value);
-        self.constants.len() - 1
+    /// Encode instruction to bytecode (static method to avoid borrow issues)
+    fn encode_instruction_static(instr: &Instruction, bytecode: &mut Vec<u8>) {
+        use Instruction::*;
+        match instr {
+            // Stack operations (0x00-0x0F)
+            LoadConst(idx) => {
+                bytecode.push(0x00);
+                bytecode.extend_from_slice(&idx.to_le_bytes());
+            }
+            LoadLocal(idx) => {
+                bytecode.push(0x01);
+                bytecode.extend_from_slice(&idx.to_le_bytes());
+            }
+            StoreLocal(idx) => {
+                bytecode.push(0x02);
+                bytecode.extend_from_slice(&idx.to_le_bytes());
+            }
+            LoadGlobal(idx) => {
+                bytecode.push(0x03);
+                bytecode.extend_from_slice(&idx.to_le_bytes());
+            }
+            StoreGlobal(idx) => {
+                bytecode.push(0x04);
+                bytecode.extend_from_slice(&idx.to_le_bytes());
+            }
+            LoadAttr(idx) => {
+                bytecode.push(0x05);
+                bytecode.extend_from_slice(&idx.to_le_bytes());
+            }
+            StoreAttr(idx) => {
+                bytecode.push(0x06);
+                bytecode.extend_from_slice(&idx.to_le_bytes());
+            }
+            Pop => bytecode.push(0x07),
+            Dup => bytecode.push(0x08),
+            
+            // Arithmetic (0x10-0x1F)
+            Add => bytecode.push(0x10),
+            Sub => bytecode.push(0x11),
+            Mul => bytecode.push(0x12),
+            Div => bytecode.push(0x13),
+            Mod => bytecode.push(0x14),
+            Pow => bytecode.push(0x15),
+            Neg => bytecode.push(0x16),
+            
+            // Comparison (0x20-0x2F)
+            Eq => bytecode.push(0x20),
+            Ne => bytecode.push(0x21),
+            Lt => bytecode.push(0x22),
+            Le => bytecode.push(0x23),
+            Gt => bytecode.push(0x24),
+            Ge => bytecode.push(0x25),
+            
+            // Logical (0x30-0x3F)
+            And => bytecode.push(0x30),
+            Or => bytecode.push(0x31),
+            Not => bytecode.push(0x32),
+            
+            // Control flow (0x40-0x4F)
+            Jump(offset) => {
+                bytecode.push(0x40);
+                bytecode.extend_from_slice(&offset.to_le_bytes());
+            }
+            JumpIfFalse(offset) => {
+                bytecode.push(0x41);
+                bytecode.extend_from_slice(&offset.to_le_bytes());
+            }
+            JumpIfTrue(offset) => {
+                bytecode.push(0x42);
+                bytecode.extend_from_slice(&offset.to_le_bytes());
+            }
+            
+            // Functions (0x50-0x5F)
+            Call(argc) => {
+                bytecode.push(0x50);
+                bytecode.push(*argc);
+            }
+            Return => bytecode.push(0x51),
+            MakeFunction(idx) => {
+                bytecode.push(0x52);
+                bytecode.extend_from_slice(&idx.to_le_bytes());
+            }
+            MakeClosure(idx, free_vars) => {
+                bytecode.push(0x53);
+                bytecode.extend_from_slice(&idx.to_le_bytes());
+                bytecode.push(*free_vars);
+            }
+            
+            // Collections (0x60-0x6F)
+            BuildList(count) => {
+                bytecode.push(0x60);
+                bytecode.extend_from_slice(&count.to_le_bytes());
+            }
+            BuildDict(count) => {
+                bytecode.push(0x61);
+                bytecode.extend_from_slice(&count.to_le_bytes());
+            }
+            BuildSet(count) => {
+                bytecode.push(0x62);
+                bytecode.extend_from_slice(&count.to_le_bytes());
+            }
+            BuildTuple(count) => {
+                bytecode.push(0x63);
+                bytecode.extend_from_slice(&count.to_le_bytes());
+            }
+            
+            // Subscript (0x70-0x7F)
+            LoadSubscript => bytecode.push(0x70),
+            StoreSubscript => bytecode.push(0x71),
+            DeleteSubscript => bytecode.push(0x72),
+            
+            // Iteration (0x80-0x8F)
+            GetIter => bytecode.push(0x80),
+            ForIter(offset) => {
+                bytecode.push(0x81);
+                bytecode.extend_from_slice(&offset.to_le_bytes());
+            }
+            
+            // Exception handling (0x90-0x9F)
+            SetupExcept(offset) => {
+                bytecode.push(0x90);
+                bytecode.extend_from_slice(&offset.to_le_bytes());
+            }
+            PopExcept => bytecode.push(0x91),
+            Raise => bytecode.push(0x92),
+            
+            // Imports (0xA0-0xAF)
+            ImportName(idx) => {
+                bytecode.push(0xA0);
+                bytecode.extend_from_slice(&idx.to_le_bytes());
+            }
+            ImportFrom(idx) => {
+                bytecode.push(0xA1);
+                bytecode.extend_from_slice(&idx.to_le_bytes());
+            }
+            
+            // Debug (0xF0-0xFF)
+            Nop => bytecode.push(0xF0),
+            Breakpoint => bytecode.push(0xFF),
+        }
     }
 
-    pub fn add_symbol(&mut self, symbol: String) -> usize {
-        self.symbols.push(symbol);
-        self.symbols.len() - 1
+    pub fn add_constant(&mut self, constant: Constant) -> u16 {
+        self.constants.push(constant);
+        (self.constants.len() - 1) as u16
     }
 
-    /// Serializar bytecode a bytes
-    pub fn into_bytes(&self) -> Vec<u8> {
-        bincode::serialize(self).unwrap_or_default()
+    pub fn add_string(&mut self, string: String) -> u16 {
+        self.strings.push(string);
+        (self.strings.len() - 1) as u16
     }
 
-    /// Deserializar bytecode desde bytes
-    pub fn from_bytes(bytes: &[u8]) -> Result<Self, Box<dyn std::error::Error>> {
-        Ok(bincode::deserialize(bytes)?)
+    pub fn add_code_object(&mut self, code: CodeObject) -> u16 {
+        self.code_objects.push(code);
+        (self.code_objects.len() - 1) as u16
+    }
+
+    pub fn len(&self) -> usize {
+        self.code_objects.iter().map(|c| c.bytecode.len()).sum()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.code_objects.is_empty()
+    }
+
+    /// Serialize bytecode to bytes
+    pub fn to_bytes(&self) -> Result<Vec<u8>, bincode::Error> {
+        bincode::serialize(self)
+    }
+
+    /// Deserialize bytecode from bytes
+    pub fn from_bytes(bytes: &[u8]) -> Result<Self, bincode::Error> {
+        bincode::deserialize(bytes)
     }
 }
 
 impl fmt::Display for Instruction {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        use Instruction::*;
         match self {
-            Instruction::Push(val) => write!(f, "PUSH {}", val),
-            Instruction::PushFloat(val) => write!(f, "PUSH_FLOAT {}", val),
-            Instruction::PushString(val) => write!(f, "PUSH_STRING \"{}\"", val),
-            Instruction::PushBool(val) => write!(f, "PUSH_BOOL {}", val),
-            Instruction::Pop => write!(f, "POP"),
-            Instruction::Add => write!(f, "ADD"),
-            Instruction::Sub => write!(f, "SUB"),
-            Instruction::Mul => write!(f, "MUL"),
-            Instruction::Div => write!(f, "DIV"),
-            Instruction::Eq => write!(f, "EQ"),
-            Instruction::Ne => write!(f, "NE"),
-            Instruction::Lt => write!(f, "LT"),
-            Instruction::Le => write!(f, "LE"),
-            Instruction::Gt => write!(f, "GT"),
-            Instruction::Ge => write!(f, "GE"),
-            Instruction::Jump(addr) => write!(f, "JUMP {}", addr),
-            Instruction::JumpIf(addr) => write!(f, "JUMP_IF {}", addr),
-            Instruction::Call(addr) => write!(f, "CALL {}", addr),
-            Instruction::Return => write!(f, "RETURN"),
-            Instruction::Load(idx) => write!(f, "LOAD {}", idx),
-            Instruction::Store(idx) => write!(f, "STORE {}", idx),
-            Instruction::SignalNew => write!(f, "SIGNAL_NEW"),
-            Instruction::SignalGet => write!(f, "SIGNAL_GET"),
-            Instruction::SignalSet => write!(f, "SIGNAL_SET"),
-            Instruction::ComputedNew(addr) => write!(f, "COMPUTED_NEW {}", addr),
-            Instruction::EffectNew(addr) => write!(f, "EFFECT_NEW {}", addr),
-            Instruction::FnNew(addr) => write!(f, "FN_NEW {}", addr),
-            Instruction::ClosureNew(addr) => write!(f, "CLOSURE_NEW {}", addr),
-            Instruction::ListNew => write!(f, "LIST_NEW"),
-            Instruction::ListPush => write!(f, "LIST_PUSH"),
-            Instruction::DictNew => write!(f, "DICT_NEW"),
-            Instruction::DictSet => write!(f, "DICT_SET"),
-            Instruction::Match => write!(f, "MATCH"),
-            Instruction::Case(addr) => write!(f, "CASE {}", addr),
-            Instruction::Wildcard => write!(f, "WILDCARD"),
-            Instruction::Try(addr) => write!(f, "TRY {}", addr),
-            Instruction::Catch(addr) => write!(f, "CATCH {}", addr),
-            Instruction::Throw => write!(f, "THROW"),
-            Instruction::Print => write!(f, "PRINT"),
-            Instruction::Len => write!(f, "LEN"),
-            Instruction::TypeOf => write!(f, "TYPEOF"),
-            Instruction::Import(module) => write!(f, "IMPORT {}", module),
-            Instruction::Export(symbol) => write!(f, "EXPORT {}", symbol),
-            Instruction::Nop => write!(f, "NOP"),
+            // Stack operations (0x00-0x0F)
+            LoadConst(idx) => write!(f, "LOAD_CONST {}", idx),
+            LoadLocal(idx) => write!(f, "LOAD_LOCAL {}", idx),
+            StoreLocal(idx) => write!(f, "STORE_LOCAL {}", idx),
+            LoadGlobal(idx) => write!(f, "LOAD_GLOBAL {}", idx),
+            StoreGlobal(idx) => write!(f, "STORE_GLOBAL {}", idx),
+            LoadAttr(idx) => write!(f, "LOAD_ATTR {}", idx),
+            StoreAttr(idx) => write!(f, "STORE_ATTR {}", idx),
+            Pop => write!(f, "POP"),
+            Dup => write!(f, "DUP"),
+            
+            // Arithmetic (0x10-0x1F)
+            Add => write!(f, "ADD"),
+            Sub => write!(f, "SUB"),
+            Mul => write!(f, "MUL"),
+            Div => write!(f, "DIV"),
+            Mod => write!(f, "MOD"),
+            Pow => write!(f, "POW"),
+            Neg => write!(f, "NEG"),
+            
+            // Comparison (0x20-0x2F)
+            Eq => write!(f, "EQ"),
+            Ne => write!(f, "NE"),
+            Lt => write!(f, "LT"),
+            Le => write!(f, "LE"),
+            Gt => write!(f, "GT"),
+            Ge => write!(f, "GE"),
+            
+            // Logical (0x30-0x3F)
+            And => write!(f, "AND"),
+            Or => write!(f, "OR"),
+            Not => write!(f, "NOT"),
+            
+            // Control flow (0x40-0x4F)
+            Jump(offset) => write!(f, "JUMP {}", offset),
+            JumpIfFalse(offset) => write!(f, "JUMP_IF_FALSE {}", offset),
+            JumpIfTrue(offset) => write!(f, "JUMP_IF_TRUE {}", offset),
+            
+            // Functions (0x50-0x5F)
+            Call(argc) => write!(f, "CALL {}", argc),
+            Return => write!(f, "RETURN"),
+            MakeFunction(idx) => write!(f, "MAKE_FUNCTION {}", idx),
+            MakeClosure(idx, free_vars) => write!(f, "MAKE_CLOSURE {} {}", idx, free_vars),
+            
+            // Collections (0x60-0x6F)
+            BuildList(count) => write!(f, "BUILD_LIST {}", count),
+            BuildDict(count) => write!(f, "BUILD_DICT {}", count),
+            BuildSet(count) => write!(f, "BUILD_SET {}", count),
+            BuildTuple(count) => write!(f, "BUILD_TUPLE {}", count),
+            
+            // Subscript (0x70-0x7F)
+            LoadSubscript => write!(f, "LOAD_SUBSCRIPT"),
+            StoreSubscript => write!(f, "STORE_SUBSCRIPT"),
+            DeleteSubscript => write!(f, "DELETE_SUBSCRIPT"),
+            
+            // Iteration (0x80-0x8F)
+            GetIter => write!(f, "GET_ITER"),
+            ForIter(offset) => write!(f, "FOR_ITER {}", offset),
+            
+            // Exception handling (0x90-0x9F)
+            SetupExcept(offset) => write!(f, "SETUP_EXCEPT {}", offset),
+            PopExcept => write!(f, "POP_EXCEPT"),
+            Raise => write!(f, "RAISE"),
+            
+            // Imports (0xA0-0xAF)
+            ImportName(idx) => write!(f, "IMPORT_NAME {}", idx),
+            ImportFrom(idx) => write!(f, "IMPORT_FROM {}", idx),
+            
+            // Debug (0xF0-0xFF)
+            Nop => write!(f, "NOP"),
+            Breakpoint => write!(f, "BREAKPOINT"),
         }
     }
 }
 
-/// Runtime values
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub enum Value {
-    Int(i64),
-    Float(f64),
-    String(String),
-    Bool(bool),
-    List(Vec<Value>),
-    Dict(std::collections::HashMap<String, Value>),
-    Function(Function),
-    Signal(Box<Value>),
-    None,
-}
+/// Runtime value with tagged pointers (NaN-boxing)
+/// 
+/// Values are represented as 64-bit integers with tags:
+/// - `0x0001_XXXX_XXXX_XXXX`: Int (lower 48 bits)
+/// - `0xFFFE_XXXX_XXXX_XXXX`: Heap pointer (lower 48 bits)
+/// - `0x0000_0000_0000_0000`: Null
+/// - `0x0000_0000_0000_0002`: True
+/// - `0x0000_0000_0000_0001`: False
+/// - NaN-boxed floats: quiet NaNs with payload
+///
+/// This representation enables:
+/// - Efficient 64-bit immediate values
+/// - Fast type checks (single bitwise operation)
+/// - Pointer compression (48-bit addresses)
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Value(u64);
 
-/// Function definition
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct Function {
-    pub name: String,
-    pub params: Vec<String>,
-    pub body_start: usize,  // Address where function body starts
-    pub body_end: usize,    // Address where function body ends
-}
-
-impl Function {
-    pub fn new(name: String, params: Vec<String>, body_start: usize, body_end: usize) -> Self {
-        Self {
-            name,
-            params,
-            body_start,
-            body_end,
+impl Value {
+    // Tag constants
+    const TAG_INT: u64 = 0x0001_0000_0000_0000;
+    const TAG_PTR: u64 = 0xFFFE_0000_0000_0000;
+    const MASK_PAYLOAD: u64 = 0x0000_FFFF_FFFF_FFFF;
+    
+    // Special values
+    pub const NULL: Value = Value(0);
+    pub const TRUE: Value = Value(2);
+    pub const FALSE: Value = Value(1);
+    
+    /// Create integer value
+    pub fn int(n: i64) -> Self {
+        Value(Self::TAG_INT | (n as u64 & Self::MASK_PAYLOAD))
+    }
+    
+    /// Create float value (NaN-boxing)
+    pub fn float(f: f64) -> Self {
+        Value(f.to_bits())
+    }
+    
+    /// Create heap pointer value
+    pub fn ptr(addr: usize) -> Self {
+        Value(Self::TAG_PTR | (addr as u64 & Self::MASK_PAYLOAD))
+    }
+    
+    /// Create boolean value
+    pub fn bool(b: bool) -> Self {
+        if b { Self::TRUE } else { Self::FALSE }
+    }
+    
+    /// Check if value is null
+    pub fn is_null(&self) -> bool {
+        self.0 == 0
+    }
+    
+    /// Check if value is integer
+    pub fn is_int(&self) -> bool {
+        (self.0 & !Self::MASK_PAYLOAD) == Self::TAG_INT
+    }
+    
+    /// Check if value is float
+    pub fn is_float(&self) -> bool {
+        !self.is_int() && !self.is_ptr() && !self.is_bool() && !self.is_null()
+    }
+    
+    /// Check if value is heap pointer
+    pub fn is_ptr(&self) -> bool {
+        (self.0 & !Self::MASK_PAYLOAD) == Self::TAG_PTR
+    }
+    
+    /// Check if value is boolean
+    pub fn is_bool(&self) -> bool {
+        self.0 == 1 || self.0 == 2
+    }
+    
+    /// Extract integer value
+    pub fn as_int(&self) -> Option<i64> {
+        if self.is_int() {
+            Some((self.0 & Self::MASK_PAYLOAD) as i64)
+        } else {
+            None
         }
+    }
+    
+    /// Extract float value
+    pub fn as_float(&self) -> Option<f64> {
+        if self.is_float() {
+            Some(f64::from_bits(self.0))
+        } else {
+            None
+        }
+    }
+    
+    /// Extract pointer value
+    pub fn as_ptr(&self) -> Option<usize> {
+        if self.is_ptr() {
+            Some((self.0 & Self::MASK_PAYLOAD) as usize)
+        } else {
+            None
+        }
+    }
+    
+    /// Extract boolean value
+    pub fn as_bool(&self) -> Option<bool> {
+        if self.is_bool() {
+            Some(self.0 == 2)
+        } else {
+            None
+        }
+    }
+}
+
+impl fmt::Display for Value {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if self.is_null() {
+            write!(f, "null")
+        } else if let Some(n) = self.as_int() {
+            write!(f, "{}", n)
+        } else if let Some(fl) = self.as_float() {
+            write!(f, "{}", fl)
+        } else if let Some(b) = self.as_bool() {
+            write!(f, "{}", b)
+        } else if let Some(ptr) = self.as_ptr() {
+            write!(f, "ptr(0x{:x})", ptr)
+        } else {
+            write!(f, "unknown")
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_value_int() {
+        let v = Value::int(42);
+        assert!(v.is_int());
+        assert_eq!(v.as_int(), Some(42));
+        assert!(!v.is_float());
+        assert!(!v.is_null());
+    }
+
+    #[test]
+    fn test_value_float() {
+        let v = Value::float(3.14);
+        assert!(v.is_float());
+        assert_eq!(v.as_float(), Some(3.14));
+        assert!(!v.is_int());
+    }
+
+    #[test]
+    fn test_value_bool() {
+        let v_true = Value::bool(true);
+        let v_false = Value::bool(false);
+        assert!(v_true.is_bool());
+        assert!(v_false.is_bool());
+        assert_eq!(v_true.as_bool(), Some(true));
+        assert_eq!(v_false.as_bool(), Some(false));
+    }
+
+    #[test]
+    fn test_value_null() {
+        let v = Value::NULL;
+        assert!(v.is_null());
+        assert!(!v.is_int());
+        assert!(!v.is_float());
+    }
+
+    #[test]
+    fn test_value_ptr() {
+        let v = Value::ptr(0x1234_5678);
+        assert!(v.is_ptr());
+        assert_eq!(v.as_ptr(), Some(0x1234_5678));
+        assert!(!v.is_int());
+    }
+
+    #[test]
+    fn test_bytecode_creation() {
+        let bytecode = Bytecode::new();
+        assert_eq!(bytecode.magic, Bytecode::MAGIC);
+        assert_eq!(bytecode.version, (0, 1, 0));
+        assert!(bytecode.is_empty());
+    }
+
+    #[test]
+    fn test_code_object_creation() {
+        let code = CodeObject::new(0, 1);
+        assert_eq!(code.name, 0);
+        assert_eq!(code.filename, 1);
+        assert_eq!(code.arg_count, 0);
+        assert!(code.bytecode.is_empty());
+    }
+
+    #[test]
+    fn test_constant_types() {
+        let c_int = Constant::Int(42);
+        let c_float = Constant::Float(3.14);
+        let c_bool = Constant::Bool(true);
+        let c_null = Constant::Null;
+        
+        assert!(matches!(c_int, Constant::Int(42)));
+        assert!(matches!(c_float, Constant::Float(_)));
+        assert!(matches!(c_bool, Constant::Bool(true)));
+        assert!(matches!(c_null, Constant::Null));
+    }
+
+    #[test]
+    fn test_instruction_display() {
+        assert_eq!(format!("{}", Instruction::Add), "ADD");
+        assert_eq!(format!("{}", Instruction::LoadConst(0)), "LOAD_CONST 0");
+        assert_eq!(format!("{}", Instruction::Jump(100)), "JUMP 100");
+        assert_eq!(format!("{}", Instruction::Call(3)), "CALL 3");
+    }
+
+    #[test]
+    fn test_bytecode_serialization() {
+        let mut bytecode = Bytecode::new();
+        bytecode.add_string("test".to_string());
+        bytecode.add_constant(Constant::Int(42));
+        
+        let bytes = bytecode.to_bytes().unwrap();
+        let deserialized = Bytecode::from_bytes(&bytes).unwrap();
+        
+        assert_eq!(bytecode.magic, deserialized.magic);
+        assert_eq!(bytecode.strings, deserialized.strings);
+        assert_eq!(bytecode.constants, deserialized.constants);
     }
 }
