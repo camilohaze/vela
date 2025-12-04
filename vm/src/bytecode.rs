@@ -466,7 +466,9 @@ impl Value {
     
     /// Create integer value
     pub fn int(n: i64) -> Self {
-        Value(Self::TAG_INT | (n as u64 & Self::MASK_PAYLOAD))
+        // Mask to 48 bits and preserve as signed
+        let payload = (n as u64) & Self::MASK_PAYLOAD;
+        Value(Self::TAG_INT | payload)
     }
     
     /// Create float value (NaN-boxing)
@@ -496,7 +498,11 @@ impl Value {
     
     /// Check if value is float
     pub fn is_float(&self) -> bool {
-        !self.is_int() && !self.is_ptr() && !self.is_bool() && !self.is_null()
+        // Float is anything that's not tagged as int/ptr and not a special value
+        let has_tag = (self.0 & !Self::MASK_PAYLOAD) == Self::TAG_INT
+            || (self.0 & !Self::MASK_PAYLOAD) == Self::TAG_PTR;
+        let is_special = self.0 == 0 || self.0 == 1 || self.0 == 2;
+        !has_tag && !is_special
     }
     
     /// Check if value is heap pointer
@@ -512,7 +518,15 @@ impl Value {
     /// Extract integer value
     pub fn as_int(&self) -> Option<i64> {
         if self.is_int() {
-            Some((self.0 & Self::MASK_PAYLOAD) as i64)
+            let payload = self.0 & Self::MASK_PAYLOAD;
+            // Sign extend from 48 bits to 64 bits
+            let sign_bit = payload & 0x0000_8000_0000_0000;
+            let extended = if sign_bit != 0 {
+                payload | 0xFFFF_0000_0000_0000
+            } else {
+                payload
+            };
+            Some(extended as i64)
         } else {
             None
         }

@@ -113,12 +113,12 @@ fn test_conditional_jump() {
     // Program: if false { return 10 } else { return 20 }
     let program = create_program(
         vec![
-            0x00, 0x00, 0x00, // LoadConst 0 (false)
-            0x41, 0x07, 0x00, 0x00, 0x00, // JumpIfFalse +7
-            0x00, 0x01, 0x00, // LoadConst 1 (10)
-            0x51, // Return
-            0x00, 0x02, 0x00, // LoadConst 2 (20)
-            0x51, // Return
+            0x00, 0x00, 0x00, // LoadConst 0 (false) - Position 0-2
+            0x41, 0x0C, 0x00, 0x00, 0x00, // JumpIfFalse to position 12 - Position 3-7
+            0x00, 0x01, 0x00, // LoadConst 1 (10) - Position 8-10
+            0x51, // Return - Position 11
+            0x00, 0x02, 0x00, // LoadConst 2 (20) - Position 12-14 (jump target)
+            0x51, // Return - Position 15
         ],
         vec![Constant::Bool(false), Constant::Int(10), Constant::Int(20)],
     );
@@ -154,7 +154,8 @@ fn test_local_variables() {
     let mut bytecode = Bytecode::new();
     bytecode.add_constant(Constant::Int(42));
 
-    let mut code = CodeObject::new(0, 1); // 1 local variable
+    let mut code = CodeObject::new(0, 0); // name=0, filename=0
+    code.local_count = 1; // 1 local variable
     code.bytecode = vec![
         0x00, 0x00, 0x00, // LoadConst 0 (42)
         0x02, 0x00, 0x00, // StoreLocal 0
@@ -362,9 +363,9 @@ fn test_unconditional_jump() {
     // Program: jump over LoadConst(10), return LoadConst(20)
     let program = create_program(
         vec![
-            0x40, 0x04, 0x00, 0x00, 0x00, // Jump +4
+            0x40, 0x08, 0x00, 0x00, 0x00, // Jump to position 8 (LoadConst 1)
             0x00, 0x00, 0x00, // LoadConst 0 (10) - SKIPPED
-            0x00, 0x01, 0x00, // LoadConst 1 (20)
+            0x00, 0x01, 0x00, // LoadConst 1 (20) - Position 8
             0x51, // Return
         ],
         vec![Constant::Int(10), Constant::Int(20)],

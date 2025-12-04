@@ -12,6 +12,7 @@ members = [
     "runtime",
     "concurrency",
     "semantic",
+    "tooling",
 ]
 
 [workspace.package]
