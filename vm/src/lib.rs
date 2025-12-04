@@ -50,8 +50,7 @@ pub mod error;
 /// Re-export main types
 pub use bytecode::{Bytecode, Instruction, Value, CodeObject, Constant};
 pub use vm::{VirtualMachine, CallFrame};
-// TODO: Uncomment when gc.rs is implemented
-// pub use gc::{GcHeap, GcObject};
+pub use gc::{GcHeap, GcObject, GcPtr, GcStats, FunctionObject, ClosureObject};
 pub use error::{Error, Result};
 
 /// Version information
