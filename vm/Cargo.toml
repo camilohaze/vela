@@ -36,11 +36,6 @@ debug_execution = []
 gc_debug = []
 performance = ["debug_execution"]
 
-# TODO: Uncomment when benchmark files are implemented
-# [[bench]]
-# name = "vm_bench"
-# harness = false
-#
-# [[bench]]
-# name = "gc_bench"
-# harness = false
+[[bench]]
+name = "sprint10_benchmarks"
+harness = false
