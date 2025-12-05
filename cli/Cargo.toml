@@ -20,7 +20,7 @@ thiserror.workspace = true
 serde.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
-vela-compiler = { path = "../compiler" }
+# vela-compiler = { path = "../compiler" }  # TODO: Re-enable when compiler API stabilizes
 vela-vm = { path = "../vm" }
 
 [dev-dependencies]

@@ -35,15 +35,23 @@ enum Commands {
         opt_level: OptLevel,
     },
 
-    /// Run Vela programs
+    /// Run Vela bytecode (.velac) files
     Run {
-        /// Source file to run
+        /// Bytecode file to execute (.velac format)
         #[arg(value_name = "FILE")]
         file: PathBuf,
 
         /// Command-line arguments to pass to the program
         #[arg(last = true)]
         args: Vec<String>,
+        
+        /// Show VM execution trace (debug)
+        #[arg(long)]
+        trace: bool,
+        
+        /// Enable GC statistics
+        #[arg(long)]
+        gc_stats: bool,
     },
 
     /// Check syntax without compiling
@@ -99,8 +107,8 @@ fn main() -> Result<()> {
         Commands::Build { input, output, opt_level } => {
             handle_build(input, output, opt_level)
         }
-        Commands::Run { file, args } => {
-            handle_run(file, args)
+        Commands::Run { file, args, trace, gc_stats } => {
+            handle_run(file, args, trace, gc_stats)
         }
         Commands::Check { files } => {
             handle_check(files)
@@ -123,9 +131,78 @@ fn handle_build(_input: Vec<PathBuf>, _output: Option<PathBuf>, _opt_level: OptL
     Ok(())
 }
 
-fn handle_run(_file: PathBuf, _args: Vec<String>) -> Result<()> {
-    println!("Running Vela program...");
-    // TODO: Implement run command
+fn handle_run(file: PathBuf, args: Vec<String>, trace: bool, gc_stats: bool) -> Result<()> {
+    use vela_vm::{Bytecode, VirtualMachine};
+    use std::fs;
+    use std::time::Instant;
+    
+    // Verify file exists and has .velac extension
+    if !file.exists() {
+        anyhow::bail!("File not found: {}", file.display());
+    }
+    
+    let ext = file.extension()
+        .and_then(|s| s.to_str())
+        .unwrap_or("");
+    
+    if ext != "velac" {
+        anyhow::bail!(
+            "Expected .velac bytecode file, got .{}\nHint: Use 'vela build' to compile source files first",
+            ext
+        );
+    }
+    
+    // Load bytecode from file
+    println!("Loading bytecode from {}...", file.display());
+    let bytecode_bytes = fs::read(&file)
+        .with_context(|| format!("Failed to read bytecode file: {}", file.display()))?;
+    
+    let bytecode = Bytecode::deserialize(&bytecode_bytes)
+        .with_context(|| "Failed to deserialize bytecode (corrupted file?)")?;
+    
+    if trace {
+        println!("\n=== Bytecode Disassembly ===");
+        bytecode.disassemble();
+        println!("============================\n");
+    }
+    
+    // Create VM and execute
+    let mut vm = VirtualMachine::new();
+    
+    if trace {
+        println!("=== VM Execution Trace ===");
+    }
+    
+    let start = Instant::now();
+    let result = vm.execute(&bytecode)
+        .with_context(|| "VM execution failed")?;
+    let elapsed = start.elapsed();
+    
+    if trace {
+        println!("==========================\n");
+    }
+    
+    // Print result
+    println!("Result: {}", result);
+    println!("Execution time: {:.3}ms", elapsed.as_secs_f64() * 1000.0);
+    
+    // Show GC stats if requested
+    if gc_stats {
+        let stats = vm.gc_stats();
+        println!("\n=== GC Statistics ===");
+        println!("Objects allocated: {}", stats.objects_allocated);
+        println!("Objects freed: {}", stats.objects_freed);
+        println!("Collections triggered: {}", stats.collections);
+        println!("Bytes allocated: {}", stats.bytes_allocated);
+        println!("Bytes freed: {}", stats.bytes_freed);
+        println!("=====================");
+    }
+    
+    // Pass args to program (for future use)
+    if !args.is_empty() {
+        println!("\nNote: Program arguments not yet supported: {:?}", args);
+    }
+    
     Ok(())
 }
 

@@ -55,6 +55,16 @@ use crate::error::{Error, Result};
 use std::collections::HashMap;
 use std::rc::Rc;
 
+/// GC statistics for monitoring
+#[derive(Debug, Clone, Default)]
+pub struct GCStats {
+    pub objects_allocated: usize,
+    pub objects_freed: usize,
+    pub collections: usize,
+    pub bytes_allocated: usize,
+    pub bytes_freed: usize,
+}
+
 /// Call frame for function execution
 #[derive(Debug, Clone)]
 pub struct CallFrame {
@@ -424,7 +434,23 @@ impl VirtualMachine {
                     return Err(Error::type_error("number", "unknown"));
                 }
             }
-            Mod => self.binary_op(|a, b| a % b)?,
+            Mod => {
+                let b = self.pop()?;
+                let a = self.pop()?;
+                if let (Some(a_int), Some(b_int)) = (a.as_int(), b.as_int()) {
+                    if b_int == 0 {
+                        return Err(Error::DivisionByZero);
+                    }
+                    self.push(Value::int(a_int % b_int));
+                } else if let (Some(a_float), Some(b_float)) = (a.as_float(), b.as_float()) {
+                    if b_float == 0.0 {
+                        return Err(Error::DivisionByZero);
+                    }
+                    self.push(Value::float(a_float % b_float));
+                } else {
+                    return Err(Error::type_error("number", "unknown"));
+                }
+            }
             Pow => {
                 let b = self.pop()?;
                 let a = self.pop()?;
@@ -661,6 +687,19 @@ impl VirtualMachine {
     /// Get current frame mutably
     fn current_frame_mut(&mut self) -> Result<&mut CallFrame> {
         self.frames.last_mut().ok_or(Error::CallStackOverflow)
+    }
+    
+    /// Get GC statistics
+    pub fn gc_stats(&self) -> GCStats {
+        // TODO: Integrate with actual GC when added
+        // For now return stub data
+        GCStats {
+            objects_allocated: 0,
+            objects_freed: 0,
+            collections: 0,
+            bytes_allocated: 0,
+            bytes_freed: 0,
+        }
     }
 }
 

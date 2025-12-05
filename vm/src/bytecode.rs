@@ -346,6 +346,29 @@ impl Bytecode {
         self.code_objects.is_empty()
     }
 
+    /// Get current bytecode position in the last code object
+    pub fn current_position(&self) -> u16 {
+        self.code_objects
+            .last()
+            .map(|code| code.bytecode.len() as u16)
+            .unwrap_or(0)
+    }
+
+    /// Patch a jump instruction at the given position
+    /// Jump instructions use i32 offset encoded as 4 bytes (little-endian)
+    pub fn patch_jump(&mut self, position: usize, target: u16) {
+        if let Some(code) = self.code_objects.last_mut() {
+            if position + 4 < code.bytecode.len() {
+                let target_i32 = target as i32;
+                let bytes = target_i32.to_le_bytes();
+                code.bytecode[position + 1] = bytes[0];
+                code.bytecode[position + 2] = bytes[1];
+                code.bytecode[position + 3] = bytes[2];
+                code.bytecode[position + 4] = bytes[3];
+            }
+        }
+    }
+
     /// Serialize bytecode to bytes
     pub fn to_bytes(&self) -> Result<Vec<u8>, bincode::Error> {
         bincode::serialize(self)
@@ -354,6 +377,114 @@ impl Bytecode {
     /// Deserialize bytecode from bytes
     pub fn from_bytes(bytes: &[u8]) -> Result<Self, bincode::Error> {
         bincode::deserialize(bytes)
+    }
+    
+    /// Serialize bytecode to bytes (alias for CLI compatibility)
+    pub fn serialize(&self) -> Result<Vec<u8>, bincode::Error> {
+        self.to_bytes()
+    }
+    
+    /// Deserialize bytecode from bytes (alias for CLI compatibility)
+    pub fn deserialize(bytes: &[u8]) -> Result<Self, bincode::Error> {
+        Self::from_bytes(bytes)
+    }
+    
+    /// Disassemble bytecode for debugging (prints to stdout)
+    pub fn disassemble(&self) {
+        println!("=== Bytecode Disassembly ===");
+        println!("Magic: 0x{:08X} ({})", self.magic, 
+            String::from_utf8_lossy(&self.magic.to_be_bytes()));
+        println!("Version: {}.{}.{}", self.version.0, self.version.1, self.version.2);
+        println!("Timestamp: {}", self.timestamp);
+        println!();
+        
+        // Print constants
+        if !self.constants.is_empty() {
+            println!("Constants ({}):", self.constants.len());
+            for (i, c) in self.constants.iter().enumerate() {
+                println!("  [{}] {:?}", i, c);
+            }
+            println!();
+        }
+        
+        // Print strings
+        if !self.strings.is_empty() {
+            println!("Strings ({}):", self.strings.len());
+            for (i, s) in self.strings.iter().enumerate() {
+                println!("  [{}] {:?}", i, s);
+            }
+            println!();
+        }
+        
+        // Print code objects
+        println!("Code Objects ({}):", self.code_objects.len());
+        for (i, code) in self.code_objects.iter().enumerate() {
+            println!("\nCode Object [{}]:", i);
+            println!("  Arguments: {}", code.arg_count);
+            println!("  Locals: {}", code.local_count);
+            println!("  Bytecode ({} bytes):", code.bytecode.len());
+            
+            // Simple bytecode disassembly
+            let mut offset = 0;
+            while offset < code.bytecode.len() {
+                print!("    {:04}: ", offset);
+                
+                let opcode = code.bytecode[offset];
+                offset += 1;
+                
+                // Decode instruction (simplified)
+                match opcode {
+                    0x00 => {
+                        if offset + 1 < code.bytecode.len() {
+                            let idx = u16::from_le_bytes([
+                                code.bytecode[offset],
+                                code.bytecode[offset + 1],
+                            ]);
+                            println!("LOAD_CONST {}", idx);
+                            offset += 2;
+                        }
+                    }
+                    0x01 => {
+                        if offset + 1 < code.bytecode.len() {
+                            let idx = u16::from_le_bytes([
+                                code.bytecode[offset],
+                                code.bytecode[offset + 1],
+                            ]);
+                            println!("LOAD_LOCAL {}", idx);
+                            offset += 2;
+                        }
+                    }
+                    0x10 => println!("ADD"),
+                    0x11 => println!("SUB"),
+                    0x12 => println!("MUL"),
+                    0x13 => println!("DIV"),
+                    0x20 => println!("EQ"),
+                    0x21 => println!("NE"),
+                    0x22 => println!("LT"),
+                    0x40 => {
+                        if offset + 1 < code.bytecode.len() {
+                            let target = u16::from_le_bytes([
+                                code.bytecode[offset],
+                                code.bytecode[offset + 1],
+                            ]);
+                            println!("JUMP {}", target);
+                            offset += 2;
+                        }
+                    }
+                    0x50 => {
+                        if offset < code.bytecode.len() {
+                            let argc = code.bytecode[offset];
+                            println!("CALL {}", argc);
+                            offset += 1;
+                        }
+                    }
+                    0x51 => println!("RETURN"),
+                    0xFF => println!("HALT"),
+                    _ => println!("UNKNOWN(0x{:02X})", opcode),
+                }
+            }
+        }
+        println!("\n============================");
     }
 }
 

@@ -1,0 +1,11 @@
+[package]
+name = "vela-examples"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "create_bytecode"
+path = "create_bytecode.rs"
+
+[dependencies]
+vela-vm = { path = "../vm" }
