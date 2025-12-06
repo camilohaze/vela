@@ -1,0 +1,478 @@
+"""
+TASK-058: Integrar signals con widgets
+
+Implementación de: VELA-583
+Historia: Sprint 21 - Sistema Reactivo Integrado en UI
+Fecha: 2025-12-06
+
+Descripción:
+Sistema que integra señales reactivas (signals/computed) con el ciclo de vida
+de widgets. Provee tracking automático de dependencias reactivas en build methods
+para actualizar UI cuando los valores reactivos cambian.
+
+Inspiración:
+- Solid.js: Fine-grained reactivity con automatic tracking
+- Vue 3: Reactivity system con effect tracking
+- Svelte: Compiler-based reactivity
+- React: useEffect y dependency tracking
+"""
+
+import 'system:reactive' show { Signal, Computed, Effect, EffectScope }
+import 'system:ui' show { Widget, StatefulWidget, BuildContext }
+
+
+# ============================================================================
+# REACTIVE WIDGET MIXIN
+# ============================================================================
+
+"""
+Mixin que agrega capacidades reactivas a widgets.
+Auto-tracking de signals en build() para re-renders automáticos.
+"""
+mixin ReactiveWidget {
+  # Effect scope para tracking de dependencias
+  _effectScope: Option<EffectScope> = None
+  
+  # Lista de signals suscritos (para cleanup)
+  _subscriptions: List<() -> void> = []
+  
+  # Flag para evitar re-renders redundantes
+  _isRebuilding: Bool = false
+  
+  
+  # --------------------------------------------------------------------------
+  # AUTO-TRACKING EN BUILD
+  # --------------------------------------------------------------------------
+  
+  """
+  Wrapper que ejecuta build() con tracking automático de signals.
+  Captura signals accedidos durante build() y suscribe a cambios.
+  """
+  fn buildWithTracking(context: BuildContext) -> Widget {
+    # Limpiar suscripciones previas
+    this.disposeSubscriptions()
+    
+    # Crear nuevo effect scope para este build
+    scope = EffectScope.create()
+    this._effectScope = Some(scope)
+    
+    result: Option<Widget> = None
+    
+    # Ejecutar build() dentro del scope (captura signals)
+    scope.run(() => {
+      # Crear effect que ejecuta build y se suscribe a dependencias
+      effect(() => {
+        if !this._isRebuilding {
+          this._isRebuilding = true
+          result = Some(this.build(context))
+          this._isRebuilding = false
+        }
+      })
+    })
+    
+    return result.unwrapOr(this.build(context))
+  }
+  
+  
+  """
+  Hook de ciclo de vida: llamar cuando el widget se monta.
+  Inicializa el sistema de tracking reactivo.
+  """
+  fn mountReactive() -> void {
+    # Subclases pueden override para setup adicional
+  }
+  
+  
+  """
+  Hook de ciclo de vida: llamar cuando el widget se desmonta.
+  Limpia todas las suscripciones reactivas.
+  """
+  fn unmountReactive() -> void {
+    this.disposeSubscriptions()
+    
+    match this._effectScope {
+      Some(scope) => {
+        scope.dispose()
+        this._effectScope = None
+      }
+      None => {}
+    }
+  }
+  
+  
+  # --------------------------------------------------------------------------
+  # SUBSCRIPTION MANAGEMENT
+  # --------------------------------------------------------------------------
+  
+  """
+  Suscribirse manualmente a un signal (alternativa a auto-tracking).
+  """
+  fn watchSignal<T>(signal: Signal<T>, callback: (T) -> void) -> void {
+    unsubscribe = signal.subscribe(callback)
+    this._subscriptions.push(unsubscribe)
+  }
+  
+  
+  """
+  Suscribirse a un computed (auto-actualiza cuando dependencias cambian).
+  """
+  fn watchComputed<T>(computed: Computed<T>, callback: (T) -> void) -> void {
+    unsubscribe = computed.subscribe(callback)
+    this._subscriptions.push(unsubscribe)
+  }
+  
+  
+  """
+  Crear un effect que se ejecuta cuando dependencias cambian.
+  Effect se limpia automáticamente al desmontar widget.
+  """
+  fn createEffect(fn: () -> void) -> void {
+    match this._effectScope {
+      Some(scope) => {
+        scope.run(() => {
+          dispose = effect(fn)
+          this._subscriptions.push(dispose)
+        })
+      }
+      None => {
+        dispose = effect(fn)
+        this._subscriptions.push(dispose)
+      }
+    }
+  }
+  
+  
+  """
+  Limpiar todas las suscripciones activas.
+  """
+  fn disposeSubscriptions() -> void {
+    this._subscriptions.forEach(unsubscribe => unsubscribe())
+    this._subscriptions = []
+  }
+}
+
+
+# ============================================================================
+# REACTIVE STATEFUL WIDGET
+# ============================================================================
+
+"""
+Versión reactiva de StatefulWidget.
+Build method tiene auto-tracking de signals habilitado por defecto.
+"""
+abstract class ReactiveStatefulWidget extends StatefulWidget with ReactiveWidget {
+  
+  override fn mount() -> void {
+    super.mount()
+    this.mountReactive()
+  }
+  
+  
+  override fn destroy() -> void {
+    this.unmountReactive()
+    super.destroy()
+  }
+  
+  
+  """
+  Build method con auto-tracking habilitado.
+  Override en subclases para definir UI.
+  """
+  abstract fn build(context: BuildContext) -> Widget
+  
+  
+  """
+  Método público para re-render manual (si es necesario).
+  """
+  fn rebuild() -> void {
+    this.setState(() => {})
+  }
+}
+
+
+# ============================================================================
+# REACTIVE VALUE WRAPPER
+# ============================================================================
+
+"""
+Wrapper para valores reactivos que se integra con state management.
+Combina Signal con setState para triggering de re-renders.
+"""
+class ReactiveValue<T> {
+  _signal: Signal<T>
+  _widget: Option<StatefulWidget> = None
+  
+  
+  constructor(initialValue: T) {
+    this._signal = Signal(initialValue)
+  }
+  
+  
+  """
+  Vincular este reactive value con un widget.
+  Cuando el valor cambia, el widget se actualiza.
+  """
+  fn bindToWidget(widget: StatefulWidget) -> void {
+    this._widget = Some(widget)
+    
+    # Suscribirse a cambios del signal
+    this._signal.subscribe((newValue: T) => {
+      match this._widget {
+        Some(w) => w.setState(() => {})
+        None => {}
+      }
+    })
+  }
+  
+  
+  # Getter/Setter con integración reactiva
+  computed value: T {
+    return this._signal.value
+  }
+  
+  
+  fn setValue(newValue: T) -> void {
+    this._signal.value = newValue
+  }
+  
+  
+  # Operaciones comunes
+  fn update(updater: (T) -> T) -> void {
+    this.setValue(updater(this.value))
+  }
+  
+  
+  fn subscribe(callback: (T) -> void) -> () -> void {
+    return this._signal.subscribe(callback)
+  }
+}
+
+
+# ============================================================================
+# REACTIVE STATE HOOK
+# ============================================================================
+
+"""
+Hook para crear estado reactivo en widgets funcionales.
+Inspirado en React hooks y Vue composables.
+"""
+fn useReactiveState<T>(initialValue: T, widget: StatefulWidget) -> ReactiveValue<T> {
+  reactiveVal = ReactiveValue(initialValue)
+  reactiveVal.bindToWidget(widget)
+  return reactiveVal
+}
+
+
+# ============================================================================
+# REACTIVE COMPUTED HOOK
+# ============================================================================
+
+"""
+Hook para crear valores computed que dependen de otros signals.
+Auto-tracking de dependencias.
+"""
+fn useComputed<T>(computeFn: () -> T) -> Computed<T> {
+  return Computed(computeFn)
+}
+
+
+# ============================================================================
+# REACTIVE EFFECT HOOK
+# ============================================================================
+
+"""
+Hook para side effects reactivos.
+Se ejecuta cuando dependencias cambian.
+"""
+fn useEffect(effectFn: () -> void, widget: ReactiveStatefulWidget) -> void {
+  widget.createEffect(effectFn)
+}
+
+
+# ============================================================================
+# REACTIVE WATCH HOOK
+# ============================================================================
+
+"""
+Hook para observar cambios en signals específicos.
+"""
+fn useWatch<T>(
+  signal: Signal<T>,
+  callback: (newValue: T, oldValue: Option<T>) -> void,
+  widget: ReactiveStatefulWidget
+) -> void {
+  previousValue: Option<T> = None
+  
+  widget.watchSignal(signal, (newValue: T) => {
+    callback(newValue, previousValue)
+    previousValue = Some(newValue)
+  })
+}
+
+
+# ============================================================================
+# EJEMPLOS DE USO
+# ============================================================================
+
+"""
+Ejemplo 1: Counter con ReactiveStatefulWidget
+"""
+class CounterWidget extends ReactiveStatefulWidget {
+  state count: Signal<Number> = Signal(0)
+  
+  
+  override fn build(context: BuildContext) -> Widget {
+    # Auto-tracking: cuando count cambia, build() se re-ejecuta
+    return Container(
+      child: Column(
+        children: [
+          Text("Count: ${this.count.value}"),
+          Button(
+            text: "Increment",
+            onPressed: () => {
+              this.count.value = this.count.value + 1
+            }
+          )
+        ]
+      )
+    )
+  }
+}
+
+
+"""
+Ejemplo 2: Computed values
+"""
+class ShoppingCartWidget extends ReactiveStatefulWidget {
+  state items: Signal<List<CartItem>> = Signal([])
+  
+  # Computed value (auto-actualiza cuando items cambia)
+  computed total: Computed<Float> {
+    return Computed(() => {
+      return this.items.value
+        .map(item => item.price * item.quantity)
+        .reduce((a, b) => a + b, 0.0)
+    })
+  }
+  
+  
+  override fn build(context: BuildContext) -> Widget {
+    return Container(
+      child: Column(
+        children: [
+          Text("Items: ${this.items.value.length}"),
+          Text("Total: $${this.total.value}"),  # Auto-tracking del computed
+          Button(
+            text: "Add Item",
+            onPressed: () => this.addItem()
+          )
+        ]
+      )
+    )
+  }
+  
+  
+  fn addItem() -> void {
+    newItem = CartItem(name: "Product", price: 19.99, quantity: 1)
+    this.items.value = [...this.items.value, newItem]
+  }
+}
+
+
+"""
+Ejemplo 3: Effects reactivos
+"""
+class UserProfileWidget extends ReactiveStatefulWidget {
+  state userId: Signal<Number> = Signal(0)
+  state userData: Signal<Option<User>> = Signal(None)
+  
+  
+  override fn mount() -> void {
+    super.mount()
+    
+    # Effect: fetch user data cuando userId cambia
+    this.createEffect(() => {
+      id = this.userId.value
+      
+      # Llamada async
+      fetchUser(id).then(user => {
+        this.userData.value = Some(user)
+      })
+    })
+  }
+  
+  
+  override fn build(context: BuildContext) -> Widget {
+    match this.userData.value {
+      Some(user) => {
+        return Text("User: ${user.name}")
+      }
+      None => {
+        return Text("Loading...")
+      }
+    }
+  }
+}
+
+
+"""
+Ejemplo 4: Usando hooks
+"""
+class TodoListWidget extends ReactiveStatefulWidget {
+  state todos: ReactiveValue<List<String>>
+  
+  
+  constructor() {
+    # Usar hook para crear reactive state
+    this.todos = useReactiveState([], this)
+    
+    # Watch: log cuando todos cambian
+    useWatch(this.todos._signal, (newTodos, oldTodos) => {
+      print("Todos changed: ${oldTodos} -> ${newTodos}")
+    }, this)
+  }
+  
+  
+  override fn build(context: BuildContext) -> Widget {
+    return Container(
+      child: Column(
+        children: this.todos.value.map(todo => Text(todo)).toList()
+      )
+    )
+  }
+}
+
+
+# ============================================================================
+# HELPER: BATCH UPDATES
+# ============================================================================
+
+"""
+Agrupar múltiples updates de signals en un solo re-render.
+Optimización de performance.
+"""
+fn batchUpdates(updates: () -> void) -> void {
+  # Deshabilitar tracking temporalmente
+  previousTracking = EffectScope.trackingEnabled
+  EffectScope.trackingEnabled = false
+  
+  # Ejecutar todos los updates
+  updates()
+  
+  # Re-habilitar tracking y triggear un solo re-render
+  EffectScope.trackingEnabled = previousTracking
+  EffectScope.triggerEffects()
+}
+
+
+"""
+Ejemplo de batch updates:
+"""
+fn updateMultipleValues(widget: ReactiveStatefulWidget) -> void {
+  batchUpdates(() => {
+    widget.count.value = 10
+    widget.name.value = "John"
+    widget.isActive.value = true
+    # Solo triggea UN re-render al final
+  })
+}

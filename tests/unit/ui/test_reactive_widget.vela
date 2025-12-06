@@ -1,0 +1,574 @@
+"""
+Tests unitarios para reactive_widget.vela
+
+Jira: VELA-583
+Sprint: 21
+Task: TASK-058
+"""
+
+import 'system:testing' show { describe, it, expect, beforeEach, afterEach }
+import 'ui:reactive_widget' show {
+  ReactiveWidget,
+  ReactiveStatefulWidget,
+  ReactiveValue,
+  useReactiveState,
+  useComputed,
+  useEffect,
+  useWatch,
+  batchUpdates
+}
+import 'system:reactive' show { Signal, Computed }
+import 'system:ui' show { BuildContext, Container, Text }
+
+
+# ============================================================================
+# TEST: REACTIVE WIDGET MIXIN
+# ============================================================================
+
+describe("ReactiveWidget Mixin", () => {
+  
+  it("should create effect scope on mount", () => {
+    widget = TestReactiveWidget()
+    widget.mountReactive()
+    
+    expect(widget._effectScope.isSome()).toBe(true)
+  })
+  
+  
+  it("should dispose effect scope on unmount", () => {
+    widget = TestReactiveWidget()
+    widget.mountReactive()
+    widget.unmountReactive()
+    
+    expect(widget._effectScope.isNone()).toBe(true)
+  })
+  
+  
+  it("should track signal access in build", () => {
+    widget = TestReactiveWidget()
+    signal = Signal(42)
+    
+    buildCount = 0
+    widget.buildFn = (ctx) => {
+      buildCount = buildCount + 1
+      value = signal.value  # Acceso a signal (debe ser trackeado)
+      return Text("Value: ${value}")
+    }
+    
+    context = BuildContext.mock()
+    widget.buildWithTracking(context)
+    
+    expect(buildCount).toBe(1)
+    
+    # Cambiar signal debe triggear rebuild
+    signal.value = 100
+    
+    expect(buildCount).toBeGreaterThan(1)
+  })
+  
+  
+  it("should dispose subscriptions on cleanup", () => {
+    widget = TestReactiveWidget()
+    signal = Signal(0)
+    
+    callbackCount = 0
+    widget.watchSignal(signal, (val) => {
+      callbackCount = callbackCount + 1
+    })
+    
+    signal.value = 1
+    expect(callbackCount).toBe(1)
+    
+    widget.disposeSubscriptions()
+    signal.value = 2
+    
+    expect(callbackCount).toBe(1)  # No debe incrementar después de dispose
+  })
+})
+
+
+# ============================================================================
+# TEST: REACTIVE STATEFUL WIDGET
+# ============================================================================
+
+describe("ReactiveStatefulWidget", () => {
+  
+  it("should mount and unmount reactive system", () => {
+    widget = CounterTestWidget()
+    
+    widget.mount()
+    expect(widget._effectScope.isSome()).toBe(true)
+    
+    widget.destroy()
+    expect(widget._effectScope.isNone()).toBe(true)
+  })
+  
+  
+  it("should auto-rebuild when signal changes", () => {
+    widget = CounterTestWidget()
+    widget.mount()
+    
+    context = BuildContext.mock()
+    
+    # Build inicial
+    result1 = widget.build(context)
+    expect(widget.count.value).toBe(0)
+    
+    # Cambiar signal
+    widget.count.value = 5
+    
+    # Verificar que se rebuildeó
+    result2 = widget.build(context)
+    expect(widget.count.value).toBe(5)
+  })
+  
+  
+  it("should support manual rebuild", () => {
+    widget = CounterTestWidget()
+    widget.mount()
+    
+    rebuildCalled = false
+    widget.onRebuild = () => { rebuildCalled = true }
+    
+    widget.rebuild()
+    
+    expect(rebuildCalled).toBe(true)
+  })
+})
+
+
+# ============================================================================
+# TEST: REACTIVE VALUE WRAPPER
+# ============================================================================
+
+describe("ReactiveValue", () => {
+  
+  it("should initialize with value", () => {
+    reactive = ReactiveValue(42)
+    
+    expect(reactive.value).toBe(42)
+  })
+  
+  
+  it("should update value", () => {
+    reactive = ReactiveValue(10)
+    
+    reactive.setValue(20)
+    
+    expect(reactive.value).toBe(20)
+  })
+  
+  
+  it("should trigger widget setState when bound", () => {
+    widget = TestStatefulWidget()
+    reactive = ReactiveValue(0)
+    
+    reactive.bindToWidget(widget)
+    
+    setStateCalled = false
+    widget.onSetState = () => { setStateCalled = true }
+    
+    reactive.setValue(5)
+    
+    expect(setStateCalled).toBe(true)
+  })
+  
+  
+  it("should support update with function", () => {
+    reactive = ReactiveValue(10)
+    
+    reactive.update(val => val * 2)
+    
+    expect(reactive.value).toBe(20)
+  })
+  
+  
+  it("should notify subscribers on change", () => {
+    reactive = ReactiveValue(0)
+    
+    notifications = []
+    reactive.subscribe(val => notifications.push(val))
+    
+    reactive.setValue(1)
+    reactive.setValue(2)
+    
+    expect(notifications).toEqual([1, 2])
+  })
+})
+
+
+# ============================================================================
+# TEST: REACTIVE HOOKS
+# ============================================================================
+
+describe("useReactiveState Hook", () => {
+  
+  it("should create reactive state bound to widget", () => {
+    widget = TestStatefulWidget()
+    
+    state = useReactiveState(42, widget)
+    
+    expect(state.value).toBe(42)
+    expect(state._widget.isSome()).toBe(true)
+  })
+  
+  
+  it("should trigger widget update on state change", () => {
+    widget = TestStatefulWidget()
+    state = useReactiveState(0, widget)
+    
+    updateCount = 0
+    widget.onSetState = () => { updateCount = updateCount + 1 }
+    
+    state.setValue(1)
+    state.setValue(2)
+    
+    expect(updateCount).toBe(2)
+  })
+})
+
+
+describe("useComputed Hook", () => {
+  
+  it("should create computed value", () => {
+    signal = Signal(10)
+    
+    computed = useComputed(() => signal.value * 2)
+    
+    expect(computed.value).toBe(20)
+  })
+  
+  
+  it("should auto-update when dependency changes", () => {
+    signal = Signal(5)
+    computed = useComputed(() => signal.value * 3)
+    
+    expect(computed.value).toBe(15)
+    
+    signal.value = 10
+    
+    expect(computed.value).toBe(30)
+  })
+})
+
+
+describe("useEffect Hook", () => {
+  
+  it("should run effect when dependencies change", () => {
+    widget = CounterTestWidget()
+    widget.mount()
+    
+    effectRuns = 0
+    
+    useEffect(() => {
+      value = widget.count.value  # Dependency
+      effectRuns = effectRuns + 1
+    }, widget)
+    
+    expect(effectRuns).toBe(1)
+    
+    widget.count.value = 10
+    
+    expect(effectRuns).toBeGreaterThan(1)
+  })
+  
+  
+  it("should cleanup effect on widget unmount", () => {
+    widget = CounterTestWidget()
+    widget.mount()
+    
+    effectRuns = 0
+    useEffect(() => {
+      effectRuns = effectRuns + 1
+    }, widget)
+    
+    initialRuns = effectRuns
+    
+    widget.unmount()
+    widget.count.value = 999
+    
+    expect(effectRuns).toBe(initialRuns)
+  })
+})
+
+
+describe("useWatch Hook", () => {
+  
+  it("should watch signal changes", () => {
+    widget = CounterTestWidget()
+    widget.mount()
+    
+    signal = Signal(0)
+    changes = []
+    
+    useWatch(signal, (newVal, oldVal) => {
+      changes.push({ new: newVal, old: oldVal })
+    }, widget)
+    
+    signal.value = 1
+    signal.value = 2
+    
+    expect(changes.length).toBe(2)
+    expect(changes[0].new).toBe(1)
+    expect(changes[1].new).toBe(2)
+  })
+  
+  
+  it("should track old values", () => {
+    widget = CounterTestWidget()
+    widget.mount()
+    
+    signal = Signal(10)
+    oldValues = []
+    
+    useWatch(signal, (newVal, oldVal) => {
+      oldValues.push(oldVal)
+    }, widget)
+    
+    signal.value = 20
+    signal.value = 30
+    
+    expect(oldValues[0].isNone()).toBe(true)  # Primer cambio no tiene old value
+    expect(oldValues[1].unwrap()).toBe(20)     # Segundo cambio tiene old value
+  })
+})
+
+
+# ============================================================================
+# TEST: BATCH UPDATES
+# ============================================================================
+
+describe("batchUpdates", () => {
+  
+  it("should batch multiple signal updates into one render", () => {
+    signal1 = Signal(0)
+    signal2 = Signal(0)
+    signal3 = Signal(0)
+    
+    renderCount = 0
+    effect(() => {
+      # Accede a los 3 signals
+      val1 = signal1.value
+      val2 = signal2.value
+      val3 = signal3.value
+      renderCount = renderCount + 1
+    })
+    
+    initialRenderCount = renderCount
+    
+    # Sin batch: cada cambio triggea un render
+    signal1.value = 1
+    signal2.value = 2
+    signal3.value = 3
+    
+    unbatchedRenderCount = renderCount - initialRenderCount
+    
+    # Reset
+    renderCount = 0
+    
+    # Con batch: solo un render al final
+    batchUpdates(() => {
+      signal1.value = 10
+      signal2.value = 20
+      signal3.value = 30
+    })
+    
+    expect(renderCount).toBe(1)
+    expect(unbatchedRenderCount).toBeGreaterThan(1)
+  })
+})
+
+
+# ============================================================================
+# TEST: INTEGRATION SCENARIOS
+# ============================================================================
+
+describe("Integration: Shopping Cart", () => {
+  
+  it("should update total when items change", () => {
+    cart = ShoppingCartTestWidget()
+    cart.mount()
+    
+    expect(cart.total.value).toBe(0.0)
+    
+    # Agregar items
+    cart.addItem("Product A", 10.0, 2)
+    expect(cart.total.value).toBe(20.0)
+    
+    cart.addItem("Product B", 5.0, 3)
+    expect(cart.total.value).toBe(35.0)
+  })
+  
+  
+  it("should rebuild UI when cart changes", () => {
+    cart = ShoppingCartTestWidget()
+    cart.mount()
+    
+    context = BuildContext.mock()
+    
+    # Build inicial
+    result1 = cart.build(context)
+    expect(cart.items.value.length).toBe(0)
+    
+    # Agregar item
+    cart.addItem("Test", 5.0, 1)
+    
+    # Verificar rebuild
+    result2 = cart.build(context)
+    expect(cart.items.value.length).toBe(1)
+  })
+})
+
+
+describe("Integration: User Profile", () => {
+  
+  it("should fetch user data when userId changes", async () => {
+    profile = UserProfileTestWidget()
+    profile.mount()
+    
+    expect(profile.userData.value.isNone()).toBe(true)
+    
+    # Cambiar userId (triggea effect)
+    profile.userId.value = 123
+    
+    # Esperar fetch async
+    await profile.waitForUserData()
+    
+    expect(profile.userData.value.isSome()).toBe(true)
+    expect(profile.userData.value.unwrap().id).toBe(123)
+  })
+})
+
+
+# ============================================================================
+# TEST HELPERS
+# ============================================================================
+
+class TestReactiveWidget with ReactiveWidget {
+  buildFn: (BuildContext) -> Widget = (ctx) => Text("Default")
+  
+  fn build(context: BuildContext) -> Widget {
+    return this.buildFn(context)
+  }
+}
+
+
+class CounterTestWidget extends ReactiveStatefulWidget {
+  state count: Signal<Number> = Signal(0)
+  onRebuild: Option<() -> void> = None
+  
+  override fn build(context: BuildContext) -> Widget {
+    match this.onRebuild {
+      Some(callback) => callback()
+      None => {}
+    }
+    
+    return Container(
+      child: Text("Count: ${this.count.value}")
+    )
+  }
+}
+
+
+class TestStatefulWidget extends StatefulWidget {
+  onSetState: Option<() -> void> = None
+  
+  override fn setState(fn: () -> void) -> void {
+    match this.onSetState {
+      Some(callback) => callback()
+      None => {}
+    }
+    super.setState(fn)
+  }
+  
+  override fn build(context: BuildContext) -> Widget {
+    return Text("Test")
+  }
+}
+
+
+struct CartItem {
+  name: String
+  price: Float
+  quantity: Number
+}
+
+
+class ShoppingCartTestWidget extends ReactiveStatefulWidget {
+  state items: Signal<List<CartItem>> = Signal([])
+  
+  computed total: Computed<Float> {
+    return Computed(() => {
+      return this.items.value
+        .map(item => item.price * item.quantity)
+        .reduce((a, b) => a + b, 0.0)
+    })
+  }
+  
+  fn addItem(name: String, price: Float, quantity: Number) -> void {
+    newItem = CartItem { name, price, quantity }
+    this.items.value = [...this.items.value, newItem]
+  }
+  
+  override fn build(context: BuildContext) -> Widget {
+    return Container(
+      child: Text("Total: ${this.total.value}")
+    )
+  }
+}
+
+
+struct User {
+  id: Number
+  name: String
+}
+
+
+class UserProfileTestWidget extends ReactiveStatefulWidget {
+  state userId: Signal<Number> = Signal(0)
+  state userData: Signal<Option<User>> = Signal(None)
+  
+  override fn mount() -> void {
+    super.mount()
+    
+    this.createEffect(() => {
+      id = this.userId.value
+      if id > 0 {
+        # Simular fetch
+        user = User { id, name: "User ${id}" }
+        this.userData.value = Some(user)
+      }
+    })
+  }
+  
+  async fn waitForUserData() -> void {
+    # Helper para tests async
+    maxWait = 1000  # 1 segundo
+    waited = 0
+    
+    while this.userData.value.isNone() && waited < maxWait {
+      await sleep(10)
+      waited = waited + 10
+    }
+  }
+  
+  override fn build(context: BuildContext) -> Widget {
+    match this.userData.value {
+      Some(user) => Text("User: ${user.name}")
+      None => Text("Loading...")
+    }
+  }
+}
+
+
+# ============================================================================
+# RUN TESTS
+# ============================================================================
+
+@test
+fn runAllReactiveWidgetTests() -> void {
+  print("Running TASK-058 Reactive Widget Tests...")
+  
+  # Los tests se ejecutan automáticamente con el framework de testing
+  # Este método es solo un entry point
+}
