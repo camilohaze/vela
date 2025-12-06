@@ -1,6 +1,7 @@
-# US-12: Sprint 20 - UI Framework
+# VELA-582: Sprint 20 - UI Framework
 
 ## 📋 Información General
+- **Historia:** VELA-582
 - **Epic:** EPIC-05 - UI Framework & Widgets System
 - **Sprint:** Sprint 20
 - **Estado:** Completada ✅
@@ -196,7 +197,7 @@ tests/unit/ui/
 └── display/
     └── test_display.vela (38 tests)
 
-docs/features/US-12-Sprint-20/
+docs/features/VELA-582/
 ├── README.md (este archivo)
 ├── TASK-053.md
 ├── TASK-054.md
@@ -321,6 +322,7 @@ class MyApp extends StatefulWidget {
 ---
 
 ## 🔗 Referencias
+- **Historia Jira**: [VELA-582](https://velalang.atlassian.net/browse/VELA-582)
 - **Roadmap CSV**: vela-roadmap-scrum.csv (Sprint 20)
 - **Epic**: EPIC-05 - UI Framework
 - **User Story**: US-12 - "Como desarrollador, quiero crear interfaces con widgets declarativos"
@@ -375,3 +377,16 @@ Con el UI Framework completo (Sprint 20), los próximos sprints pueden enfocarse
 - 5 subtasks completadas
 
 **Fecha de finalización**: 2025-01-20
+
+---
+
+## 📝 Notas de Política Git
+
+**Rama**: `feature/VELA-582-ui-framework`
+
+Siguiendo las políticas establecidas:
+- ✅ **UNA RAMA POR HISTORIA**: Todos los commits de TASK-053 a TASK-057 en `feature/VELA-582-ui-framework`
+- ✅ **UN COMMIT POR TAREA**: Cada Subtask tiene su commit atómico
+- ✅ **Carpeta de docs**: `docs/features/VELA-582/`
+
+Refs: VELA-582
