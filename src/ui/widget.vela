@@ -1,0 +1,709 @@
+"""
+Widget Base Class - Sistema fundamental de UI de Vela
+
+Este módulo define las clases base para el sistema de widgets:
+- Widget: Clase abstracta base
+- StatelessWidget: Widgets sin estado mutable
+- StatefulWidget: Widgets con estado mutable
+- Key: Sistema de identificación
+- BuildContext: Acceso al árbol de widgets
+
+Inspirado en: Flutter, React, SwiftUI
+
+Sprint: 20
+Task: TASK-054
+"""
+
+import 'system:reactive' show { Signal, Computed, Effect }
+
+# ============================================================================
+# KEY SYSTEM - Identificación única de widgets
+# ============================================================================
+
+"""
+Key abstracta para identificación de widgets.
+Usada por el reconciler para trackear identidad de widgets.
+"""
+abstract class Key {
+  """Comparar keys por valor"""
+  abstract fn equals(other: Key) -> Bool
+  
+  """Hash code para HashMap"""
+  abstract fn hashCode() -> Number
+}
+
+"""
+ValueKey: Key basada en valor primitivo (String, Number, Bool)
+Ejemplo: ValueKey("user-123"), ValueKey(42)
+"""
+class ValueKey<T> extends Key {
+  value: T
+  
+  constructor(value: T) {
+    this.value = value
+  }
+  
+  override fn equals(other: Key) -> Bool {
+    if other is ValueKey<T> {
+      return this.value == other.value
+    }
+    return false
+  }
+  
+  override fn hashCode() -> Number {
+    # Hash del valor interno
+    return hash(this.value)
+  }
+  
+  override fn toString() -> String {
+    return "ValueKey(${this.value})"
+  }
+}
+
+"""
+ObjectKey: Key basada en identidad de objeto.
+Usa referencia de objeto, no valor.
+"""
+class ObjectKey extends Key {
+  object: Any
+  
+  constructor(object: Any) {
+    this.object = object
+  }
+  
+  override fn equals(other: Key) -> Bool {
+    if other is ObjectKey {
+      return this.object === other.object  # Identidad, no igualdad
+    }
+    return false
+  }
+  
+  override fn hashCode() -> Number {
+    return identityHashCode(this.object)
+  }
+  
+  override fn toString() -> String {
+    return "ObjectKey(${this.object})"
+  }
+}
+
+"""
+GlobalKey: Key única globalmente.
+Permite acceder al widget desde cualquier lugar del árbol.
+"""
+class GlobalKey extends Key {
+  private static nextId: Number = 0
+  id: Number
+  
+  constructor() {
+    this.id = GlobalKey.nextId
+    GlobalKey.nextId += 1
+  }
+  
+  override fn equals(other: Key) -> Bool {
+    if other is GlobalKey {
+      return this.id == other.id
+    }
+    return false
+  }
+  
+  override fn hashCode() -> Number {
+    return this.id
+  }
+  
+  override fn toString() -> String {
+    return "GlobalKey(${this.id})"
+  }
+}
+
+# ============================================================================
+# BUILD CONTEXT - Acceso al árbol de widgets y servicios
+# ============================================================================
+
+"""
+BuildContext provee acceso al árbol de widgets, theme, servicios y navegación.
+Pasado como parámetro a build().
+"""
+interface BuildContext {
+  """Obtener el theme actual"""
+  fn theme() -> Theme
+  
+  """Obtener servicio del DI container"""
+  fn service<T>(type: Type<T>) -> T
+  
+  """Encontrar widget ancestro por tipo"""
+  fn findAncestorWidgetOfType<T>() -> Option<T>
+  
+  """Obtener el widget padre directo"""
+  fn parent() -> Option<Widget>
+  
+  """Obtener el tamaño disponible para layout"""
+  fn size() -> Size
+  
+  """Navegar a una ruta"""
+  fn navigate(route: String) -> void
+  
+  """Mostrar un dialog modal"""
+  fn showDialog(dialog: Widget) -> void
+  
+  """Mostrar un snackbar"""
+  fn showSnackbar(message: String) -> void
+}
+
+"""
+Implementación interna de BuildContext.
+Gestionado por el framework, no instanciar manualmente.
+"""
+class BuildContextImpl implements BuildContext {
+  private element: Element
+  private themeValue: Theme
+  private diContainer: DIContainer
+  private router: Router
+  
+  constructor(element: Element, theme: Theme, di: DIContainer, router: Router) {
+    this.element = element
+    this.themeValue = theme
+    this.diContainer = di
+    this.router = router
+  }
+  
+  override fn theme() -> Theme {
+    return this.themeValue
+  }
+  
+  override fn service<T>(type: Type<T>) -> T {
+    return this.diContainer.resolve<T>(type)
+  }
+  
+  override fn findAncestorWidgetOfType<T>() -> Option<T> {
+    current: Element? = this.element.parent
+    
+    while current != None {
+      if let Some(elem) = current {
+        if elem.widget is T {
+          return Some(elem.widget as T)
+        }
+        current = elem.parent
+      }
+    }
+    
+    return None
+  }
+  
+  override fn parent() -> Option<Widget> {
+    if let Some(parent) = this.element.parent {
+      return Some(parent.widget)
+    }
+    return None
+  }
+  
+  override fn size() -> Size {
+    return this.element.size
+  }
+  
+  override fn navigate(route: String) -> void {
+    this.router.push(route)
+  }
+  
+  override fn showDialog(dialog: Widget) -> void {
+    # Implementado por el renderer
+    this.element.showModal(dialog)
+  }
+  
+  override fn showSnackbar(message: String) -> void {
+    # Implementado por el renderer
+    this.element.showNotification(message)
+  }
+}
+
+# ============================================================================
+# WIDGET BASE CLASS - Clase abstracta para todos los widgets
+# ============================================================================
+
+"""
+Widget: Clase base abstracta para todos los widgets de UI.
+
+Un widget describe CÓMO debe verse la interfaz, no CÓMO construirla.
+Los widgets son inmutables y ligeros - se recrean en cada rebuild.
+
+Inspirado en Flutter Widget.
+"""
+abstract class Widget {
+  """
+  Key opcional para identificación durante reconciliación.
+  Importante para listas dinámicas.
+  """
+  key: Option<Key> = None
+  
+  """
+  Construir el widget tree.
+  Llamado cada vez que el widget necesita reconstruirse.
+  
+  @param context - Acceso al árbol, theme, servicios
+  @return Widget resultante (puede ser otro widget compuesto)
+  """
+  abstract fn build(context: BuildContext) -> Widget
+  
+  """
+  Hook llamado cuando el widget se monta en el árbol.
+  Útil para: fetch data, iniciar timers, suscribirse a streams.
+  """
+  mount() -> void {
+    # Por defecto: no-op
+    # Subclases pueden override
+  }
+  
+  """
+  Hook llamado ANTES de rebuild.
+  Útil para: comparar props viejos vs nuevos, preparar estado.
+  """
+  beforeUpdate() -> void {
+    # Por defecto: no-op
+  }
+  
+  """
+  Hook llamado DESPUÉS de rebuild.
+  Útil para: side effects post-render, medir DOM.
+  """
+  afterUpdate() -> void {
+    # Por defecto: no-op
+  }
+  
+  """
+  Hook llamado cuando el widget se desmonta del árbol.
+  Útil para: cleanup, cancelar timers, desuscribirse.
+  """
+  destroy() -> void {
+    # Por defecto: no-op
+  }
+  
+  """
+  Comparar si dos widgets son del mismo tipo.
+  Usado por el reconciler para decidir si reusar Element.
+  """
+  fn canUpdate(other: Widget) -> Bool {
+    # Mismo tipo de runtime Y misma key
+    return type(this) == type(other) && this.key == other.key
+  }
+  
+  """
+  Representación en string para debugging.
+  """
+  override fn toString() -> String {
+    name: String = type(this).name
+    if let Some(k) = this.key {
+      return "${name}(key: ${k})"
+    }
+    return name
+  }
+}
+
+# ============================================================================
+# STATELESS WIDGET - Widget sin estado mutable
+# ============================================================================
+
+"""
+StatelessWidget: Widget sin estado mutable (puro).
+
+Características:
+- Solo props inmutables
+- build() llamado cuando props cambian
+- Más eficiente que StatefulWidget
+- Preferir StatelessWidget cuando sea posible
+
+Ejemplo:
+```vela
+widget Label extends StatelessWidget {
+  text: String
+  fontSize: Number = 14
+  
+  fn build(context: BuildContext) -> Widget {
+    return Text(
+      this.text,
+      style: TextStyle(fontSize: this.fontSize)
+    )
+  }
+}
+```
+"""
+abstract class StatelessWidget extends Widget {
+  """
+  Construir el widget.
+  Llamado cada vez que las props cambian.
+  """
+  abstract override fn build(context: BuildContext) -> Widget
+}
+
+# ============================================================================
+# STATEFUL WIDGET - Widget con estado mutable
+# ============================================================================
+
+"""
+StatefulWidget: Widget con estado mutable.
+
+Características:
+- Puede tener variables state
+- Mutar state triggea rebuild automático
+- build() llamado cada vez que state cambia
+- Usar solo cuando necesites estado mutable
+
+Ejemplo:
+```vela
+widget Counter extends StatefulWidget {
+  state count: Number = 0
+  
+  fn build(context: BuildContext) -> Widget {
+    return Column(
+      children: [
+        Text("Count: ${this.count}"),
+        Button(
+          text: "+1",
+          onClick: () => this.count += 1  # Muta state → rebuild
+        )
+      ]
+    )
+  }
+}
+```
+"""
+abstract class StatefulWidget extends Widget {
+  """
+  Signal para trackear si el widget necesita rebuild.
+  Gestionado internamente por el framework.
+  """
+  private needsRebuild: Signal<Bool> = Signal(false)
+  
+  """
+  Effect que observa todas las state variables.
+  Cuando una state cambia, marca needsRebuild = true.
+  """
+  private stateWatcher: Effect? = None
+  
+  """
+  Inicializar el sistema reactivo de state.
+  Llamado automáticamente por el framework.
+  """
+  fn initState() -> void {
+    # Crear effect que observa todas las props marcadas con 'state'
+    this.stateWatcher = Some(Effect(() => {
+      # Este effect se ejecuta cuando cualquier state cambia
+      this.needsRebuild.value = true
+    }))
+  }
+  
+  """
+  Cleanup del sistema reactivo.
+  Llamado automáticamente por el framework.
+  """
+  override fn destroy() -> void {
+    # Destruir el effect watcher
+    if let Some(watcher) = this.stateWatcher {
+      watcher.dispose()
+    }
+    
+    super.destroy()
+  }
+  
+  """
+  Construir el widget.
+  Llamado cada vez que state cambia.
+  """
+  abstract override fn build(context: BuildContext) -> Widget
+}
+
+# ============================================================================
+# ELEMENT - Estado mutable del widget (interno del framework)
+# ============================================================================
+
+"""
+Element: Representación mutable de un widget en el árbol.
+
+Los Elements persisten entre rebuilds, mientras que los Widgets
+son inmutables y se recrean cada vez.
+
+Element mantiene:
+- Referencia al widget actual
+- Referencia al widget hijo (si hay)
+- Referencia al parent Element
+- Estado de lifecycle (mounted, dirty, etc.)
+
+NO instanciar manualmente - gestionado por el framework.
+"""
+class Element {
+  """Widget inmutable que este Element representa"""
+  widget: Widget
+  
+  """Parent Element en el árbol"""
+  parent: Option<Element> = None
+  
+  """Child Element (si existe)"""
+  child: Option<Element> = None
+  
+  """BuildContext para este Element"""
+  context: BuildContext
+  
+  """¿Está montado en el árbol?"""
+  private mounted: Bool = false
+  
+  """¿Necesita rebuild?"""
+  private dirty: Bool = false
+  
+  """Tamaño asignado por layout"""
+  size: Size = Size(0, 0)
+  
+  constructor(widget: Widget, parent: Option<Element>, context: BuildContext) {
+    this.widget = widget
+    this.parent = parent
+    this.context = context
+  }
+  
+  """
+  Montar el element en el árbol.
+  Llama al hook mount() del widget.
+  """
+  fn mount() -> void {
+    if this.mounted {
+      return  # Ya montado
+    }
+    
+    this.mounted = true
+    this.widget.mount()
+    
+    # Inicializar state si es StatefulWidget
+    if this.widget is StatefulWidget {
+      (this.widget as StatefulWidget).initState()
+    }
+    
+    # Construir y montar child
+    child_widget: Widget = this.widget.build(this.context)
+    this.child = Some(Element(child_widget, Some(this), this.context))
+    
+    if let Some(c) = this.child {
+      c.mount()
+    }
+  }
+  
+  """
+  Rebuild del element.
+  Llama a build() y actualiza el child.
+  """
+  fn rebuild() -> void {
+    if !this.mounted {
+      return  # No montado, ignorar
+    }
+    
+    this.widget.beforeUpdate()
+    
+    # Construir nuevo widget child
+    new_child_widget: Widget = this.widget.build(this.context)
+    
+    # Decidir si reusar o reemplazar child Element
+    if let Some(old_child) = this.child {
+      if old_child.widget.canUpdate(new_child_widget) {
+        # Reusar Element, solo actualizar widget
+        old_child.widget = new_child_widget
+        old_child.rebuild()
+      } else {
+        # Reemplazar Element completamente
+        old_child.unmount()
+        this.child = Some(Element(new_child_widget, Some(this), this.context))
+        if let Some(c) = this.child {
+          c.mount()
+        }
+      }
+    } else {
+      # No había child, crear nuevo
+      this.child = Some(Element(new_child_widget, Some(this), this.context))
+      if let Some(c) = this.child {
+        c.mount()
+      }
+    }
+    
+    this.widget.afterUpdate()
+    this.dirty = false
+  }
+  
+  """
+  Desmontar el element del árbol.
+  Llama al hook destroy() del widget.
+  """
+  fn unmount() -> void {
+    if !this.mounted {
+      return  # Ya desmontado
+    }
+    
+    # Desmontar child primero
+    if let Some(c) = this.child {
+      c.unmount()
+    }
+    
+    # Destruir widget
+    this.widget.destroy()
+    this.mounted = false
+  }
+  
+  """
+  Marcar como dirty (necesita rebuild).
+  """
+  fn markNeedsRebuild() -> void {
+    if this.mounted && !this.dirty {
+      this.dirty = true
+      # Schedular rebuild en el próximo frame
+      scheduleRebuild(this)
+    }
+  }
+  
+  """
+  Métodos de rendering (implementados por renderer específico)
+  """
+  fn showModal(dialog: Widget) -> void {
+    # Implementado por renderer (web, mobile, desktop)
+  }
+  
+  fn showNotification(message: String) -> void {
+    # Implementado por renderer
+  }
+}
+
+# ============================================================================
+# HELPER TYPES
+# ============================================================================
+
+"""Tamaño en píxeles"""
+struct Size {
+  width: Number
+  height: Number
+}
+
+"""Tema de la aplicación"""
+struct Theme {
+  primaryColor: Color
+  secondaryColor: Color
+  errorColor: Color
+  backgroundColor: Color
+  textTheme: TextTheme
+  buttonTheme: ButtonThemeData
+}
+
+"""Theme de texto"""
+struct TextTheme {
+  headline1: TextStyle
+  headline2: TextStyle
+  body1: TextStyle
+  body2: TextStyle
+  caption: TextStyle
+}
+
+"""Theme de botones"""
+struct ButtonThemeData {
+  height: Number
+  borderRadius: Number
+  backgroundColor: Color
+  textColor: Color
+}
+
+"""Estilo de texto"""
+struct TextStyle {
+  fontSize: Number
+  color: Color
+  fontWeight: FontWeight
+  fontFamily: String
+  letterSpacing: Number = 0
+  lineHeight: Number = 1.0
+}
+
+"""Peso de fuente"""
+enum FontWeight {
+  Thin,
+  ExtraLight,
+  Light,
+  Normal,
+  Medium,
+  SemiBold,
+  Bold,
+  ExtraBold,
+  Black
+}
+
+"""Color RGBA"""
+struct Color {
+  r: Number
+  g: Number
+  b: Number
+  a: Number = 1.0
+  
+  """Crear color desde RGB"""
+  static fn fromRGB(r: Number, g: Number, b: Number) -> Color {
+    return Color { r, g, b, a: 1.0 }
+  }
+  
+  """Crear color desde hex"""
+  static fn fromHex(hex: String) -> Color {
+    # Parse hex string (#RRGGBB o #RRGGBBAA)
+    # Implementación omitida por brevedad
+    return Color { r: 0, g: 0, b: 0, a: 1.0 }
+  }
+  
+  # Colores predefinidos
+  static Blue: Color = Color.fromRGB(0, 0, 255)
+  static Red: Color = Color.fromRGB(255, 0, 0)
+  static Green: Color = Color.fromRGB(0, 255, 0)
+  static Black: Color = Color.fromRGB(0, 0, 0)
+  static White: Color = Color.fromRGB(255, 255, 255)
+  static Grey: Color = Color.fromRGB(128, 128, 128)
+  static Grey200: Color = Color.fromRGB(200, 200, 200)
+}
+
+# ============================================================================
+# SCHEDULER - Gestión de rebuilds (interno del framework)
+# ============================================================================
+
+"""
+Scheduler para gestionar rebuilds de Elements.
+Agrupa rebuilds en frames para eficiencia.
+"""
+singleton WidgetScheduler {
+  private dirtyElements: List<Element> = []
+  private isScheduled: Bool = false
+  
+  """
+  Schedular rebuild de un Element.
+  """
+  fn scheduleRebuild(element: Element) -> void {
+    if !this.dirtyElements.contains(element) {
+      this.dirtyElements.push(element)
+    }
+    
+    if !this.isScheduled {
+      this.isScheduled = true
+      # Schedular en próximo frame
+      requestAnimationFrame(() => this.flush())
+    }
+  }
+  
+  """
+  Ejecutar todos los rebuilds pendientes.
+  """
+  private fn flush() -> void {
+    elements: List<Element> = this.dirtyElements.clone()
+    this.dirtyElements.clear()
+    this.isScheduled = false
+    
+    # Rebuild cada element
+    elements.forEach(elem => elem.rebuild())
+  }
+}
+
+"""
+Helper global para schedular rebuilds.
+"""
+fn scheduleRebuild(element: Element) -> void {
+  WidgetScheduler.scheduleRebuild(element)
+}
+
+"""
+Helper para request animation frame (implementado por runtime).
+"""
+fn requestAnimationFrame(callback: () -> void) -> void {
+  # Implementado por runtime específico (web, mobile, desktop)
+}

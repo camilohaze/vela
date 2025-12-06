@@ -1,0 +1,627 @@
+"""
+Progress Indicators & Notifications - ProgressIndicator, Snackbar, Toast
+
+Inspirado en:
+- Flutter: LinearProgressIndicator, CircularProgressIndicator, SnackBar
+- Material Design: Progress indicators, Snackbars
+- Toast notifications
+
+Sprint: 20
+Task: TASK-057
+"""
+
+import 'ui/widget' show { Widget, StatelessWidget, StatefulWidget, BuildContext }
+import 'ui/layout/container' show { Container, BoxDecoration, BorderRadius, EdgeInsets, Alignment }
+import 'ui/layout/flex' show { Row, Column }
+import 'ui/display/text' show { Text, TextStyle }
+import 'ui/input/button' show { TextButton }
+
+# ============================================================================
+# LINEAR PROGRESS INDICATOR
+# ============================================================================
+
+"""
+LinearProgressIndicator - Indicador de progreso lineal
+
+Ejemplos:
+  # Indeterminado (animación continua)
+  LinearProgressIndicator {}
+  
+  # Determinado (con valor específico)
+  LinearProgressIndicator { value: Some(0.7) }  # 70%
+"""
+class LinearProgressIndicator extends StatefulWidget {
+  # Valor del progreso (0.0 a 1.0), None = indeterminado
+  value: Option<Float> = None
+  
+  # Color de fondo
+  backgroundColor: Option<Color> = None
+  
+  # Color del progreso
+  valueColor: Option<Color> = None
+  
+  # Altura del indicador
+  minHeight: Float = 4
+  
+  # Semantic label
+  semanticsLabel: Option<String> = None
+  
+  # Semantic value
+  semanticsValue: Option<String> = None
+  
+  # Estado de animación (para modo indeterminado)
+  state animationProgress: Float = 0.0
+  
+  mount() {
+    if this.value.isNone() {
+      this.startAnimation()
+    }
+  }
+  
+  fn startAnimation() -> void {
+    # Iniciar animación continua
+    # En implementación real, usaría AnimationController
+    this.animationProgress = 0.0
+  }
+  
+  fn build(context: BuildContext) -> Widget {
+    effectiveBackgroundColor = this.backgroundColor.unwrapOr(
+      context.theme.colorScheme.primary.withOpacity(0.24)
+    )
+    
+    effectiveValueColor = this.valueColor.unwrapOr(
+      context.theme.colorScheme.primary
+    )
+    
+    # Contenedor del indicador
+    return Container {
+      height: Some(this.minHeight),
+      decoration: BoxDecoration {
+        color: effectiveBackgroundColor,
+        borderRadius: BorderRadius.circular(this.minHeight / 2)
+      },
+      child: Some(this.buildProgressBar(effectiveValueColor))
+    }
+  }
+  
+  fn buildProgressBar(color: Color) -> Widget {
+    match this.value {
+      # Progreso determinado
+      Some(progress) => {
+        return FractionallySizedBox {
+          widthFactor: progress.clamp(0.0, 1.0),
+          alignment: Alignment.centerLeft,
+          child: Container {
+            decoration: BoxDecoration {
+              color: color,
+              borderRadius: BorderRadius.circular(this.minHeight / 2)
+            }
+          }
+        }
+      }
+      # Progreso indeterminado (animado)
+      None => {
+        return AnimatedProgressBar {
+          color: color,
+          height: this.minHeight
+        }
+      }
+    }
+  }
+}
+
+# ============================================================================
+# CIRCULAR PROGRESS INDICATOR
+# ============================================================================
+
+"""
+CircularProgressIndicator - Indicador de progreso circular
+
+Ejemplos:
+  CircularProgressIndicator {}
+  CircularProgressIndicator { value: Some(0.5), size: 48 }
+"""
+class CircularProgressIndicator extends StatefulWidget {
+  # Valor del progreso (0.0 a 1.0), None = indeterminado
+  value: Option<Float> = None
+  
+  # Color del indicador
+  color: Option<Color> = None
+  
+  # Color de fondo
+  backgroundColor: Option<Color> = None
+  
+  # Ancho del trazo
+  strokeWidth: Float = 4
+  
+  # Tamaño del indicador
+  size: Float = 36
+  
+  # Semantic label
+  semanticsLabel: Option<String> = None
+  
+  # Semantic value
+  semanticsValue: Option<String> = None
+  
+  # Estado de animación
+  state animationProgress: Float = 0.0
+  
+  mount() {
+    if this.value.isNone() {
+      this.startAnimation()
+    }
+  }
+  
+  fn startAnimation() -> void {
+    # Animación de rotación continua
+    this.animationProgress = 0.0
+  }
+  
+  fn build(context: BuildContext) -> Widget {
+    effectiveColor = this.color.unwrapOr(
+      context.theme.colorScheme.primary
+    )
+    
+    return Container {
+      width: Some(this.size),
+      height: Some(this.size),
+      child: Some(
+        CircularProgressPrimitive {
+          value: this.value,
+          color: effectiveColor,
+          backgroundColor: this.backgroundColor,
+          strokeWidth: this.strokeWidth
+        }
+      )
+    }
+  }
+}
+
+"""CircularProgressPrimitive - Primitivo de progress circular"""
+class CircularProgressPrimitive extends Widget {
+  value: Option<Float>
+  color: Color
+  backgroundColor: Option<Color>
+  strokeWidth: Float
+}
+
+# ============================================================================
+# SNACKBAR - Notificación temporal en la parte inferior
+# ============================================================================
+
+"""
+SnackBar - Barra de notificación temporal en la parte inferior
+
+Ejemplos:
+  ScaffoldMessenger.of(context).showSnackBar(
+    SnackBar {
+      content: Text { data: "Message sent!" },
+      duration: Duration.seconds(3)
+    }
+  )
+"""
+class SnackBar extends StatelessWidget {
+  # Contenido del snackbar
+  content: Widget
+  
+  # Color de fondo
+  backgroundColor: Option<Color> = None
+  
+  # Duración de visualización
+  duration: Duration = Duration.seconds(4)
+  
+  # Acción opcional
+  action: Option<SnackBarAction> = None
+  
+  # Elevación
+  elevation: Float = 6
+  
+  # Shape
+  shape: Option<ShapeBorder> = None
+  
+  # Comportamiento
+  behavior: SnackBarBehavior = SnackBarBehavior.Fixed
+  
+  # Margin (solo para behavior = Floating)
+  margin: Option<EdgeInsets> = None
+  
+  # Padding
+  padding: EdgeInsets = EdgeInsets.symmetric(horizontal: 16, vertical: 14)
+  
+  # Width (solo para behavior = Floating)
+  width: Option<Float> = None
+  
+  fn build(context: BuildContext) -> Widget {
+    effectiveBackgroundColor = this.backgroundColor.unwrapOr(
+      Color.grey900
+    )
+    
+    children: List<Widget> = [this.content]
+    
+    # Agregar acción si existe
+    match this.action {
+      Some(snackBarAction) => {
+        children.push(
+          TextButton {
+            text: snackBarAction.label,
+            color: snackBarAction.textColor.unwrapOr(
+              context.theme.colorScheme.primary
+            ),
+            onPressed: Some(snackBarAction.onPressed)
+          }
+        )
+      }
+      None => {}
+    }
+    
+    snackBarContent = Container {
+      padding: Some(this.padding),
+      decoration: BoxDecoration {
+        color: effectiveBackgroundColor,
+        borderRadius: match this.behavior {
+          SnackBarBehavior.Floating => BorderRadius.circular(4)
+          SnackBarBehavior.Fixed => BorderRadius.zero
+        },
+        boxShadow: [
+          BoxShadow {
+            color: Color.black.withOpacity(0.2),
+            offset: Offset { dx: 0, dy: this.elevation },
+            blurRadius: this.elevation * 2
+          }
+        ]
+      },
+      child: Some(
+        Row {
+          mainAxisAlignment: MainAxisAlignment.SpaceBetween,
+          children: children
+        }
+      )
+    }
+    
+    # Aplicar margin y width para Floating
+    if this.behavior == SnackBarBehavior.Floating {
+      return Container {
+        margin: this.margin,
+        width: this.width,
+        child: Some(snackBarContent)
+      }
+    }
+    
+    return snackBarContent
+  }
+}
+
+"""SnackBarAction - Acción del snackbar"""
+struct SnackBarAction {
+  label: String
+  onPressed: () -> void
+  textColor: Option<Color> = None
+  disabledTextColor: Option<Color> = None
+}
+
+"""SnackBarBehavior - Comportamiento del snackbar"""
+enum SnackBarBehavior {
+  Fixed     # Fijo en la parte inferior
+  Floating  # Flotante con margin
+}
+
+# ============================================================================
+# TOAST - Notificación tipo toast (más simple que SnackBar)
+# ============================================================================
+
+"""
+Toast - Notificación temporal tipo toast
+
+Más simple que SnackBar, sin acciones.
+
+Ejemplos:
+  Toast.show(
+    context: context,
+    message: "Item added to cart",
+    duration: Duration.seconds(2)
+  )
+"""
+class Toast {
+  # Factory method para mostrar toast
+  static fn show(
+    context: BuildContext,
+    message: String,
+    duration: Duration = Duration.seconds(2),
+    backgroundColor: Option<Color> = None,
+    textColor: Option<Color> = None,
+    position: ToastPosition = ToastPosition.Bottom
+  ) -> void {
+    # En implementación real, esto usaría un overlay
+    # Por ahora, es solo la interfaz
+    
+    toast = ToastWidget {
+      message: message,
+      backgroundColor: backgroundColor,
+      textColor: textColor,
+      position: position
+    }
+    
+    # Mostrar toast en overlay
+    # context.overlay.show(toast, duration)
+  }
+}
+
+"""ToastWidget - Widget interno del toast"""
+class ToastWidget extends StatelessWidget {
+  message: String
+  backgroundColor: Option<Color> = None
+  textColor: Option<Color> = None
+  position: ToastPosition = ToastPosition.Bottom
+  
+  fn build(context: BuildContext) -> Widget {
+    effectiveBackgroundColor = this.backgroundColor.unwrapOr(
+      Color.grey900.withOpacity(0.9)
+    )
+    
+    effectiveTextColor = this.textColor.unwrapOr(Color.white)
+    
+    return Container {
+      padding: Some(EdgeInsets.symmetric(horizontal: 24, vertical: 12)),
+      decoration: BoxDecoration {
+        color: effectiveBackgroundColor,
+        borderRadius: BorderRadius.circular(24)
+      },
+      child: Some(
+        Text {
+          data: this.message,
+          style: Some(TextStyle {
+            color: Some(effectiveTextColor),
+            fontSize: Some(14)
+          })
+        }
+      )
+    }
+  }
+}
+
+"""ToastPosition - Posición del toast"""
+enum ToastPosition {
+  Top     # Parte superior
+  Center  # Centro
+  Bottom  # Parte inferior
+}
+
+# ============================================================================
+# REFRESH INDICATOR - Indicador de pull-to-refresh
+# ============================================================================
+
+"""
+RefreshIndicator - Indicador de pull-to-refresh
+
+Ejemplos:
+  RefreshIndicator {
+    onRefresh: () async => {
+      await fetchData()
+    },
+    child: ListView { children: [...] }
+  }
+"""
+class RefreshIndicator extends StatefulWidget {
+  # Widget hijo (típicamente ListView o ScrollView)
+  child: Widget
+  
+  # Callback al hacer pull-to-refresh
+  onRefresh: () async -> void
+  
+  # Color del indicador
+  color: Option<Color> = None
+  
+  # Color de fondo
+  backgroundColor: Option<Color> = None
+  
+  # Distancia de stroke
+  strokeWidth: Float = 2.0
+  
+  # Distancia de desplazamiento para activar refresh
+  displacement: Float = 40
+  
+  # Estado de refresh
+  state isRefreshing: Bool = false
+  
+  fn handleRefresh() async -> void {
+    this.isRefreshing = true
+    await this.onRefresh()
+    this.isRefreshing = false
+  }
+  
+  fn build(context: BuildContext) -> Widget {
+    # En implementación real, detectaría gestos de scroll
+    return this.child
+  }
+}
+
+# ============================================================================
+# SKELETON - Placeholder animado durante carga
+# ============================================================================
+
+"""
+Skeleton - Placeholder animado para contenido en carga
+
+Ejemplos:
+  Skeleton { width: 200, height: 20 }
+  Skeleton { width: 100, height: 100, shape: SkeletonShape.Circle }
+"""
+class Skeleton extends StatefulWidget {
+  # Dimensiones
+  width: Option<Float> = None
+  height: Float = 16
+  
+  # Forma
+  shape: SkeletonShape = SkeletonShape.Rectangle
+  
+  # Color base
+  baseColor: Color = Color.grey300
+  
+  # Color de highlight
+  highlightColor: Color = Color.grey100
+  
+  # Estado de animación
+  state animationProgress: Float = 0.0
+  
+  mount() {
+    this.startAnimation()
+  }
+  
+  fn startAnimation() -> void {
+    # Animación de shimmer
+    this.animationProgress = 0.0
+  }
+  
+  fn build(context: BuildContext) -> Widget {
+    borderRadius = match this.shape {
+      SkeletonShape.Rectangle => BorderRadius.circular(4)
+      SkeletonShape.Circle => BorderRadius.circular(999)
+    }
+    
+    return Container {
+      width: this.width,
+      height: Some(this.height),
+      decoration: BoxDecoration {
+        color: this.baseColor,
+        borderRadius: borderRadius
+      },
+      child: Some(
+        ShimmerEffect {
+          baseColor: this.baseColor,
+          highlightColor: this.highlightColor,
+          progress: this.animationProgress
+        }
+      )
+    }
+  }
+}
+
+"""SkeletonShape - Forma del skeleton"""
+enum SkeletonShape {
+  Rectangle  # Rectangular
+  Circle     # Circular
+}
+
+"""ShimmerEffect - Efecto shimmer primitivo"""
+class ShimmerEffect extends Widget {
+  baseColor: Color
+  highlightColor: Color
+  progress: Float
+}
+
+# ============================================================================
+# HELPERS Y PRIMITIVOS
+# ============================================================================
+
+"""Duration - Duración de tiempo"""
+struct Duration {
+  milliseconds: Number
+  
+  static fn seconds(s: Number) -> Duration {
+    return Duration { milliseconds: s * 1000 }
+  }
+  
+  static fn minutes(m: Number) -> Duration {
+    return Duration { milliseconds: m * 60 * 1000 }
+  }
+}
+
+"""FractionallySizedBox - Box dimensionado por fracción del parent"""
+class FractionallySizedBox extends StatelessWidget {
+  widthFactor: Option<Float> = None
+  heightFactor: Option<Float> = None
+  alignment: Alignment = Alignment.center
+  child: Widget
+  
+  fn build(context: BuildContext) -> Widget {
+    # Implementación simplificada
+    return this.child
+  }
+}
+
+"""AnimatedProgressBar - Barra de progreso animada"""
+class AnimatedProgressBar extends StatefulWidget {
+  color: Color
+  height: Float
+  
+  state position: Float = 0.0
+  
+  mount() {
+    this.startAnimation()
+  }
+  
+  fn startAnimation() -> void {
+    # Animación continua de ida y vuelta
+    this.position = 0.0
+  }
+  
+  fn build(context: BuildContext) -> Widget {
+    return Container {
+      decoration: BoxDecoration {
+        color: this.color,
+        borderRadius: BorderRadius.circular(this.height / 2)
+      }
+    }
+  }
+}
+
+"""ShapeBorder - Forma de borde"""
+abstract class ShapeBorder {
+  borderRadius: BorderRadius = BorderRadius.zero
+}
+
+"""RoundedRectangleBorder - Borde rectangular redondeado"""
+class RoundedRectangleBorder extends ShapeBorder {
+  borderRadius: BorderRadius = BorderRadius.zero
+}
+
+"""BoxShadow - Sombra de box"""
+struct BoxShadow {
+  color: Color
+  offset: Offset
+  blurRadius: Float
+  spreadRadius: Float = 0
+}
+
+"""Offset - Desplazamiento 2D"""
+struct Offset {
+  dx: Float
+  dy: Float
+}
+
+# ============================================================================
+# COLOR HELPERS
+# ============================================================================
+
+"""Color - Definición de color"""
+struct Color {
+  red: Number
+  green: Number
+  blue: Number
+  alpha: Float
+  
+  static black: Color = Color { red: 0, green: 0, blue: 0, alpha: 1.0 }
+  static white: Color = Color { red: 255, green: 255, blue: 255, alpha: 1.0 }
+  static grey900: Color = Color { red: 33, green: 33, blue: 33, alpha: 1.0 }
+  static grey300: Color = Color { red: 224, green: 224, blue: 224, alpha: 1.0 }
+  static grey100: Color = Color { red: 245, green: 245, blue: 245, alpha: 1.0 }
+  
+  fn withOpacity(opacity: Float) -> Color {
+    return Color {
+      red: this.red,
+      green: this.green,
+      blue: this.blue,
+      alpha: opacity
+    }
+  }
+}
+
+"""MainAxisAlignment - Alineación del eje principal"""
+enum MainAxisAlignment {
+  Start
+  End
+  Center
+  SpaceBetween
+  SpaceAround
+  SpaceEvenly
+}
