@@ -1,0 +1,699 @@
+"""
+TASK-059: Implementar Virtual DOM
+
+Implementación de: VELA-583
+Historia: Sprint 21 - Sistema Reactivo Integrado en UI
+Fecha: 2025-12-06
+
+Descripción:
+Sistema de Virtual DOM (VDOM) que crea una representación intermedia del árbol
+de widgets en memoria. Permite comparaciones eficientes y actualizaciones
+incrementales del árbol de renderizado real.
+
+Inspiración:
+- React: Virtual DOM con reconciliation algorithm
+- Vue 3: VNode system con optimizaciones de compilador
+- Svelte: Compiler-based approach sin VDOM runtime
+- Preact: Lightweight VDOM implementation
+"""
+
+import 'system:ui' show { Widget, BuildContext }
+
+
+# ============================================================================
+# VNODE - VIRTUAL DOM NODE
+# ============================================================================
+
+"""
+Representación virtual de un widget en memoria.
+Estructura ligera para comparaciones y diffs eficientes.
+"""
+class VNode {
+  # Tipo de widget (para identificación)
+  type: String
+  
+  # Props del widget (inmutables)
+  props: Map<String, Any>
+  
+  # Hijos virtuales
+  children: List<VNode>
+  
+  # Key única para optimización (opcional)
+  key: Option<String>
+  
+  # Referencia al widget real (después de mount)
+  widget: Option<Widget> = None
+  
+  # Referencia al elemento DOM (si es widget nativo)
+  domElement: Option<DOMElement> = None
+  
+  # Metadata para optimizaciones
+  isStateful: Bool
+  isComponent: Bool
+  isNative: Bool
+  
+  
+  constructor(
+    type: String,
+    props: Map<String, Any>,
+    children: List<VNode> = [],
+    key: Option<String> = None
+  ) {
+    this.type = type
+    this.props = props
+    this.children = children
+    this.key = key
+    
+    # Inferir metadata del type
+    this.isStateful = type.contains("StatefulWidget")
+    this.isComponent = !this.isNative
+    this.isNative = this.checkIfNativeElement(type)
+  }
+  
+  
+  """
+  Verificar si el tipo es un elemento nativo del DOM.
+  """
+  fn checkIfNativeElement(type: String) -> Bool {
+    nativeElements = [
+      "div", "span", "button", "input", "textarea",
+      "img", "video", "audio", "canvas", "svg",
+      "p", "h1", "h2", "h3", "h4", "h5", "h6",
+      "ul", "ol", "li", "table", "tr", "td"
+    ]
+    
+    return nativeElements.contains(type.toLowerCase())
+  }
+  
+  
+  """
+  Comparar este VNode con otro (shallow comparison).
+  """
+  fn isSameType(other: VNode) -> Bool {
+    return this.type == other.type && this.key == other.key
+  }
+  
+  
+  """
+  Clonar este VNode (deep clone).
+  """
+  fn clone() -> VNode {
+    return VNode(
+      type: this.type,
+      props: this.props.clone(),
+      children: this.children.map(child => child.clone()).toList(),
+      key: this.key
+    )
+  }
+  
+  
+  """
+  Convertir a representación string (para debugging).
+  """
+  override fn toString() -> String {
+    keyStr = match this.key {
+      Some(k) => " key=${k}"
+      None => ""
+    }
+    
+    childrenStr = if this.children.isEmpty() {
+      ""
+    } else {
+      " (${this.children.length} children)"
+    }
+    
+    return "<${this.type}${keyStr}${childrenStr}>"
+  }
+}
+
+
+# ============================================================================
+# VNODE TYPES - TIPOS ESPECIALES DE VNODES
+# ============================================================================
+
+"""
+VNode para elementos de texto.
+Optimización: texto plano sin hijos.
+"""
+class VTextNode extends VNode {
+  text: String
+  
+  
+  constructor(text: String) {
+    super(
+      type: "#text",
+      props: Map { "text": text },
+      children: [],
+      key: None
+    )
+    
+    this.text = text
+    this.isNative = true
+    this.isComponent = false
+  }
+  
+  
+  override fn toString() -> String {
+    return "\"${this.text}\""
+  }
+}
+
+
+"""
+VNode para fragmentos (múltiples raíces sin wrapper).
+Inspirado en React.Fragment y Vue <template>.
+"""
+class VFragmentNode extends VNode {
+  
+  constructor(children: List<VNode>) {
+    super(
+      type: "#fragment",
+      props: Map {},
+      children: children,
+      key: None
+    )
+    
+    this.isNative = false
+    this.isComponent = false
+  }
+  
+  
+  override fn toString() -> String {
+    return "<Fragment>${this.children.length} children</Fragment>"
+  }
+}
+
+
+"""
+VNode para comentarios (útil para debugging).
+"""
+class VCommentNode extends VNode {
+  comment: String
+  
+  
+  constructor(comment: String) {
+    super(
+      type: "#comment",
+      props: Map { "comment": comment },
+      children: [],
+      key: None
+    )
+    
+    this.comment = comment
+    this.isNative = false
+    this.isComponent = false
+  }
+  
+  
+  override fn toString() -> String {
+    return "<!-- ${this.comment} -->"
+  }
+}
+
+
+# ============================================================================
+# VNODE FACTORY - CREAR VNODES DESDE WIDGETS
+# ============================================================================
+
+"""
+Factory para crear VNodes desde widgets.
+Convierte árbol de widgets a árbol virtual.
+"""
+class VNodeFactory {
+  
+  """
+  Crear VNode desde un widget.
+  """
+  static fn createFromWidget(widget: Widget, context: BuildContext) -> VNode {
+    # Obtener tipo del widget
+    widgetType = widget.getType()
+    
+    # Extraer props del widget
+    props = this.extractProps(widget)
+    
+    # Extraer key (si existe)
+    key = widget.key
+    
+    # Crear VNode base
+    vnode = VNode(
+      type: widgetType,
+      props: props,
+      children: [],
+      key: key
+    )
+    
+    # Vincular widget al VNode
+    vnode.widget = Some(widget)
+    
+    # Si el widget tiene hijos, convertirlos recursivamente
+    children = this.extractChildren(widget, context)
+    vnode.children = children.map(child => this.createFromWidget(child, context)).toList()
+    
+    return vnode
+  }
+  
+  
+  """
+  Crear VNode desde texto plano.
+  """
+  static fn createText(text: String) -> VTextNode {
+    return VTextNode(text)
+  }
+  
+  
+  """
+  Crear VNode fragmento.
+  """
+  static fn createFragment(children: List<VNode>) -> VFragmentNode {
+    return VFragmentNode(children)
+  }
+  
+  
+  """
+  Crear VNode comentario.
+  """
+  static fn createComment(comment: String) -> VCommentNode {
+    return VCommentNode(comment)
+  }
+  
+  
+  # --------------------------------------------------------------------------
+  # HELPERS
+  # --------------------------------------------------------------------------
+  
+  """
+  Extraer props del widget como Map.
+  """
+  static fn extractProps(widget: Widget) -> Map<String, Any> {
+    props = Map<String, Any> {}
+    
+    # Usar reflection para obtener props del widget
+    # (en implementación real, esto dependería del sistema de reflection de Vela)
+    
+    # Ejemplo simplificado:
+    match widget.getType() {
+      "Container" => {
+        props.set("width", widget.width)
+        props.set("height", widget.height)
+        props.set("padding", widget.padding)
+        props.set("margin", widget.margin)
+      }
+      "Text" => {
+        props.set("text", widget.text)
+        props.set("style", widget.style)
+      }
+      "Button" => {
+        props.set("text", widget.text)
+        props.set("onPressed", widget.onPressed)
+      }
+      _ => {
+        # Fallback: intentar extraer props genéricas
+        props = widget.toMap()
+      }
+    }
+    
+    return props
+  }
+  
+  
+  """
+  Extraer widgets hijos.
+  """
+  static fn extractChildren(widget: Widget, context: BuildContext) -> List<Widget> {
+    children = []
+    
+    # Si el widget tiene método getChildren, usarlo
+    if widget.hasMethod("getChildren") {
+      children = widget.getChildren()
+    }
+    # Si el widget tiene prop 'child', extraerlo
+    else if widget.hasProperty("child") {
+      child = widget.child
+      if child.isSome() {
+        children = [child.unwrap()]
+      }
+    }
+    # Si el widget tiene prop 'children', extraerlo
+    else if widget.hasProperty("children") {
+      children = widget.children
+    }
+    
+    return children
+  }
+}
+
+
+# ============================================================================
+# VTREE - VIRTUAL DOM TREE
+# ============================================================================
+
+"""
+Árbol virtual completo.
+Representa toda la jerarquía de widgets en memoria.
+"""
+class VTree {
+  # Raíz del árbol virtual
+  root: VNode
+  
+  # Metadata del árbol
+  version: Number = 0
+  timestamp: Number = 0
+  
+  
+  constructor(root: VNode) {
+    this.root = root
+    this.timestamp = Date.now()
+  }
+  
+  
+  """
+  Crear VTree desde un widget raíz.
+  """
+  static fn fromWidget(widget: Widget, context: BuildContext) -> VTree {
+    rootVNode = VNodeFactory.createFromWidget(widget, context)
+    return VTree(rootVNode)
+  }
+  
+  
+  """
+  Recorrer el árbol en preorden (DFS).
+  """
+  fn traverse(callback: (VNode) -> void) -> void {
+    this.traverseNode(this.root, callback)
+  }
+  
+  
+  fn traverseNode(node: VNode, callback: (VNode) -> void) -> void {
+    callback(node)
+    
+    node.children.forEach(child => {
+      this.traverseNode(child, callback)
+    })
+  }
+  
+  
+  """
+  Buscar nodo por key.
+  """
+  fn findByKey(key: String) -> Option<VNode> {
+    result: Option<VNode> = None
+    
+    this.traverse((node: VNode) => {
+      match node.key {
+        Some(k) if k == key => {
+          result = Some(node)
+        }
+        _ => {}
+      }
+    })
+    
+    return result
+  }
+  
+  
+  """
+  Buscar nodos por tipo.
+  """
+  fn findByType(type: String) -> List<VNode> {
+    results = []
+    
+    this.traverse((node: VNode) => {
+      if node.type == type {
+        results.push(node)
+      }
+    })
+    
+    return results
+  }
+  
+  
+  """
+  Clonar el árbol completo.
+  """
+  fn clone() -> VTree {
+    return VTree(this.root.clone())
+  }
+  
+  
+  """
+  Incrementar versión (útil para tracking de cambios).
+  """
+  fn incrementVersion() -> void {
+    this.version = this.version + 1
+    this.timestamp = Date.now()
+  }
+  
+  
+  """
+  Convertir árbol a representación string (para debugging).
+  """
+  override fn toString() -> String {
+    return this.nodeToString(this.root, 0)
+  }
+  
+  
+  fn nodeToString(node: VNode, depth: Number) -> String {
+    indent = "  ".repeat(depth)
+    str = "${indent}${node.toString()}\n"
+    
+    node.children.forEach(child => {
+      str = str + this.nodeToString(child, depth + 1)
+    })
+    
+    return str
+  }
+}
+
+
+# ============================================================================
+# VDOM RENDERER - RENDERIZAR VDOM A DOM REAL
+# ============================================================================
+
+"""
+Renderer que convierte VNodes a elementos DOM reales.
+"""
+class VDOMRenderer {
+  # Contexto de build
+  context: BuildContext
+  
+  
+  constructor(context: BuildContext) {
+    this.context = context
+  }
+  
+  
+  """
+  Renderizar VNode a elemento DOM.
+  """
+  fn render(vnode: VNode) -> DOMElement {
+    # Si es elemento nativo, crear DOM element
+    if vnode.isNative {
+      return this.renderNative(vnode)
+    }
+    # Si es componente, renderizar widget y crear VNode de hijo
+    else if vnode.isComponent {
+      return this.renderComponent(vnode)
+    }
+    # Si es fragmento, renderizar hijos sin wrapper
+    else if vnode.type == "#fragment" {
+      return this.renderFragment(vnode)
+    }
+    # Si es texto, crear text node
+    else if vnode.type == "#text" {
+      return this.renderText(vnode)
+    }
+    # Fallback: crear div genérico
+    else {
+      return this.renderGeneric(vnode)
+    }
+  }
+  
+  
+  """
+  Renderizar elemento nativo (div, button, etc.).
+  """
+  fn renderNative(vnode: VNode) -> DOMElement {
+    element = document.createElement(vnode.type)
+    
+    # Aplicar props
+    vnode.props.forEach((key, value) => {
+      element.setAttribute(key, value)
+    })
+    
+    # Renderizar hijos
+    vnode.children.forEach(child => {
+      childElement = this.render(child)
+      element.appendChild(childElement)
+    })
+    
+    # Vincular elemento al VNode
+    vnode.domElement = Some(element)
+    
+    return element
+  }
+  
+  
+  """
+  Renderizar componente (widget).
+  """
+  fn renderComponent(vnode: VNode) -> DOMElement {
+    match vnode.widget {
+      Some(widget) => {
+        # Build del widget
+        childWidget = widget.build(this.context)
+        
+        # Crear VNode del hijo
+        childVNode = VNodeFactory.createFromWidget(childWidget, this.context)
+        
+        # Renderizar hijo
+        return this.render(childVNode)
+      }
+      None => {
+        # No hay widget, crear placeholder
+        return document.createTextNode("<!-- Missing widget -->")
+      }
+    }
+  }
+  
+  
+  """
+  Renderizar fragmento (sin wrapper).
+  """
+  fn renderFragment(vnode: VNode) -> DOMElement {
+    fragment = document.createDocumentFragment()
+    
+    vnode.children.forEach(child => {
+      childElement = this.render(child)
+      fragment.appendChild(childElement)
+    })
+    
+    return fragment
+  }
+  
+  
+  """
+  Renderizar texto.
+  """
+  fn renderText(vnode: VNode) -> DOMElement {
+    textContent = vnode.props.get("text").unwrapOr("")
+    textNode = document.createTextNode(textContent)
+    
+    vnode.domElement = Some(textNode)
+    
+    return textNode
+  }
+  
+  
+  """
+  Renderizar genérico (fallback).
+  """
+  fn renderGeneric(vnode: VNode) -> DOMElement {
+    # Crear div con clase del tipo
+    element = document.createElement("div")
+    element.setAttribute("class", "vela-${vnode.type}")
+    
+    # Renderizar hijos
+    vnode.children.forEach(child => {
+      childElement = this.render(child)
+      element.appendChild(childElement)
+    })
+    
+    vnode.domElement = Some(element)
+    
+    return element
+  }
+}
+
+
+# ============================================================================
+# EJEMPLOS DE USO
+# ============================================================================
+
+"""
+Ejemplo 1: Crear VNode desde widget
+"""
+fn example_createVNode() -> void {
+  # Widget original
+  widget = Container(
+    width: 100,
+    height: 100,
+    child: Text("Hello World")
+  )
+  
+  context = BuildContext.create()
+  
+  # Convertir a VNode
+  vnode = VNodeFactory.createFromWidget(widget, context)
+  
+  print(vnode.toString())
+  # Output: <Container> (1 children)
+}
+
+
+"""
+Ejemplo 2: Crear VTree desde widget raíz
+"""
+fn example_createVTree() -> void {
+  rootWidget = Container(
+    child: Column(
+      children: [
+        Text("Title"),
+        Text("Subtitle"),
+        Button(text: "Click me")
+      ]
+    )
+  )
+  
+  context = BuildContext.create()
+  
+  # Convertir a VTree
+  vtree = VTree.fromWidget(rootWidget, context)
+  
+  print(vtree.toString())
+  # Output:
+  # <Container>
+  #   <Column>
+  #     <Text>
+  #     <Text>
+  #     <Button>
+}
+
+
+"""
+Ejemplo 3: Buscar nodos en VTree
+"""
+fn example_searchVTree() -> void {
+  vtree = VTree.fromWidget(myWidget, context)
+  
+  # Buscar por key
+  match vtree.findByKey("header") {
+    Some(node) => print("Found header: ${node}")
+    None => print("Header not found")
+  }
+  
+  # Buscar por tipo
+  textNodes = vtree.findByType("Text")
+  print("Found ${textNodes.length} Text nodes")
+}
+
+
+"""
+Ejemplo 4: Renderizar VTree a DOM
+"""
+fn example_renderVTree() -> void {
+  widget = Container(
+    child: Text("Hello Virtual DOM!")
+  )
+  
+  context = BuildContext.create()
+  
+  # Crear VTree
+  vtree = VTree.fromWidget(widget, context)
+  
+  # Renderizar a DOM
+  renderer = VDOMRenderer(context)
+  domElement = renderer.render(vtree.root)
+  
+  # Montar en DOM
+  document.body.appendChild(domElement)
+}

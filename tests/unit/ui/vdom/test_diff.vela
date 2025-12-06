@@ -1,0 +1,655 @@
+"""
+Tests unitarios para diff.vela (Diffing Algorithm)
+
+Jira: VELA-583
+Sprint: 21
+Task: TASK-060
+"""
+
+import 'system:testing' show { describe, it, expect, beforeEach }
+import 'ui:vdom:vnode' show { VNode, VTextNode, VTree, VNodeFactory }
+import 'ui:vdom:diff' show { 
+  PatchType, 
+  Patch, 
+  DiffResult, 
+  DiffAlgorithm,
+  DiffOptimizer,
+  diff,
+  diffNodes
+}
+import 'system:ui' show { BuildContext, Container, Text, Button }
+
+
+# ============================================================================
+# TEST: PATCH TYPES
+# ============================================================================
+
+describe("Patch", () => {
+  
+  it("should create patch", () => {
+    patch = Patch {
+      type: PatchType.Create,
+      node: VNode(type: "Text", props: Map {}),
+      index: 0
+    }
+    
+    expect(patch.type).toBe(PatchType.Create)
+    expect(patch.node.type).toBe("Text")
+  })
+  
+  
+  it("should convert to string", () => {
+    patch = Patch {
+      type: PatchType.Create,
+      node: VNode(type: "Button", props: Map {}),
+      index: 1
+    }
+    
+    str = patch.toString()
+    
+    expect(str).toContain("CREATE")
+    expect(str).toContain("Button")
+  })
+})
+
+
+describe("DiffResult", () => {
+  
+  it("should initialize empty", () => {
+    result = DiffResult {}
+    
+    expect(result.patches.length).toBe(0)
+    expect(result.hasChanges()).toBe(false)
+  })
+  
+  
+  it("should add patches", () => {
+    result = DiffResult {}
+    
+    result.addPatch(Patch {
+      type: PatchType.Create,
+      node: VNode(type: "Text", props: Map {}),
+      index: 0
+    })
+    
+    expect(result.patches.length).toBe(1)
+    expect(result.hasChanges()).toBe(true)
+  })
+  
+  
+  it("should count patches by type", () => {
+    result = DiffResult {}
+    
+    result.addPatch(Patch {
+      type: PatchType.Create,
+      node: VNode(type: "Text", props: Map {}),
+      index: 0
+    })
+    
+    result.addPatch(Patch {
+      type: PatchType.Create,
+      node: VNode(type: "Button", props: Map {}),
+      index: 1
+    })
+    
+    result.addPatch(Patch {
+      type: PatchType.Remove,
+      node: VNode(type: "Text", props: Map {}),
+      index: 2
+    })
+    
+    expect(result.countByType(PatchType.Create)).toBe(2)
+    expect(result.countByType(PatchType.Remove)).toBe(1)
+    expect(result.countByType(PatchType.Update)).toBe(0)
+  })
+})
+
+
+# ============================================================================
+# TEST: DIFF ALGORITHM - BASIC
+# ============================================================================
+
+describe("DiffAlgorithm - Basic", () => {
+  
+  it("should detect no changes for identical trees", () => {
+    node = VNode(type: "Container", props: Map { "width": 100 })
+    tree1 = VTree(node.clone())
+    tree2 = VTree(node.clone())
+    
+    algorithm = DiffAlgorithm {}
+    result = algorithm.diff(tree1, tree2)
+    
+    expect(result.hasChanges()).toBe(false)
+  })
+  
+  
+  it("should detect replace when types differ", () => {
+    oldNode = VNode(type: "Container", props: Map {})
+    newNode = VNode(type: "Column", props: Map {})
+    
+    result = diffNodes(oldNode, newNode)
+    
+    expect(result.hasChanges()).toBe(true)
+    expect(result.countByType(PatchType.Replace)).toBe(1)
+  })
+  
+  
+  it("should detect props changes", () => {
+    oldNode = VNode(type: "Container", props: Map { "width": 100 })
+    newNode = VNode(type: "Container", props: Map { "width": 200 })
+    
+    result = diffNodes(oldNode, newNode)
+    
+    expect(result.hasChanges()).toBe(true)
+    expect(result.countByType(PatchType.Props)).toBeGreaterThan(0)
+  })
+  
+  
+  it("should detect text changes", () => {
+    oldNode = VTextNode("Hello")
+    newNode = VTextNode("World")
+    
+    result = diffNodes(oldNode, newNode)
+    
+    expect(result.hasChanges()).toBe(true)
+    expect(result.countByType(PatchType.Text)).toBe(1)
+  })
+})
+
+
+# ============================================================================
+# TEST: DIFF ALGORITHM - CHILDREN
+# ============================================================================
+
+describe("DiffAlgorithm - Children", () => {
+  
+  it("should detect new children (CREATE)", () => {
+    oldNode = VNode(type: "Container", props: Map {}, children: [])
+    newNode = VNode(
+      type: "Container",
+      props: Map {},
+      children: [
+        VNode(type: "Text", props: Map { "text": "Child" })
+      ]
+    )
+    
+    result = diffNodes(oldNode, newNode)
+    
+    expect(result.countByType(PatchType.Create)).toBe(1)
+  })
+  
+  
+  it("should detect removed children (REMOVE)", () => {
+    oldNode = VNode(
+      type: "Container",
+      props: Map {},
+      children: [
+        VNode(type: "Text", props: Map { "text": "Child" })
+      ]
+    )
+    newNode = VNode(type: "Container", props: Map {}, children: [])
+    
+    result = diffNodes(oldNode, newNode)
+    
+    expect(result.countByType(PatchType.Remove)).toBe(1)
+  })
+  
+  
+  it("should diff children recursively", () => {
+    oldNode = VNode(
+      type: "Container",
+      props: Map {},
+      children: [
+        VNode(type: "Text", props: Map { "text": "Old" })
+      ]
+    )
+    
+    newNode = VNode(
+      type: "Container",
+      props: Map {},
+      children: [
+        VNode(type: "Text", props: Map { "text": "New" })
+      ]
+    )
+    
+    result = diffNodes(oldNode, newNode)
+    
+    expect(result.hasChanges()).toBe(true)
+    expect(result.countByType(PatchType.Text)).toBe(1)
+  })
+  
+  
+  it("should handle multiple children changes", () => {
+    oldNode = VNode(
+      type: "Container",
+      props: Map {},
+      children: [
+        VNode(type: "Text", props: Map { "text": "A" }),
+        VNode(type: "Text", props: Map { "text": "B" })
+      ]
+    )
+    
+    newNode = VNode(
+      type: "Container",
+      props: Map {},
+      children: [
+        VNode(type: "Text", props: Map { "text": "A" }),
+        VNode(type: "Text", props: Map { "text": "B" }),
+        VNode(type: "Text", props: Map { "text": "C" })
+      ]
+    )
+    
+    result = diffNodes(oldNode, newNode)
+    
+    expect(result.countByType(PatchType.Create)).toBe(1)
+  })
+})
+
+
+# ============================================================================
+# TEST: DIFF ALGORITHM - KEY-BASED
+# ============================================================================
+
+describe("DiffAlgorithm - Key-based", () => {
+  
+  it("should match children by key", () => {
+    oldNode = VNode(
+      type: "Container",
+      props: Map {},
+      children: [
+        VNode(type: "Text", props: Map { "text": "A" }, key: Some("text-a")),
+        VNode(type: "Text", props: Map { "text": "B" }, key: Some("text-b"))
+      ]
+    )
+    
+    newNode = VNode(
+      type: "Container",
+      props: Map {},
+      children: [
+        VNode(type: "Text", props: Map { "text": "A" }, key: Some("text-a")),
+        VNode(type: "Text", props: Map { "text": "B-updated" }, key: Some("text-b"))
+      ]
+    )
+    
+    result = diffNodes(oldNode, newNode)
+    
+    expect(result.hasChanges()).toBe(true)
+    # text-b debe detectarse como update, no replace
+    expect(result.countByType(PatchType.Replace)).toBe(0)
+  })
+  
+  
+  it("should detect reordering with keys", () => {
+    oldNode = VNode(
+      type: "Container",
+      props: Map {},
+      children: [
+        VNode(type: "Text", props: Map {}, key: Some("a")),
+        VNode(type: "Text", props: Map {}, key: Some("b")),
+        VNode(type: "Text", props: Map {}, key: Some("c"))
+      ]
+    )
+    
+    newNode = VNode(
+      type: "Container",
+      props: Map {},
+      children: [
+        VNode(type: "Text", props: Map {}, key: Some("c")),
+        VNode(type: "Text", props: Map {}, key: Some("a")),
+        VNode(type: "Text", props: Map {}, key: Some("b"))
+      ]
+    )
+    
+    result = diffNodes(oldNode, newNode)
+    
+    # Debe detectar reordering
+    expect(result.countByType(PatchType.Reorder)).toBeGreaterThan(0)
+  })
+  
+  
+  it("should detect removed keys", () => {
+    oldNode = VNode(
+      type: "Container",
+      props: Map {},
+      children: [
+        VNode(type: "Text", props: Map {}, key: Some("a")),
+        VNode(type: "Text", props: Map {}, key: Some("b")),
+        VNode(type: "Text", props: Map {}, key: Some("c"))
+      ]
+    )
+    
+    newNode = VNode(
+      type: "Container",
+      props: Map {},
+      children: [
+        VNode(type: "Text", props: Map {}, key: Some("a")),
+        VNode(type: "Text", props: Map {}, key: Some("c"))
+      ]
+    )
+    
+    result = diffNodes(oldNode, newNode)
+    
+    # "b" fue removido
+    expect(result.countByType(PatchType.Remove)).toBe(1)
+  })
+  
+  
+  it("should detect new keys", () => {
+    oldNode = VNode(
+      type: "Container",
+      props: Map {},
+      children: [
+        VNode(type: "Text", props: Map {}, key: Some("a"))
+      ]
+    )
+    
+    newNode = VNode(
+      type: "Container",
+      props: Map {},
+      children: [
+        VNode(type: "Text", props: Map {}, key: Some("a")),
+        VNode(type: "Text", props: Map {}, key: Some("b"))
+      ]
+    )
+    
+    result = diffNodes(oldNode, newNode)
+    
+    # "b" es nuevo
+    expect(result.countByType(PatchType.Create)).toBe(1)
+  })
+})
+
+
+# ============================================================================
+# TEST: DIFF OPTIMIZER
+# ============================================================================
+
+describe("DiffOptimizer", () => {
+  
+  it("should deduplicate patches", () => {
+    result = DiffResult {}
+    
+    # Agregar patches duplicados
+    patch1 = Patch {
+      type: PatchType.Create,
+      node: VNode(type: "Text", props: Map {}),
+      index: 1
+    }
+    
+    result.addPatch(patch1)
+    result.addPatch(patch1)  # Duplicado
+    
+    optimized = DiffOptimizer.optimize(result)
+    
+    expect(optimized.patches.length).toBe(1)
+  })
+  
+  
+  it("should merge consecutive props patches", () => {
+    result = DiffResult {}
+    
+    node = VNode(type: "Container", props: Map {})
+    
+    result.addPatch(Patch {
+      type: PatchType.Props,
+      node: node,
+      props: Map { "width": 100 },
+      index: 1
+    })
+    
+    result.addPatch(Patch {
+      type: PatchType.Props,
+      node: node,
+      props: Map { "height": 100 },
+      index: 1
+    })
+    
+    optimized = DiffOptimizer.optimize(result)
+    
+    # Debe fusionar en un solo patch
+    expect(optimized.patches.length).toBe(1)
+    expect(optimized.patches[0].props.has("width")).toBe(true)
+    expect(optimized.patches[0].props.has("height")).toBe(true)
+  })
+  
+  
+  it("should filter canceling patches", () => {
+    result = DiffResult {}
+    
+    node = VNode(type: "Text", props: Map {})
+    
+    # CREATE seguido de REMOVE inmediato
+    result.addPatch(Patch {
+      type: PatchType.Create,
+      node: node,
+      index: 1
+    })
+    
+    result.addPatch(Patch {
+      type: PatchType.Remove,
+      node: node,
+      index: 1
+    })
+    
+    optimized = DiffOptimizer.optimize(result)
+    
+    # Ambos deben cancelarse
+    expect(optimized.patches.length).toBe(0)
+  })
+})
+
+
+# ============================================================================
+# TEST: PUBLIC API
+# ============================================================================
+
+describe("Public API", () => {
+  
+  it("should diff trees", () => {
+    oldTree = VTree(VNode(type: "Container", props: Map { "width": 100 }))
+    newTree = VTree(VNode(type: "Container", props: Map { "width": 200 }))
+    
+    result = diff(oldTree, newTree)
+    
+    expect(result.hasChanges()).toBe(true)
+  })
+  
+  
+  it("should diff nodes directly", () => {
+    oldNode = VNode(type: "Text", props: Map { "text": "Old" })
+    newNode = VNode(type: "Text", props: Map { "text": "New" })
+    
+    result = diffNodes(oldNode, newNode)
+    
+    expect(result.hasChanges()).toBe(true)
+  })
+  
+  
+  it("should return optimized result", () => {
+    # Tree con patches duplicados
+    oldNode = VNode(
+      type: "Container",
+      props: Map {},
+      children: [
+        VNode(type: "Text", props: Map {}),
+        VNode(type: "Text", props: Map {})
+      ]
+    )
+    
+    newNode = VNode(
+      type: "Container",
+      props: Map {},
+      children: [
+        VNode(type: "Text", props: Map {}),
+        VNode(type: "Text", props: Map {})
+      ]
+    )
+    
+    result = diffNodes(oldNode, newNode)
+    
+    # No debe haber patches (idénticos)
+    expect(result.hasChanges()).toBe(false)
+  })
+})
+
+
+# ============================================================================
+# TEST: INTEGRATION - REAL WORLD SCENARIOS
+# ============================================================================
+
+describe("Integration - Real World", () => {
+  
+  it("should handle todo list update", () => {
+    # Escenario: agregar item a lista
+    oldWidget = Container(
+      child: Column(
+        children: [
+          Text("Item 1", key: "item-1"),
+          Text("Item 2", key: "item-2")
+        ]
+      )
+    )
+    
+    newWidget = Container(
+      child: Column(
+        children: [
+          Text("Item 1", key: "item-1"),
+          Text("Item 2", key: "item-2"),
+          Text("Item 3", key: "item-3")
+        ]
+      )
+    )
+    
+    context = BuildContext.mock()
+    oldTree = VTree.fromWidget(oldWidget, context)
+    newTree = VTree.fromWidget(newWidget, context)
+    
+    result = diff(oldTree, newTree)
+    
+    expect(result.hasChanges()).toBe(true)
+    expect(result.countByType(PatchType.Create)).toBeGreaterThan(0)
+  })
+  
+  
+  it("should handle todo list reorder", () => {
+    # Escenario: reordenar items
+    oldWidget = Container(
+      child: Column(
+        children: [
+          Text("A", key: "a"),
+          Text("B", key: "b"),
+          Text("C", key: "c")
+        ]
+      )
+    )
+    
+    newWidget = Container(
+      child: Column(
+        children: [
+          Text("C", key: "c"),
+          Text("A", key: "a"),
+          Text("B", key: "b")
+        ]
+      )
+    )
+    
+    context = BuildContext.mock()
+    oldTree = VTree.fromWidget(oldWidget, context)
+    newTree = VTree.fromWidget(newWidget, context)
+    
+    result = diff(oldTree, newTree)
+    
+    # Debe detectar reordering
+    expect(result.hasChanges()).toBe(true)
+  })
+  
+  
+  it("should handle form field update", () => {
+    # Escenario: usuario escribe en input
+    oldWidget = Container(
+      child: TextField(value: "", placeholder: "Enter name")
+    )
+    
+    newWidget = Container(
+      child: TextField(value: "John", placeholder: "Enter name")
+    )
+    
+    context = BuildContext.mock()
+    oldTree = VTree.fromWidget(oldWidget, context)
+    newTree = VTree.fromWidget(newWidget, context)
+    
+    result = diff(oldTree, newTree)
+    
+    expect(result.hasChanges()).toBe(true)
+    expect(result.countByType(PatchType.Props)).toBeGreaterThan(0)
+  })
+  
+  
+  it("should handle conditional rendering", () => {
+    # Escenario: mostrar/ocultar elemento
+    oldWidget = Container(
+      child: Column(
+        children: [
+          Text("Always visible")
+        ]
+      )
+    )
+    
+    newWidget = Container(
+      child: Column(
+        children: [
+          Text("Always visible"),
+          Text("Now visible")
+        ]
+      )
+    )
+    
+    context = BuildContext.mock()
+    oldTree = VTree.fromWidget(oldWidget, context)
+    newTree = VTree.fromWidget(newWidget, context)
+    
+    result = diff(oldTree, newTree)
+    
+    expect(result.countByType(PatchType.Create)).toBe(1)
+  })
+})
+
+
+# ============================================================================
+# TEST: PERFORMANCE
+# ============================================================================
+
+describe("Performance", () => {
+  
+  it("should handle large lists efficiently", () => {
+    # Crear listas grandes
+    oldChildren = (0..100).map(i => {
+      VNode(type: "Text", props: Map { "text": "Item ${i}" }, key: Some("item-${i}"))
+    })
+    
+    newChildren = (0..100).map(i => {
+      VNode(type: "Text", props: Map { "text": "Item ${i}" }, key: Some("item-${i}"))
+    })
+    
+    oldNode = VNode(type: "Container", props: Map {}, children: oldChildren)
+    newNode = VNode(type: "Container", props: Map {}, children: newChildren)
+    
+    startTime = Date.now()
+    result = diffNodes(oldNode, newNode)
+    endTime = Date.now()
+    
+    # Debe ser rápido (< 100ms para 100 items idénticos)
+    expect(endTime - startTime).toBeLessThan(100)
+    expect(result.hasChanges()).toBe(false)
+  })
+})
+
+
+# ============================================================================
+# RUN TESTS
+# ============================================================================
+
+@test
+fn runAllDiffTests() -> void {
+  print("Running TASK-060 Diffing Algorithm Tests...")
+}
