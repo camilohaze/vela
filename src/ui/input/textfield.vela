@@ -1,0 +1,678 @@
+"""
+TextField & Text Input Widgets - Componentes de entrada de texto
+
+Inspirado en:
+- Flutter: TextField, TextFormField
+- HTML: <input>, <textarea>
+- Material Design: Text fields
+- iOS: UITextField
+
+Sprint: 20
+Task: TASK-056
+"""
+
+import 'src/ui/widget' show { Widget, StatefulWidget, BuildContext }
+import 'src/ui/layout/container' show { Container, EdgeInsets, BoxDecoration, Border, BorderRadius }
+import 'system:reactive' show { Signal }
+
+# ============================================================================
+# TEXT FIELD - Input de texto básico
+# ============================================================================
+
+"""
+TextField: Campo de entrada de texto.
+
+Ejemplo básico:
+```vela
+TextField(
+  placeholder: "Enter your name",
+  onChanged: (value) => { this.name = value }
+)
+```
+
+Ejemplo con validación:
+```vela
+TextField(
+  placeholder: "Email",
+  keyboardType: KeyboardType.Email,
+  validator: (value) => {
+    if !value.contains("@") {
+      return Some("Invalid email")
+    }
+    return None
+  },
+  onChanged: (value) => { this.email = value }
+)
+```
+
+Ejemplo con password:
+```vela
+TextField(
+  placeholder: "Password",
+  obscureText: true,
+  onChanged: (value) => { this.password = value }
+)
+```
+"""
+widget TextField extends StatefulWidget {
+  """Valor inicial del campo"""
+  initialValue: String = ""
+  
+  """Placeholder text"""
+  placeholder: String = ""
+  
+  """Label encima del campo"""
+  label: Option<String> = None
+  
+  """Texto de ayuda debajo del campo"""
+  helperText: Option<String> = None
+  
+  """Icon al inicio del campo"""
+  prefixIcon: Option<Widget> = None
+  
+  """Icon al final del campo"""
+  suffixIcon: Option<Widget> = None
+  
+  """Si el texto debe estar oculto (passwords)"""
+  obscureText: Bool = false
+  
+  """Si el campo está habilitado"""
+  enabled: Bool = true
+  
+  """Si el campo es de solo lectura"""
+  readOnly: Bool = false
+  
+  """Número máximo de líneas (1 = single line, >1 = multiline)"""
+  maxLines: Number = 1
+  
+  """Número máximo de caracteres"""
+  maxLength: Option<Number> = None
+  
+  """Tipo de teclado"""
+  keyboardType: KeyboardType = KeyboardType.Text
+  
+  """Text capitalization"""
+  textCapitalization: TextCapitalization = TextCapitalization.None
+  
+  """Text align"""
+  textAlign: TextAlign = TextAlign.Start
+  
+  """Autocorrect habilitado"""
+  autocorrect: Bool = true
+  
+  """Callback cuando cambia el texto"""
+  onChanged: Option<(String) -> void> = None
+  
+  """Callback cuando se envía (Enter key)"""
+  onSubmitted: Option<(String) -> void> = None
+  
+  """Validador (retorna None si válido, Some(error) si inválido)"""
+  validator: Option<(String) -> Option<String>> = None
+  
+  """Estado: valor actual del campo"""
+  state value: String = this.initialValue
+  
+  """Estado: si el campo tiene foco"""
+  state isFocused: Bool = false
+  
+  """Estado: si el campo ha sido tocado (para mostrar errores)"""
+  state isTouched: Bool = false
+  
+  """Estado: mensaje de error actual"""
+  state errorMessage: Option<String> = None
+  
+  """
+  Valida el campo actual.
+  Retorna true si válido, false si inválido.
+  """
+  fn validate() -> Bool {
+    if let Some(validatorFn) = this.validator {
+      this.errorMessage = validatorFn(this.value)
+      return this.errorMessage.isNone()
+    }
+    return true
+  }
+  
+  """Handle cambio de texto"""
+  fn handleChange(newValue: String) -> void {
+    # Aplicar maxLength si existe
+    finalValue = if let Some(max) = this.maxLength {
+      newValue.substring(0, max)
+    } else {
+      newValue
+    }
+    
+    this.value = finalValue
+    
+    # Validar si ya fue tocado
+    if this.isTouched {
+      this.validate()
+    }
+    
+    # Callback
+    if let Some(callback) = this.onChanged {
+      callback(finalValue)
+    }
+  }
+  
+  """Handle submit (Enter key)"""
+  fn handleSubmit() -> void {
+    this.isTouched = true
+    this.validate()
+    
+    if let Some(callback) = this.onSubmitted {
+      callback(this.value)
+    }
+  }
+  
+  """Handle focus"""
+  fn handleFocus() -> void {
+    this.isFocused = true
+  }
+  
+  """Handle blur (pierde foco)"""
+  fn handleBlur() -> void {
+    this.isFocused = false
+    this.isTouched = true
+    this.validate()
+  }
+  
+  fn build(context: BuildContext) -> Widget {
+    # Determinar estado visual
+    hasError = this.errorMessage.isSome()
+    borderColor = if hasError {
+      Color.red
+    } else if this.isFocused {
+      Color.primary
+    } else {
+      Color.gray.withOpacity(0.5)
+    }
+    
+    borderWidth = if this.isFocused { 2 } else { 1 }
+    
+    # Construir contenido del campo
+    inputWidget = Container(
+      padding: Some(EdgeInsets.symmetric(horizontal: 12, vertical: 10)),
+      decoration: Some(BoxDecoration {
+        color: Some(if this.enabled { Color.white } else { Color.gray.withOpacity(0.1) }),
+        border: Some(Border.all(color: borderColor, width: borderWidth)),
+        borderRadius: Some(BorderRadius.circular(4))
+      }),
+      child: Some(
+        Row(
+          children: [
+            # Prefix icon
+            if let Some(icon) = this.prefixIcon {
+              icon,
+              SizedBox { width: Some(8) }
+            },
+            
+            # Input field
+            Expanded(
+              child: TextInput(
+                value: this.value,
+                placeholder: this.placeholder,
+                obscureText: this.obscureText,
+                enabled: this.enabled,
+                readOnly: this.readOnly,
+                maxLines: this.maxLines,
+                textAlign: this.textAlign,
+                onChanged: (newValue) => this.handleChange(newValue),
+                onSubmitted: () => this.handleSubmit(),
+                onFocus: () => this.handleFocus(),
+                onBlur: () => this.handleBlur()
+              )
+            ),
+            
+            # Suffix icon
+            if let Some(icon) = this.suffixIcon {
+              SizedBox { width: Some(8) },
+              icon
+            },
+            
+            # Character counter (si maxLength existe)
+            if let Some(max) = this.maxLength {
+              SizedBox { width: Some(8) },
+              Text(
+                "${this.value.length}/${max}",
+                style: TextStyle { fontSize: 12, color: Color.gray }
+              )
+            }
+          ]
+        )
+      )
+    )
+    
+    # Construir widget completo con label, campo y helper/error
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.Start,
+      children: [
+        # Label
+        if let Some(labelText) = this.label {
+          Text(
+            labelText,
+            style: TextStyle {
+              fontSize: 12,
+              fontWeight: FontWeight.Medium,
+              color: if hasError { Color.red } else { Color.black }
+            }
+          ),
+          SizedBox { height: Some(4) }
+        },
+        
+        # Input field
+        inputWidget,
+        
+        # Helper text o error
+        if hasError && let Some(error) = this.errorMessage {
+          SizedBox { height: Some(4) },
+          Text(
+            error,
+            style: TextStyle { fontSize: 12, color: Color.red }
+          )
+        } else if let Some(helper) = this.helperText {
+          SizedBox { height: Some(4) },
+          Text(
+            helper,
+            style: TextStyle { fontSize: 12, color: Color.gray }
+          )
+        }
+      ]
+    )
+  }
+}
+
+"""
+TextInput: Widget nativo de input (usado por TextField).
+Este es un widget primitivo que se mapea al <input> HTML o UITextField nativo.
+"""
+widget TextInput extends StatefulWidget {
+  value: String
+  placeholder: String
+  obscureText: Bool
+  enabled: Bool
+  readOnly: Bool
+  maxLines: Number
+  textAlign: TextAlign
+  onChanged: (String) -> void
+  onSubmitted: () -> void
+  onFocus: () -> void
+  onBlur: () -> void
+  
+  fn build(context: BuildContext) -> Widget {
+    # Este widget se renderiza nativamente
+    return this
+  }
+}
+
+# ============================================================================
+# TEXT AREA - Input multilinea
+# ============================================================================
+
+"""
+TextArea: Campo de texto multilinea.
+Es un TextField con maxLines > 1.
+
+Ejemplo:
+```vela
+TextArea(
+  placeholder: "Enter your message...",
+  minLines: 3,
+  maxLines: 10,
+  onChanged: (value) => { this.message = value }
+)
+```
+"""
+widget TextArea extends StatefulWidget {
+  initialValue: String = ""
+  placeholder: String = ""
+  label: Option<String> = None
+  helperText: Option<String> = None
+  enabled: Bool = true
+  minLines: Number = 3
+  maxLines: Number = 10
+  maxLength: Option<Number> = None
+  onChanged: Option<(String) -> void> = None
+  
+  fn build(context: BuildContext) -> Widget {
+    return TextField {
+      initialValue: this.initialValue,
+      placeholder: this.placeholder,
+      label: this.label,
+      helperText: this.helperText,
+      enabled: this.enabled,
+      maxLines: this.maxLines,
+      maxLength: this.maxLength,
+      onChanged: this.onChanged
+    }
+  }
+}
+
+# ============================================================================
+# ENUMS & TYPES
+# ============================================================================
+
+"""Tipo de teclado"""
+enum KeyboardType {
+  Text,           # Teclado de texto normal
+  Number,         # Teclado numérico
+  Phone,          # Teclado de teléfono
+  Email,          # Teclado con @ y .
+  Url,            # Teclado con / y .com
+  Decimal,        # Teclado numérico con punto decimal
+  DateTime,       # Teclado para fecha/hora
+  VisiblePassword # Teclado para password visible
+}
+
+"""Text capitalization"""
+enum TextCapitalization {
+  None,        # Sin capitalización automática
+  Words,       # Capitalizar primera letra de cada palabra
+  Sentences,   # Capitalizar primera letra de cada oración
+  Characters   # Todas las letras en mayúsculas
+}
+
+"""Text alignment"""
+enum TextAlign {
+  Start,   # Izquierda en LTR, derecha en RTL
+  End,     # Derecha en LTR, izquierda en RTL
+  Left,    # Siempre izquierda
+  Right,   # Siempre derecha
+  Center,  # Centrado
+  Justify  # Justificado
+}
+
+# ============================================================================
+# FORM - Contenedor para múltiples campos
+# ============================================================================
+
+"""
+Form: Contenedor para agrupar campos de formulario y validarlos juntos.
+
+Ejemplo:
+```vela
+widget LoginForm extends StatefulWidget {
+  state email: String = ""
+  state password: String = ""
+  
+  fn handleSubmit() -> void {
+    if this.formKey.currentState.validate() {
+      # Todo válido, hacer login
+      login(this.email, this.password)
+    }
+  }
+  
+  fn build(context: BuildContext) -> Widget {
+    return Form(
+      key: this.formKey,
+      children: [
+        TextField(
+          label: Some("Email"),
+          keyboardType: KeyboardType.Email,
+          validator: (value) => {
+            if !value.contains("@") {
+              return Some("Invalid email")
+            }
+            return None
+          },
+          onChanged: (value) => { this.email = value }
+        ),
+        
+        SizedBox { height: Some(16) },
+        
+        TextField(
+          label: Some("Password"),
+          obscureText: true,
+          validator: (value) => {
+            if value.length < 6 {
+              return Some("Password must be at least 6 characters")
+            }
+            return None
+          },
+          onChanged: (value) => { this.password = value }
+        ),
+        
+        SizedBox { height: Some(24) },
+        
+        ElevatedButton(
+          text: "Login",
+          onPressed: () => this.handleSubmit()
+        )
+      ]
+    )
+  }
+}
+```
+"""
+widget Form extends StatefulWidget {
+  """Children (campos del form)"""
+  children: List<Widget>
+  
+  """Key para acceder al estado del form"""
+  key: Option<FormKey> = None
+  
+  """Auto-validate mode"""
+  autovalidateMode: AutovalidateMode = AutovalidateMode.OnUserInteraction
+  
+  """
+  Valida todos los campos del form.
+  Retorna true si todos son válidos.
+  """
+  fn validate() -> Bool {
+    # Recorrer todos los children y validar los TextField
+    allValid = true
+    
+    this.children.forEach(child => {
+      if child is TextField {
+        valid = child.validate()
+        if !valid {
+          allValid = false
+        }
+      }
+    })
+    
+    return allValid
+  }
+  
+  """Reset todos los campos del form"""
+  fn reset() -> void {
+    this.children.forEach(child => {
+      if child is TextField {
+        child.value = child.initialValue
+        child.errorMessage = None
+        child.isTouched = false
+      }
+    })
+  }
+  
+  fn build(context: BuildContext) -> Widget {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.Stretch,
+      children: this.children
+    )
+  }
+}
+
+"""FormKey: Key para acceder al estado de un Form"""
+class FormKey {
+  """Referencia al estado del form"""
+  currentState: Option<Form> = None
+  
+  """Validar el form"""
+  fn validate() -> Bool {
+    if let Some(form) = this.currentState {
+      return form.validate()
+    }
+    return false
+  }
+  
+  """Reset el form"""
+  fn reset() -> void {
+    if let Some(form) = this.currentState {
+      form.reset()
+    }
+  }
+}
+
+"""Auto-validate mode"""
+enum AutovalidateMode {
+  Always,              # Validar siempre (en cada keystroke)
+  OnUserInteraction,   # Validar después del primer blur
+  Disabled             # No auto-validar (solo en submit)
+}
+
+# ============================================================================
+# VALIDATORS COMUNES
+# ============================================================================
+
+"""
+Validators: Funciones de validación comunes.
+"""
+class Validators {
+  """Validar que el campo no esté vacío"""
+  static fn required(message: String = "This field is required") -> (String) -> Option<String> {
+    return (value: String) => {
+      if value.trim().isEmpty() {
+        return Some(message)
+      }
+      return None
+    }
+  }
+  
+  """Validar email"""
+  static fn email(message: String = "Invalid email address") -> (String) -> Option<String> {
+    return (value: String) => {
+      pattern = r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$"
+      if !value.matches(pattern) {
+        return Some(message)
+      }
+      return None
+    }
+  }
+  
+  """Validar longitud mínima"""
+  static fn minLength(min: Number, message: Option<String> = None) -> (String) -> Option<String> {
+    return (value: String) => {
+      if value.length < min {
+        msg = message.unwrapOr("Must be at least ${min} characters")
+        return Some(msg)
+      }
+      return None
+    }
+  }
+  
+  """Validar longitud máxima"""
+  static fn maxLength(max: Number, message: Option<String> = None) -> (String) -> Option<String> {
+    return (value: String) => {
+      if value.length > max {
+        msg = message.unwrapOr("Must be at most ${max} characters")
+        return Some(msg)
+      }
+      return None
+    }
+  }
+  
+  """Validar patrón regex"""
+  static fn pattern(pattern: String, message: String) -> (String) -> Option<String> {
+    return (value: String) => {
+      if !value.matches(pattern) {
+        return Some(message)
+      }
+      return None
+    }
+  }
+  
+  """Validar número"""
+  static fn numeric(message: String = "Must be a number") -> (String) -> Option<String> {
+    return (value: String) => {
+      if !value.isNumeric() {
+        return Some(message)
+      }
+      return None
+    }
+  }
+  
+  """Validar rango numérico"""
+  static fn range(min: Number, max: Number, message: Option<String> = None) -> (String) -> Option<String> {
+    return (value: String) => {
+      if !value.isNumeric() {
+        return Some("Must be a number")
+      }
+      
+      num = value.toNumber()
+      if num < min || num > max {
+        msg = message.unwrapOr("Must be between ${min} and ${max}")
+        return Some(msg)
+      }
+      return None
+    }
+  }
+  
+  """Componer múltiples validadores"""
+  static fn compose(validators: List<(String) -> Option<String>>) -> (String) -> Option<String> {
+    return (value: String) => {
+      # Ejecutar todos los validadores, retornar primer error
+      validators.forEach(validator => {
+        error = validator(value)
+        if error.isSome() {
+          return error
+        }
+      })
+      return None
+    }
+  }
+}
+
+# ============================================================================
+# STRING EXTENSIONS
+# ============================================================================
+
+"""Extensions para String"""
+extension StringValidation on String {
+  """Verifica si el string está vacío (sin trim)"""
+  fn isEmpty() -> Bool {
+    return this.length == 0
+  }
+  
+  """Verifica si el string contiene solo whitespace"""
+  fn isBlank() -> Bool {
+    return this.trim().isEmpty()
+  }
+  
+  """Verifica si el string es un número válido"""
+  fn isNumeric() -> Bool {
+    # Intenta parsear como número
+    result = Number.tryParse(this)
+    return result.isSome()
+  }
+  
+  """Verifica si el string coincide con un patrón regex"""
+  fn matches(pattern: String) -> Bool {
+    # En un framework real, esto usaría regex engine
+    return true  # Placeholder
+  }
+  
+  """Remove whitespace del inicio y fin"""
+  fn trim() -> String {
+    # En un framework real, esto haría trim real
+    return this  # Placeholder
+  }
+  
+  """Substring (inicio, fin)"""
+  fn substring(start: Number, end: Number) -> String {
+    # En un framework real, esto haría substring real
+    return this  # Placeholder
+  }
+  
+  """Contiene substring"""
+  fn contains(substring: String) -> Bool {
+    # En un framework real, esto verificaría substring
+    return true  # Placeholder
+  }
+  
+  """Longitud del string"""
+  fn length() -> Number {
+    # En un framework real, esto retornaría longitud real
+    return 0  # Placeholder
+  }
+}

@@ -1,0 +1,769 @@
+"""
+Button Widgets - Componentes de botones interactivos
+
+Inspirado en:
+- Flutter: TextButton, ElevatedButton, OutlinedButton, IconButton, FloatingActionButton
+- Material Design: Button specs
+- HTML: <button> element
+- iOS: UIButton
+
+Sprint: 20
+Task: TASK-056
+"""
+
+import 'src/ui/widget' show { Widget, StatelessWidget, StatefulWidget, BuildContext }
+import 'src/ui/layout/container' show { Container, EdgeInsets, BoxDecoration, BorderRadius, Alignment }
+
+# ============================================================================
+# BUTTON BASE - Clase base para todos los botones
+# ============================================================================
+
+"""
+Button: Botón base con funcionalidad común.
+No usar directamente, usar subclases (TextButton, ElevatedButton, etc.)
+"""
+abstract widget Button extends StatefulWidget {
+  """Callback cuando se presiona el botón"""
+  onPressed: Option<() -> void> = None
+  
+  """Callback cuando se hace long press"""
+  onLongPress: Option<() -> void> = None
+  
+  """Si el botón está habilitado (None = auto-detectar por onPressed)"""
+  enabled: Option<Bool> = None
+  
+  """Padding interno del botón"""
+  padding: EdgeInsets = EdgeInsets.symmetric(horizontal: 16, vertical: 12)
+  
+  """Si debe tomar ancho completo"""
+  fullWidth: Bool = false
+  
+  """Estado de loading"""
+  state isLoading: Bool = false
+  
+  """Estado de hover (desktop)"""
+  state isHovered: Bool = false
+  
+  """Estado de pressed"""
+  state isPressed: Bool = false
+  
+  """Estado de focused (teclado)"""
+  state isFocused: Bool = false
+  
+  """
+  Verifica si el botón está habilitado.
+  Deshabilitado si onPressed es None o enabled es false.
+  """
+  fn isEnabled() -> Bool {
+    if let Some(explicitEnabled) = this.enabled {
+      return explicitEnabled
+    }
+    return this.onPressed.isSome()
+  }
+  
+  """Handle tap event"""
+  fn handleTap() -> void {
+    if !this.isEnabled() || this.isLoading {
+      return
+    }
+    
+    if let Some(callback) = this.onPressed {
+      callback()
+    }
+  }
+  
+  """Handle long press event"""
+  fn handleLongPress() -> void {
+    if !this.isEnabled() || this.isLoading {
+      return
+    }
+    
+    if let Some(callback) = this.onLongPress {
+      callback()
+    }
+  }
+}
+
+# ============================================================================
+# TEXT BUTTON - Botón de texto plano (sin fondo)
+# ============================================================================
+
+"""
+TextButton: Botón de texto sin elevación ni fondo.
+Usado para acciones secundarias o de baja prioridad.
+
+Ejemplo:
+```vela
+TextButton(
+  text: "Cancel",
+  onPressed: () => navigator.pop()
+)
+```
+
+Ejemplo con icon:
+```vela
+TextButton(
+  text: "Download",
+  icon: Some(Icon(name: "download")),
+  onPressed: () => downloadFile()
+)
+```
+"""
+widget TextButton extends Button {
+  """Texto del botón"""
+  text: String
+  
+  """Icon opcional (se muestra antes del texto)"""
+  icon: Option<Widget> = None
+  
+  """Color del texto"""
+  color: Color = Color.primary
+  
+  """Tamaño del texto"""
+  fontSize: Number = 14
+  
+  """Font weight"""
+  fontWeight: FontWeight = FontWeight.Medium
+  
+  fn build(context: BuildContext) -> Widget {
+    textColor = if this.isEnabled() { this.color } else { Color.gray }
+    
+    # Opacity cuando está pressed o hovered
+    opacity = if this.isPressed {
+      0.7
+    } else if this.isHovered {
+      0.9
+    } else {
+      1.0
+    }
+    
+    content = if let Some(iconWidget) = this.icon {
+      Row(
+        mainAxisSize: MainAxisSize.Min,
+        children: [
+          iconWidget,
+          SizedBox { width: Some(8) },
+          Text(
+            this.text,
+            style: TextStyle {
+              color: textColor,
+              fontSize: this.fontSize,
+              fontWeight: this.fontWeight
+            }
+          )
+        ]
+      )
+    } else {
+      Text(
+        this.text,
+        style: TextStyle {
+          color: textColor,
+          fontSize: this.fontSize,
+          fontWeight: this.fontWeight
+        }
+      )
+    }
+    
+    # Loading indicator
+    if this.isLoading {
+      content = Row(
+        mainAxisSize: MainAxisSize.Min,
+        children: [
+          CircularProgressIndicator(size: 16, color: textColor),
+          SizedBox { width: Some(8) },
+          content
+        ]
+      )
+    }
+    
+    return Container(
+      padding: Some(this.padding),
+      child: Some(content),
+      onTap: Some(() => this.handleTap()),
+      onLongPress: this.onLongPress.map(|_| () => this.handleLongPress()),
+      cursor: if this.isEnabled() { Cursor.Pointer } else { Cursor.NotAllowed }
+    ).withOpacity(opacity)
+  }
+}
+
+# ============================================================================
+# ELEVATED BUTTON - Botón con elevación (primario)
+# ============================================================================
+
+"""
+ElevatedButton: Botón con fondo de color y elevación (sombra).
+Usado para acciones primarias importantes.
+
+Ejemplo:
+```vela
+ElevatedButton(
+  text: "Submit",
+  onPressed: () => submitForm()
+)
+```
+
+Ejemplo con custom color:
+```vela
+ElevatedButton(
+  text: "Delete",
+  backgroundColor: Color.red,
+  foregroundColor: Color.white,
+  onPressed: () => deleteItem()
+)
+```
+"""
+widget ElevatedButton extends Button {
+  """Texto del botón"""
+  text: String
+  
+  """Icon opcional"""
+  icon: Option<Widget> = None
+  
+  """Color de fondo"""
+  backgroundColor: Color = Color.primary
+  
+  """Color del texto"""
+  foregroundColor: Color = Color.white
+  
+  """Elevación (altura de la sombra)"""
+  elevation: Number = 2
+  
+  """Border radius"""
+  borderRadius: Number = 4
+  
+  fn build(context: BuildContext) -> Widget {
+    bgColor = if this.isEnabled() {
+      if this.isPressed {
+        this.backgroundColor.darken(0.1)
+      } else if this.isHovered {
+        this.backgroundColor.lighten(0.05)
+      } else {
+        this.backgroundColor
+      }
+    } else {
+      Color.gray.withOpacity(0.5)
+    }
+    
+    content = if let Some(iconWidget) = this.icon {
+      Row(
+        mainAxisSize: MainAxisSize.Min,
+        children: [
+          iconWidget,
+          SizedBox { width: Some(8) },
+          Text(
+            this.text,
+            style: TextStyle {
+              color: this.foregroundColor,
+              fontSize: 14,
+              fontWeight: FontWeight.Medium
+            }
+          )
+        ]
+      )
+    } else {
+      Text(
+        this.text,
+        style: TextStyle {
+          color: this.foregroundColor,
+          fontSize: 14,
+          fontWeight: FontWeight.Medium
+        }
+      )
+    }
+    
+    if this.isLoading {
+      content = Row(
+        mainAxisSize: MainAxisSize.Min,
+        children: [
+          CircularProgressIndicator(size: 16, color: this.foregroundColor),
+          SizedBox { width: Some(8) },
+          content
+        ]
+      )
+    }
+    
+    return Container(
+      padding: Some(this.padding),
+      decoration: Some(BoxDecoration {
+        color: Some(bgColor),
+        borderRadius: Some(BorderRadius.circular(this.borderRadius)),
+        boxShadow: if this.isEnabled() {
+          Some([
+            BoxShadow {
+              color: Color.black.withOpacity(0.2),
+              offset: Offset { x: 0, y: this.elevation },
+              blurRadius: this.elevation * 2
+            }
+          ])
+        } else {
+          None
+        }
+      }),
+      child: Some(content),
+      onTap: Some(() => this.handleTap()),
+      onLongPress: this.onLongPress.map(|_| () => this.handleLongPress()),
+      cursor: if this.isEnabled() { Cursor.Pointer } else { Cursor.NotAllowed }
+    )
+  }
+}
+
+# ============================================================================
+# OUTLINED BUTTON - Botón con borde
+# ============================================================================
+
+"""
+OutlinedButton: Botón con borde pero sin fondo.
+Usado para acciones secundarias importantes.
+
+Ejemplo:
+```vela
+OutlinedButton(
+  text: "Cancel",
+  onPressed: () => cancelAction()
+)
+```
+"""
+widget OutlinedButton extends Button {
+  """Texto del botón"""
+  text: String
+  
+  """Icon opcional"""
+  icon: Option<Widget> = None
+  
+  """Color del borde y texto"""
+  color: Color = Color.primary
+  
+  """Ancho del borde"""
+  borderWidth: Number = 1
+  
+  """Border radius"""
+  borderRadius: Number = 4
+  
+  fn build(context: BuildContext) -> Widget {
+    borderColor = if this.isEnabled() { this.color } else { Color.gray }
+    textColor = borderColor
+    
+    bgColor = if this.isPressed {
+      this.color.withOpacity(0.1)
+    } else if this.isHovered {
+      this.color.withOpacity(0.05)
+    } else {
+      Color.transparent
+    }
+    
+    content = if let Some(iconWidget) = this.icon {
+      Row(
+        mainAxisSize: MainAxisSize.Min,
+        children: [
+          iconWidget,
+          SizedBox { width: Some(8) },
+          Text(
+            this.text,
+            style: TextStyle {
+              color: textColor,
+              fontSize: 14,
+              fontWeight: FontWeight.Medium
+            }
+          )
+        ]
+      )
+    } else {
+      Text(
+        this.text,
+        style: TextStyle {
+          color: textColor,
+          fontSize: 14,
+          fontWeight: FontWeight.Medium
+        }
+      )
+    }
+    
+    if this.isLoading {
+      content = Row(
+        mainAxisSize: MainAxisSize.Min,
+        children: [
+          CircularProgressIndicator(size: 16, color: textColor),
+          SizedBox { width: Some(8) },
+          content
+        ]
+      )
+    }
+    
+    return Container(
+      padding: Some(this.padding),
+      decoration: Some(BoxDecoration {
+        color: Some(bgColor),
+        border: Some(Border.all(
+          color: borderColor,
+          width: this.borderWidth
+        )),
+        borderRadius: Some(BorderRadius.circular(this.borderRadius))
+      }),
+      child: Some(content),
+      onTap: Some(() => this.handleTap()),
+      onLongPress: this.onLongPress.map(|_| () => this.handleLongPress()),
+      cursor: if this.isEnabled() { Cursor.Pointer } else { Cursor.NotAllowed }
+    )
+  }
+}
+
+# ============================================================================
+# ICON BUTTON - Botón con solo icon
+# ============================================================================
+
+"""
+IconButton: Botón circular/cuadrado con solo un icon.
+Usado para acciones compactas (toolbar, appbar, etc.)
+
+Ejemplo:
+```vela
+IconButton(
+  icon: Icon(name: "close"),
+  onPressed: () => closeDialog()
+)
+```
+
+Ejemplo con tooltip:
+```vela
+IconButton(
+  icon: Icon(name: "edit"),
+  tooltip: Some("Edit item"),
+  onPressed: () => editItem()
+)
+```
+"""
+widget IconButton extends Button {
+  """Icon del botón"""
+  icon: Widget
+  
+  """Color del icon"""
+  color: Color = Color.black
+  
+  """Tamaño del botón"""
+  size: Number = 48
+  
+  """Tooltip opcional"""
+  tooltip: Option<String> = None
+  
+  """Si el fondo es circular (true) o cuadrado (false)"""
+  circular: Bool = true
+  
+  """Color de fondo (None = transparente)"""
+  backgroundColor: Option<Color> = None
+  
+  fn build(context: BuildContext) -> Widget {
+    iconColor = if this.isEnabled() { this.color } else { Color.gray }
+    
+    bgColor = if let Some(bg) = this.backgroundColor {
+      if this.isPressed {
+        bg.darken(0.1)
+      } else if this.isHovered {
+        bg.lighten(0.05)
+      } else {
+        bg
+      }
+    } else {
+      if this.isPressed {
+        Color.gray.withOpacity(0.2)
+      } else if this.isHovered {
+        Color.gray.withOpacity(0.1)
+      } else {
+        Color.transparent
+      }
+    }
+    
+    content = Container(
+      width: Some(this.size),
+      height: Some(this.size),
+      decoration: Some(BoxDecoration {
+        color: Some(bgColor),
+        shape: if this.circular { BoxShape.Circle } else { BoxShape.Rectangle },
+        borderRadius: if !this.circular {
+          Some(BorderRadius.circular(4))
+        } else {
+          None
+        }
+      }),
+      alignment: Some(Alignment.Center),
+      child: Some(this.icon),
+      onTap: Some(() => this.handleTap()),
+      onLongPress: this.onLongPress.map(|_| () => this.handleLongPress()),
+      cursor: if this.isEnabled() { Cursor.Pointer } else { Cursor.NotAllowed }
+    )
+    
+    # Agregar tooltip si existe
+    if let Some(tooltipText) = this.tooltip {
+      return Tooltip(
+        message: tooltipText,
+        child: content
+      )
+    }
+    
+    return content
+  }
+}
+
+# ============================================================================
+# FLOATING ACTION BUTTON (FAB)
+# ============================================================================
+
+"""
+FloatingActionButton: Botón circular flotante para acción principal.
+Típicamente se coloca en la esquina inferior derecha.
+
+Ejemplo:
+```vela
+Stack(
+  children: [
+    # Content
+    ListView(...),
+    
+    # FAB
+    Positioned(
+      bottom: Some(16),
+      right: Some(16),
+      child: FloatingActionButton(
+        icon: Icon(name: "add"),
+        onPressed: () => createNew()
+      )
+    )
+  ]
+)
+```
+"""
+widget FloatingActionButton extends Button {
+  """Icon del FAB"""
+  icon: Widget
+  
+  """Tooltip opcional"""
+  tooltip: Option<String> = None
+  
+  """Color de fondo"""
+  backgroundColor: Color = Color.primary
+  
+  """Color del icon"""
+  foregroundColor: Color = Color.white
+  
+  """Tamaño del FAB (regular = 56, mini = 40, large = 96)"""
+  size: FABSize = FABSize.Regular
+  
+  """Elevación"""
+  elevation: Number = 6
+  
+  fn build(context: BuildContext) -> Widget {
+    sizeValue = match this.size {
+      FABSize.Mini => 40
+      FABSize.Regular => 56
+      FABSize.Large => 96
+    }
+    
+    bgColor = if this.isPressed {
+      this.backgroundColor.darken(0.1)
+    } else if this.isHovered {
+      this.backgroundColor.lighten(0.05)
+    } else {
+      this.backgroundColor
+    }
+    
+    content = Container(
+      width: Some(sizeValue),
+      height: Some(sizeValue),
+      decoration: Some(BoxDecoration {
+        color: Some(bgColor),
+        shape: BoxShape.Circle,
+        boxShadow: Some([
+          BoxShadow {
+            color: Color.black.withOpacity(0.3),
+            offset: Offset { x: 0, y: this.elevation },
+            blurRadius: this.elevation * 2
+          }
+        ])
+      }),
+      alignment: Some(Alignment.Center),
+      child: Some(this.icon),
+      onTap: Some(() => this.handleTap()),
+      cursor: if this.isEnabled() { Cursor.Pointer } else { Cursor.NotAllowed }
+    )
+    
+    if let Some(tooltipText) = this.tooltip {
+      return Tooltip(
+        message: tooltipText,
+        child: content
+      )
+    }
+    
+    return content
+  }
+}
+
+"""Tamaños de FAB"""
+enum FABSize {
+  Mini,     # 40x40
+  Regular,  # 56x56 (default)
+  Large     # 96x96
+}
+
+# ============================================================================
+# BUTTON GROUP - Grupo de botones
+# ============================================================================
+
+"""
+ButtonGroup: Grupo de botones conectados.
+Usado para opciones mutuamente excluyentes (como tabs).
+
+Ejemplo:
+```vela
+ButtonGroup(
+  selectedIndex: this.selectedView,
+  onChanged: (index) => { this.selectedView = index },
+  buttons: [
+    "Day",
+    "Week",
+    "Month",
+    "Year"
+  ]
+)
+```
+"""
+widget ButtonGroup extends StatefulWidget {
+  """Labels de los botones"""
+  buttons: List<String>
+  
+  """Índice seleccionado"""
+  selectedIndex: Number
+  
+  """Callback cuando cambia selección"""
+  onChanged: (Number) -> void
+  
+  """Color del botón seleccionado"""
+  selectedColor: Color = Color.primary
+  
+  """Color de botones no seleccionados"""
+  unselectedColor: Color = Color.gray.withOpacity(0.2)
+  
+  fn build(context: BuildContext) -> Widget {
+    return Row(
+      mainAxisSize: MainAxisSize.Min,
+      children: this.buttons.mapIndexed((text, index) => {
+        isSelected = index == this.selectedIndex
+        isFirst = index == 0
+        isLast = index == this.buttons.length - 1
+        
+        # Border radius solo en first/last
+        borderRadius = if isFirst && isLast {
+          BorderRadius.circular(4)
+        } else if isFirst {
+          BorderRadius.only(topLeft: 4, bottomLeft: 4)
+        } else if isLast {
+          BorderRadius.only(topRight: 4, bottomRight: 4)
+        } else {
+          BorderRadius.zero()
+        }
+        
+        return Container(
+          padding: Some(EdgeInsets.symmetric(horizontal: 16, vertical: 8)),
+          decoration: Some(BoxDecoration {
+            color: Some(if isSelected { this.selectedColor } else { this.unselectedColor }),
+            borderRadius: Some(borderRadius),
+            border: Some(Border.all(color: this.selectedColor, width: 1))
+          }),
+          child: Some(
+            Text(
+              text,
+              style: TextStyle {
+                color: if isSelected { Color.white } else { this.selectedColor },
+                fontWeight: if isSelected { FontWeight.Bold } else { FontWeight.Regular }
+              }
+            )
+          ),
+          onTap: Some(() => this.onChanged(index)),
+          cursor: Cursor.Pointer
+        )
+      })
+    )
+  }
+}
+
+# ============================================================================
+# SUPPORTING TYPES
+# ============================================================================
+
+"""Tipo de cursor"""
+enum Cursor {
+  Default,     # Cursor default
+  Pointer,     # Mano (clickeable)
+  NotAllowed,  # Prohibido (disabled)
+  Text,        # I-beam (texto editable)
+  Move,        # Mover (drag)
+  Grab,        # Mano abierta
+  Grabbing     # Mano cerrada
+}
+
+"""
+Tooltip: Mensaje flotante al hacer hover.
+"""
+widget Tooltip extends StatelessWidget {
+  message: String
+  child: Widget
+  
+  fn build(context: BuildContext) -> Widget {
+    # En un framework real, esto mostraría tooltip al hover
+    # Por ahora, solo retornar child
+    return this.child
+  }
+}
+
+"""
+CircularProgressIndicator: Indicador de carga circular.
+"""
+widget CircularProgressIndicator extends StatelessWidget {
+  size: Number = 24
+  color: Color = Color.primary
+  strokeWidth: Number = 2
+  
+  fn build(context: BuildContext) -> Widget {
+    # En un framework real, esto animaría un spinner
+    return Container(
+      width: Some(this.size),
+      height: Some(this.size)
+      # Aquí iría la lógica de animación del spinner
+    )
+  }
+}
+
+# ============================================================================
+# HELPER EXTENSIONS
+# ============================================================================
+
+"""Extension para Color"""
+extension ColorExtensions on Color {
+  """Oscurecer color"""
+  fn darken(amount: Number) -> Color {
+    r = (this.r * (1.0 - amount)).toNumber()
+    g = (this.g * (1.0 - amount)).toNumber()
+    b = (this.b * (1.0 - amount)).toNumber()
+    return Color { r: r, g: g, b: b }
+  }
+  
+  """Aclarar color"""
+  fn lighten(amount: Number) -> Color {
+    r = (this.r + (255 - this.r) * amount).toNumber()
+    g = (this.g + (255 - this.g) * amount).toNumber()
+    b = (this.b + (255 - this.b) * amount).toNumber()
+    return Color { r: r, g: g, b: b }
+  }
+  
+  """Aplicar opacity"""
+  fn withOpacity(opacity: Number) -> Color {
+    return Color { r: this.r, g: this.g, b: this.b, a: opacity }
+  }
+}
+
+"""Extension para Container (opacity)"""
+extension ContainerOpacity on Container {
+  fn withOpacity(opacity: Number) -> Container {
+    # Aplicar opacity a todo el contenedor
+    # En un framework real, esto envolvería en Opacity widget
+    return this
+  }
+}
