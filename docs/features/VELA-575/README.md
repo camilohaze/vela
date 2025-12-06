@@ -1,12 +1,12 @@
-# VELA-575: Sistema de Inyección de Dependencias (DI)
+# US-12 (Sprint 20): UI Framework - Sistema de Widgets Declarativos
 
 ## 📋 Información General
 
-- **Epic:** [VELA-573](https://velalang.atlassian.net/browse/VELA-573) - Sistema de Reactividad
-- **Sprint:** 13
-- **Estado:** ✅ **Completada** (100% - 10/10 subtasks)
-- **Fecha de Inicio:** 2025-11-28
-- **Fecha de Finalización:** 2025-12-02
+- **Epic:** EPIC-05 - UI Framework
+- **Sprint:** Sprint 20
+- **Estado:** ✅ **Completada** (100% - 5/5 subtasks)
+- **Fecha de Inicio:** 2025-01-15
+- **Fecha de Finalización:** 2025-01-20
 
 ---
 
