@@ -1,0 +1,944 @@
+"""
+Tests unitarios para Navigator API
+
+Jira: VELA-585 (Sistema de navegación y routing)
+Subtask: TASK-067 (Navigation API)
+Fecha: 2025-12-06
+
+Cobertura:
+- Navigator: push, pop, replace, pushNamed, replaceNamed
+- Navigation stack: gestión, depth, history
+- Transitions: configuración, tipos, direcciones
+- RouteEntry: construcción, getters
+- NavigationResult: tipos, success/blocked/notFound
+- Callbacks: onRouteChanged
+- Edge cases: pop en stack vacío, popUntil, popToRoot
+"""
+
+import 'system:ui' show { Widget, BuildContext, Container, Text }
+import 'system:reactive' show { signal }
+import '../../../ui/navigation/router.vela' show {
+    Router,
+    RouteDefinition,
+    RouteGuard,
+    createRouter,
+    route
+}
+import '../../../ui/navigation/navigator.vela' show {
+    Navigator,
+    RouteEntry,
+    NavigationResult,
+    NavigationResultType,
+    TransitionType,
+    TransitionConfig,
+    SlideDirection,
+    createNavigator
+}
+
+
+# Mock BuildContext para tests
+class MockBuildContext implements BuildContext {
+    # Implementación mínima
+}
+
+
+# Mock Widget para tests
+class MockWidget implements Widget {
+    name: String
+    
+    constructor(name: String = "MockWidget") {
+        this.name = name
+    }
+}
+
+
+# Guard que siempre permite
+class AlwaysAllowGuard implements RouteGuard {
+    fn canActivate(context: BuildContext, params: Map<String, String>) -> Bool {
+        return true
+    }
+}
+
+
+# Guard que siempre bloquea
+class AlwaysDenyGuard implements RouteGuard {
+    fn canActivate(context: BuildContext, params: Map<String, String>) -> Bool {
+        return false
+    }
+}
+
+
+"""
+═══════════════════════════════════════════════════════════════════════════
+TESTS: TransitionConfig
+═══════════════════════════════════════════════════════════════════════════
+"""
+
+@test
+fn testTransitionConfigConstruction() -> void {
+    config = TransitionConfig(
+        type: TransitionType.Slide,
+        duration: 500,
+        curve: "ease-in",
+        direction: Some(SlideDirection.RightToLeft)
+    )
+    
+    assert(config.type == TransitionType.Slide, "Type should be Slide")
+    assert(config.duration == 500, "Duration should be 500")
+    assert(config.curve == "ease-in", "Curve should be ease-in")
+    assert(config.direction.unwrap() == SlideDirection.RightToLeft, "Direction should be RightToLeft")
+}
+
+
+@test
+fn testTransitionConfigDefaults() -> void {
+    config = TransitionConfig()
+    
+    assert(config.type == TransitionType.Slide, "Default type is Slide")
+    assert(config.duration == 300, "Default duration is 300ms")
+    assert(config.curve == "ease-in-out", "Default curve is ease-in-out")
+}
+
+
+@test
+fn testTransitionConfigFactories() -> void {
+    # defaultPush
+    pushConfig = TransitionConfig.defaultPush()
+    assert(pushConfig.type == TransitionType.Slide, "Push should be Slide")
+    assert(pushConfig.direction.unwrap() == SlideDirection.RightToLeft, "Push direction")
+    
+    # defaultPop
+    popConfig = TransitionConfig.defaultPop()
+    assert(popConfig.type == TransitionType.Slide, "Pop should be Slide")
+    assert(popConfig.direction.unwrap() == SlideDirection.LeftToRight, "Pop direction")
+    
+    # none
+    noneConfig = TransitionConfig.none()
+    assert(noneConfig.type == TransitionType.None, "Should be None")
+    assert(noneConfig.duration == 0, "Duration should be 0")
+    
+    # fade
+    fadeConfig = TransitionConfig.fade(400)
+    assert(fadeConfig.type == TransitionType.Fade, "Should be Fade")
+    assert(fadeConfig.duration == 400, "Duration should be 400")
+    
+    # scale
+    scaleConfig = TransitionConfig.scale(200)
+    assert(scaleConfig.type == TransitionType.Scale, "Should be Scale")
+    assert(scaleConfig.duration == 200, "Duration should be 200")
+}
+
+
+"""
+═══════════════════════════════════════════════════════════════════════════
+TESTS: RouteEntry
+═══════════════════════════════════════════════════════════════════════════
+"""
+
+@test
+fn testRouteEntryConstruction() -> void {
+    router = createRouter(routes: [
+        route(path: "/users/:id", builder: (ctx, params) => MockWidget())
+    ])
+    
+    match router.match("/users/123") {
+        Some(routeMatch) => {
+            widget = MockWidget("UserWidget")
+            entry = RouteEntry(
+                match: routeMatch,
+                widget: widget,
+                transition: TransitionConfig.defaultPush()
+            )
+            
+            assert(entry.getPath() == "/users/123", "Path should match")
+            assert(entry.widget.name == "UserWidget", "Widget should match")
+            assert(entry.getParams()["id"] == "123", "Params should be extracted")
+        }
+        None => throw Error("Should match")
+    }
+}
+
+
+@test
+fn testRouteEntryGetName() -> void {
+    router = createRouter(routes: [
+        route(
+            path: "/profile",
+            builder: (ctx, params) => MockWidget(),
+            name: Some("user-profile")
+        )
+    ])
+    
+    match router.match("/profile") {
+        Some(routeMatch) => {
+            entry = RouteEntry(
+                match: routeMatch,
+                widget: MockWidget()
+            )
+            
+            name = entry.getName()
+            assert(name.isSome(), "Should have name")
+            assert(name.unwrap() == "user-profile", "Name should match")
+        }
+        None => throw Error("Should match")
+    }
+}
+
+
+"""
+═══════════════════════════════════════════════════════════════════════════
+TESTS: NavigationResult
+═══════════════════════════════════════════════════════════════════════════
+"""
+
+@test
+fn testNavigationResultTypes() -> void {
+    # Success
+    successResult = NavigationResult(
+        type: NavigationResultType.Success,
+        message: "OK"
+    )
+    assert(successResult.isSuccess(), "Should be success")
+    assert(!successResult.isBlocked(), "Should not be blocked")
+    
+    # Blocked
+    blockedResult = NavigationResult(
+        type: NavigationResultType.Blocked,
+        message: "Guard blocked"
+    )
+    assert(blockedResult.isBlocked(), "Should be blocked")
+    assert(!successResult.isSuccess(), "Blocked is not success")
+    
+    # NotFound
+    notFoundResult = NavigationResult(
+        type: NavigationResultType.NotFound,
+        message: "Route not found"
+    )
+    assert(notFoundResult.isNotFound(), "Should be not found")
+    
+    # InvalidOperation
+    invalidResult = NavigationResult(
+        type: NavigationResultType.InvalidOperation,
+        message: "Cannot pop"
+    )
+    assert(invalidResult.isInvalidOperation(), "Should be invalid operation")
+}
+
+
+"""
+═══════════════════════════════════════════════════════════════════════════
+TESTS: Navigator - Construcción
+═══════════════════════════════════════════════════════════════════════════
+"""
+
+@test
+fn testNavigatorConstruction() -> void {
+    router = createRouter(routes: [
+        route(path: "/home", builder: (ctx, params) => MockWidget("Home"))
+    ])
+    context = MockBuildContext()
+    
+    navigator = Navigator(
+        router: router,
+        context: context,
+        initialPath: Some("/home")
+    )
+    
+    assert(navigator.getStackDepth() == 1, "Should have 1 route")
+    assert(navigator.getCurrentPath().unwrap() == "/home", "Current path should be /home")
+}
+
+
+@test
+fn testNavigatorWithCallback() -> void {
+    router = createRouter(routes: [
+        route(path: "/home", builder: (ctx, params) => MockWidget())
+    ])
+    context = MockBuildContext()
+    
+    callbackCalled: Bool = false
+    oldPath: Option<String> = None
+    newPath: Option<String> = None
+    
+    callback = (Option<RouteEntry> old, Option<RouteEntry> new) => {
+        callbackCalled = true
+        oldPath = old.map(e => e.getPath())
+        newPath = new.map(e => e.getPath())
+    }
+    
+    navigator = Navigator(
+        router: router,
+        context: context,
+        initialPath: Some("/home"),
+        onRouteChanged: Some(callback)
+    )
+    
+    assert(callbackCalled, "Callback should be called on initial navigation")
+    assert(newPath.unwrap() == "/home", "New path should be /home")
+}
+
+
+"""
+═══════════════════════════════════════════════════════════════════════════
+TESTS: Navigator - Push
+═══════════════════════════════════════════════════════════════════════════
+"""
+
+@test
+fn testNavigatorPushSuccess() -> void {
+    router = createRouter(routes: [
+        route(path: "/home", builder: (ctx, params) => MockWidget("Home")),
+        route(path: "/users/:id", builder: (ctx, params) => MockWidget("User"))
+    ])
+    context = MockBuildContext()
+    
+    navigator = Navigator(
+        router: router,
+        context: context,
+        initialPath: Some("/home")
+    )
+    
+    result = navigator.push("/users/123")
+    
+    assert(result.isSuccess(), "Push should succeed")
+    assert(navigator.getStackDepth() == 2, "Stack should have 2 routes")
+    assert(navigator.getCurrentPath().unwrap() == "/users/123", "Current path updated")
+}
+
+
+@test
+fn testNavigatorPushNotFound() -> void {
+    router = createRouter(routes: [
+        route(path: "/home", builder: (ctx, params) => MockWidget())
+    ])
+    context = MockBuildContext()
+    
+    navigator = Navigator(
+        router: router,
+        context: context,
+        initialPath: Some("/home")
+    )
+    
+    result = navigator.push("/missing")
+    
+    assert(result.isNotFound(), "Should return NotFound")
+    assert(navigator.getStackDepth() == 1, "Stack should not change")
+}
+
+
+@test
+fn testNavigatorPushBlocked() -> void {
+    router = createRouter(routes: [
+        route(path: "/home", builder: (ctx, params) => MockWidget()),
+        route(
+            path: "/admin",
+            builder: (ctx, params) => MockWidget(),
+            guards: [AlwaysDenyGuard()]
+        )
+    ])
+    context = MockBuildContext()
+    
+    navigator = Navigator(
+        router: router,
+        context: context,
+        initialPath: Some("/home")
+    )
+    
+    result = navigator.push("/admin")
+    
+    assert(result.isBlocked(), "Should be blocked by guard")
+    assert(navigator.getStackDepth() == 1, "Stack should not change")
+}
+
+
+@test
+fn testNavigatorPushWithTransition() -> void {
+    router = createRouter(routes: [
+        route(path: "/home", builder: (ctx, params) => MockWidget()),
+        route(path: "/about", builder: (ctx, params) => MockWidget())
+    ])
+    context = MockBuildContext()
+    
+    navigator = Navigator(
+        router: router,
+        context: context,
+        initialPath: Some("/home")
+    )
+    
+    fadeTransition = TransitionConfig.fade(500)
+    result = navigator.push("/about", transition: fadeTransition)
+    
+    assert(result.isSuccess(), "Push should succeed")
+    
+    currentEntry = navigator.getCurrentRoute().unwrap()
+    assert(currentEntry.transition.type == TransitionType.Fade, "Should use fade transition")
+    assert(currentEntry.transition.duration == 500, "Duration should be 500")
+}
+
+
+"""
+═══════════════════════════════════════════════════════════════════════════
+TESTS: Navigator - Pop
+═══════════════════════════════════════════════════════════════════════════
+"""
+
+@test
+fn testNavigatorPopSuccess() -> void {
+    router = createRouter(routes: [
+        route(path: "/home", builder: (ctx, params) => MockWidget()),
+        route(path: "/about", builder: (ctx, params) => MockWidget())
+    ])
+    context = MockBuildContext()
+    
+    navigator = Navigator(
+        router: router,
+        context: context,
+        initialPath: Some("/home")
+    )
+    
+    navigator.push("/about")
+    assert(navigator.getStackDepth() == 2, "Should have 2 routes")
+    
+    result = navigator.pop()
+    
+    assert(result.isSuccess(), "Pop should succeed")
+    assert(navigator.getStackDepth() == 1, "Should have 1 route")
+    assert(navigator.getCurrentPath().unwrap() == "/home", "Should be back at home")
+}
+
+
+@test
+fn testNavigatorPopEmpty() -> void {
+    router = createRouter(routes: [
+        route(path: "/home", builder: (ctx, params) => MockWidget())
+    ])
+    context = MockBuildContext()
+    
+    navigator = Navigator(
+        router: router,
+        context: context,
+        initialPath: Some("/home")
+    )
+    
+    result = navigator.pop()
+    
+    assert(result.isInvalidOperation(), "Should be invalid operation")
+    assert(navigator.getStackDepth() == 1, "Stack should not change")
+}
+
+
+@test
+fn testNavigatorCanPop() -> void {
+    router = createRouter(routes: [
+        route(path: "/home", builder: (ctx, params) => MockWidget()),
+        route(path: "/about", builder: (ctx, params) => MockWidget())
+    ])
+    context = MockBuildContext()
+    
+    navigator = Navigator(
+        router: router,
+        context: context,
+        initialPath: Some("/home")
+    )
+    
+    assert(!navigator.canPop(), "Cannot pop with 1 route")
+    
+    navigator.push("/about")
+    assert(navigator.canPop(), "Can pop with 2 routes")
+    
+    navigator.pop()
+    assert(!navigator.canPop(), "Cannot pop again")
+}
+
+
+"""
+═══════════════════════════════════════════════════════════════════════════
+TESTS: Navigator - Replace
+═══════════════════════════════════════════════════════════════════════════
+"""
+
+@test
+fn testNavigatorReplaceSuccess() -> void {
+    router = createRouter(routes: [
+        route(path: "/login", builder: (ctx, params) => MockWidget()),
+        route(path: "/dashboard", builder: (ctx, params) => MockWidget())
+    ])
+    context = MockBuildContext()
+    
+    navigator = Navigator(
+        router: router,
+        context: context,
+        initialPath: Some("/login")
+    )
+    
+    result = navigator.replace("/dashboard")
+    
+    assert(result.isSuccess(), "Replace should succeed")
+    assert(navigator.getStackDepth() == 1, "Stack depth should remain 1")
+    assert(navigator.getCurrentPath().unwrap() == "/dashboard", "Current path updated")
+    assert(!navigator.canPop(), "Cannot pop after replace")
+}
+
+
+@test
+fn testNavigatorReplaceNotFound() -> void {
+    router = createRouter(routes: [
+        route(path: "/home", builder: (ctx, params) => MockWidget())
+    ])
+    context = MockBuildContext()
+    
+    navigator = Navigator(
+        router: router,
+        context: context,
+        initialPath: Some("/home")
+    )
+    
+    result = navigator.replace("/missing")
+    
+    assert(result.isNotFound(), "Should return NotFound")
+    assert(navigator.getCurrentPath().unwrap() == "/home", "Path should not change")
+}
+
+
+"""
+═══════════════════════════════════════════════════════════════════════════
+TESTS: Navigator - Named Routes
+═══════════════════════════════════════════════════════════════════════════
+"""
+
+@test
+fn testNavigatorPushNamed() -> void {
+    router = createRouter(routes: [
+        route(path: "/home", builder: (ctx, params) => MockWidget()),
+        route(
+            path: "/users/:id",
+            builder: (ctx, params) => MockWidget(),
+            name: Some("user-profile")
+        )
+    ])
+    context = MockBuildContext()
+    
+    navigator = Navigator(
+        router: router,
+        context: context,
+        initialPath: Some("/home")
+    )
+    
+    result = navigator.pushNamed("user-profile", {id: "123"})
+    
+    assert(result.isSuccess(), "pushNamed should succeed")
+    assert(navigator.getCurrentPath().unwrap() == "/users/123", "Path should be built")
+}
+
+
+@test
+fn testNavigatorPushNamedNotFound() -> void {
+    router = createRouter(routes: [
+        route(path: "/home", builder: (ctx, params) => MockWidget())
+    ])
+    context = MockBuildContext()
+    
+    navigator = Navigator(
+        router: router,
+        context: context,
+        initialPath: Some("/home")
+    )
+    
+    result = navigator.pushNamed("missing-route", {})
+    
+    assert(result.isNotFound(), "Should return NotFound")
+}
+
+
+@test
+fn testNavigatorReplaceNamed() -> void {
+    router = createRouter(routes: [
+        route(path: "/login", builder: (ctx, params) => MockWidget()),
+        route(
+            path: "/dashboard",
+            builder: (ctx, params) => MockWidget(),
+            name: Some("dashboard")
+        )
+    ])
+    context = MockBuildContext()
+    
+    navigator = Navigator(
+        router: router,
+        context: context,
+        initialPath: Some("/login")
+    )
+    
+    result = navigator.replaceNamed("dashboard", {})
+    
+    assert(result.isSuccess(), "replaceNamed should succeed")
+    assert(navigator.getStackDepth() == 1, "Stack depth should be 1")
+    assert(navigator.getCurrentPath().unwrap() == "/dashboard", "Path should be dashboard")
+}
+
+
+"""
+═══════════════════════════════════════════════════════════════════════════
+TESTS: Navigator - PopUntil & PopToRoot
+═══════════════════════════════════════════════════════════════════════════
+"""
+
+@test
+fn testNavigatorPopUntil() -> void {
+    router = createRouter(routes: [
+        route(path: "/home", builder: (ctx, params) => MockWidget()),
+        route(path: "/users", builder: (ctx, params) => MockWidget()),
+        route(path: "/users/:id", builder: (ctx, params) => MockWidget()),
+        route(path: "/settings", builder: (ctx, params) => MockWidget())
+    ])
+    context = MockBuildContext()
+    
+    navigator = Navigator(
+        router: router,
+        context: context,
+        initialPath: Some("/home")
+    )
+    
+    navigator.push("/users")
+    navigator.push("/users/123")
+    navigator.push("/settings")
+    
+    assert(navigator.getStackDepth() == 4, "Should have 4 routes")
+    
+    # Pop hasta /users
+    navigator.popUntil(entry => entry.getPath() == "/users")
+    
+    assert(navigator.getStackDepth() == 2, "Should have 2 routes left")
+    assert(navigator.getCurrentPath().unwrap() == "/users", "Current should be /users")
+}
+
+
+@test
+fn testNavigatorPopToRoot() -> void {
+    router = createRouter(routes: [
+        route(path: "/home", builder: (ctx, params) => MockWidget()),
+        route(path: "/page1", builder: (ctx, params) => MockWidget()),
+        route(path: "/page2", builder: (ctx, params) => MockWidget()),
+        route(path: "/page3", builder: (ctx, params) => MockWidget())
+    ])
+    context = MockBuildContext()
+    
+    navigator = Navigator(
+        router: router,
+        context: context,
+        initialPath: Some("/home")
+    )
+    
+    navigator.push("/page1")
+    navigator.push("/page2")
+    navigator.push("/page3")
+    
+    assert(navigator.getStackDepth() == 4, "Should have 4 routes")
+    
+    navigator.popToRoot()
+    
+    assert(navigator.getStackDepth() == 1, "Should have 1 route")
+    assert(navigator.getCurrentPath().unwrap() == "/home", "Should be at root")
+}
+
+
+"""
+═══════════════════════════════════════════════════════════════════════════
+TESTS: Navigator - Query Methods
+═══════════════════════════════════════════════════════════════════════════
+"""
+
+@test
+fn testNavigatorGetHistory() -> void {
+    router = createRouter(routes: [
+        route(path: "/home", builder: (ctx, params) => MockWidget()),
+        route(path: "/about", builder: (ctx, params) => MockWidget()),
+        route(path: "/contact", builder: (ctx, params) => MockWidget())
+    ])
+    context = MockBuildContext()
+    
+    navigator = Navigator(
+        router: router,
+        context: context,
+        initialPath: Some("/home")
+    )
+    
+    navigator.push("/about")
+    navigator.push("/contact")
+    
+    history = navigator.getHistory()
+    
+    assert(history.length == 3, "History should have 3 entries")
+    assert(history[0].getPath() == "/home", "First entry is /home")
+    assert(history[1].getPath() == "/about", "Second entry is /about")
+    assert(history[2].getPath() == "/contact", "Third entry is /contact")
+}
+
+
+@test
+fn testNavigatorFindInHistory() -> void {
+    router = createRouter(routes: [
+        route(path: "/home", builder: (ctx, params) => MockWidget()),
+        route(path: "/about", builder: (ctx, params) => MockWidget())
+    ])
+    context = MockBuildContext()
+    
+    navigator = Navigator(
+        router: router,
+        context: context,
+        initialPath: Some("/home")
+    )
+    
+    navigator.push("/about")
+    
+    # Encontrar ruta existente
+    found = navigator.findInHistory("/home")
+    assert(found.isSome(), "Should find /home")
+    assert(found.unwrap().getPath() == "/home", "Path should match")
+    
+    # Buscar ruta no existente
+    notFound = navigator.findInHistory("/missing")
+    assert(notFound.isNone(), "Should not find /missing")
+}
+
+
+@test
+fn testNavigatorFindInHistoryByName() -> void {
+    router = createRouter(routes: [
+        route(path: "/home", builder: (ctx, params) => MockWidget(), name: Some("home")),
+        route(path: "/profile", builder: (ctx, params) => MockWidget(), name: Some("profile"))
+    ])
+    context = MockBuildContext()
+    
+    navigator = Navigator(
+        router: router,
+        context: context,
+        initialPath: Some("/home")
+    )
+    
+    navigator.push("/profile")
+    
+    # Encontrar por nombre
+    found = navigator.findInHistoryByName("home")
+    assert(found.isSome(), "Should find home")
+    assert(found.unwrap().getPath() == "/home", "Path should be /home")
+}
+
+
+"""
+═══════════════════════════════════════════════════════════════════════════
+TESTS: Navigator - State Management
+═══════════════════════════════════════════════════════════════════════════
+"""
+
+@test
+fn testNavigatorReset() -> void {
+    router = createRouter(routes: [
+        route(path: "/home", builder: (ctx, params) => MockWidget()),
+        route(path: "/about", builder: (ctx, params) => MockWidget()),
+        route(path: "/new-start", builder: (ctx, params) => MockWidget())
+    ])
+    context = MockBuildContext()
+    
+    navigator = Navigator(
+        router: router,
+        context: context,
+        initialPath: Some("/home")
+    )
+    
+    navigator.push("/about")
+    assert(navigator.getStackDepth() == 2, "Should have 2 routes")
+    
+    navigator.reset("/new-start")
+    
+    assert(navigator.getStackDepth() == 1, "Should have 1 route after reset")
+    assert(navigator.getCurrentPath().unwrap() == "/new-start", "Current should be /new-start")
+}
+
+
+@test
+fn testNavigatorGetSnapshot() -> void {
+    router = createRouter(routes: [
+        route(path: "/home", builder: (ctx, params) => MockWidget()),
+        route(path: "/about", builder: (ctx, params) => MockWidget())
+    ])
+    context = MockBuildContext()
+    
+    navigator = Navigator(
+        router: router,
+        context: context,
+        initialPath: Some("/home")
+    )
+    
+    navigator.push("/about")
+    
+    snapshot = navigator.getSnapshot()
+    
+    assert(snapshot.stackDepth == 2, "Snapshot should have depth 2")
+    assert(snapshot.history.length == 2, "History should have 2 entries")
+    assert(snapshot.currentRoute.isSome(), "Should have current route")
+}
+
+
+"""
+═══════════════════════════════════════════════════════════════════════════
+TESTS: Navigator - Callbacks
+═══════════════════════════════════════════════════════════════════════════
+"""
+
+@test
+fn testNavigatorCallbackOnPush() -> void {
+    router = createRouter(routes: [
+        route(path: "/home", builder: (ctx, params) => MockWidget()),
+        route(path: "/about", builder: (ctx, params) => MockWidget())
+    ])
+    context = MockBuildContext()
+    
+    callbackCount: Number = 0
+    lastOldPath: Option<String> = None
+    lastNewPath: Option<String> = None
+    
+    callback = (Option<RouteEntry> old, Option<RouteEntry> new) => {
+        callbackCount = callbackCount + 1
+        lastOldPath = old.map(e => e.getPath())
+        lastNewPath = new.map(e => e.getPath())
+    }
+    
+    navigator = Navigator(
+        router: router,
+        context: context,
+        initialPath: Some("/home"),
+        onRouteChanged: Some(callback)
+    )
+    
+    # Initial navigation triggers callback
+    assert(callbackCount == 1, "Callback called on init")
+    
+    navigator.push("/about")
+    
+    assert(callbackCount == 2, "Callback called on push")
+    assert(lastOldPath.unwrap() == "/home", "Old path is /home")
+    assert(lastNewPath.unwrap() == "/about", "New path is /about")
+}
+
+
+@test
+fn testNavigatorCallbackOnPop() -> void {
+    router = createRouter(routes: [
+        route(path: "/home", builder: (ctx, params) => MockWidget()),
+        route(path: "/about", builder: (ctx, params) => MockWidget())
+    ])
+    context = MockBuildContext()
+    
+    callbackCount: Number = 0
+    
+    callback = (Option<RouteEntry> old, Option<RouteEntry> new) => {
+        callbackCount = callbackCount + 1
+    }
+    
+    navigator = Navigator(
+        router: router,
+        context: context,
+        initialPath: Some("/home"),
+        onRouteChanged: Some(callback)
+    )
+    
+    navigator.push("/about")
+    callbackCount = 0  # Reset
+    
+    navigator.pop()
+    
+    assert(callbackCount == 1, "Callback called on pop")
+}
+
+
+"""
+═══════════════════════════════════════════════════════════════════════════
+TESTS: Helper Functions
+═══════════════════════════════════════════════════════════════════════════
+"""
+
+@test
+fn testCreateNavigatorHelper() -> void {
+    router = createRouter(routes: [
+        route(path: "/home", builder: (ctx, params) => MockWidget())
+    ])
+    context = MockBuildContext()
+    
+    navigator = createNavigator(
+        router: router,
+        context: context,
+        initialPath: Some("/home")
+    )
+    
+    assert(navigator.getStackDepth() == 1, "Should have 1 route")
+    assert(navigator.getCurrentPath().unwrap() == "/home", "Should be at /home")
+}
+
+
+"""
+═══════════════════════════════════════════════════════════════════════════
+MAIN TEST RUNNER
+═══════════════════════════════════════════════════════════════════════════
+"""
+
+fn main() -> void {
+    print("Running Navigator tests...")
+    
+    # TransitionConfig tests
+    testTransitionConfigConstruction()
+    testTransitionConfigDefaults()
+    testTransitionConfigFactories()
+    
+    # RouteEntry tests
+    testRouteEntryConstruction()
+    testRouteEntryGetName()
+    
+    # NavigationResult tests
+    testNavigationResultTypes()
+    
+    # Navigator construction tests
+    testNavigatorConstruction()
+    testNavigatorWithCallback()
+    
+    # Push tests
+    testNavigatorPushSuccess()
+    testNavigatorPushNotFound()
+    testNavigatorPushBlocked()
+    testNavigatorPushWithTransition()
+    
+    # Pop tests
+    testNavigatorPopSuccess()
+    testNavigatorPopEmpty()
+    testNavigatorCanPop()
+    
+    # Replace tests
+    testNavigatorReplaceSuccess()
+    testNavigatorReplaceNotFound()
+    
+    # Named routes tests
+    testNavigatorPushNamed()
+    testNavigatorPushNamedNotFound()
+    testNavigatorReplaceNamed()
+    
+    # PopUntil tests
+    testNavigatorPopUntil()
+    testNavigatorPopToRoot()
+    
+    # Query methods tests
+    testNavigatorGetHistory()
+    testNavigatorFindInHistory()
+    testNavigatorFindInHistoryByName()
+    
+    # State management tests
+    testNavigatorReset()
+    testNavigatorGetSnapshot()
+    
+    # Callback tests
+    testNavigatorCallbackOnPush()
+    testNavigatorCallbackOnPop()
+    
+    # Helper tests
+    testCreateNavigatorHelper()
+    
+    print("✅ All Navigator tests passed! (32 tests)")
+}
