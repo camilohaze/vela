@@ -1,0 +1,443 @@
+"""
+Tests Unitarios para Color System
+
+Jira: TASK-064 (parte 1/2)
+Historia: VELA-584 (US-14)
+Sprint: 22
+
+Test Coverage:
+- Color construction (RGB, RGBA, hex, HSL)
+- Color manipulation (opacity, lighten, darken, saturate, rotate)
+- Color conversion (toHex, toHSL, toCSSValue)
+- Color interpolation (lerp)
+- Predefined colors
+"""
+
+import 'system:testing' show { describe, it, expect }
+import 'module:styling' show { Color, HSL }
+
+
+describe("Color RGB construction", () => {
+  it("should construct from RGB values", () => {
+    color = Color(255, 128, 0)
+    
+    expect(color.r).toBe(255)
+    expect(color.g).toBe(128)
+    expect(color.b).toBe(0)
+    expect(color.a).toBe(1.0)
+  })
+  
+  it("should clamp RGB values to 0-255", () => {
+    color = Color(-10, 300, 128)
+    
+    expect(color.r).toBe(0)
+    expect(color.g).toBe(255)
+    expect(color.b).toBe(128)
+  })
+  
+  it("should default alpha to 1.0", () => {
+    color = Color(100, 100, 100)
+    
+    expect(color.a).toBe(1.0)
+  })
+  
+  it("should construct with custom alpha", () => {
+    color = Color(100, 100, 100, 0.5)
+    
+    expect(color.a).toBe(0.5)
+  })
+  
+  it("should clamp alpha to 0.0-1.0", () => {
+    color1 = Color(100, 100, 100, -0.5)
+    color2 = Color(100, 100, 100, 1.5)
+    
+    expect(color1.a).toBe(0.0)
+    expect(color2.a).toBe(1.0)
+  })
+})
+
+
+describe("Color factory constructors", () => {
+  it("should create from RGB factory", () => {
+    color = Color.fromRGB(255, 0, 0)
+    
+    expect(color.r).toBe(255)
+    expect(color.g).toBe(0)
+    expect(color.b).toBe(0)
+    expect(color.a).toBe(1.0)
+  })
+  
+  it("should create from RGBA factory", () => {
+    color = Color.fromRGBA(0, 255, 0, 0.5)
+    
+    expect(color.g).toBe(255)
+    expect(color.a).toBe(0.5)
+  })
+})
+
+
+describe("Color hex parsing", () => {
+  it("should parse 3-digit hex (#RGB)", () => {
+    result = Color.fromHex("#F0A")
+    
+    match result {
+      Ok(color) => {
+        expect(color.r).toBe(255)
+        expect(color.g).toBe(0)
+        expect(color.b).toBe(170)
+      }
+      Err(e) => throw Error("Expected Ok, got Err: ${e}")
+    }
+  })
+  
+  it("should parse 6-digit hex (#RRGGBB)", () => {
+    result = Color.fromHex("#FF5733")
+    
+    match result {
+      Ok(color) => {
+        expect(color.r).toBe(255)
+        expect(color.g).toBe(87)
+        expect(color.b).toBe(51)
+        expect(color.a).toBe(1.0)
+      }
+      Err(e) => throw Error("Expected Ok")
+    }
+  })
+  
+  it("should parse 8-digit hex with alpha (#RRGGBBAA)", () => {
+    result = Color.fromHex("#FF573380")
+    
+    match result {
+      Ok(color) => {
+        expect(color.r).toBe(255)
+        expect(color.g).toBe(87)
+        expect(color.b).toBe(51)
+        expect(color.a).toBeCloseTo(0.5, 0.01)
+      }
+      Err(e) => throw Error("Expected Ok")
+    }
+  })
+  
+  it("should parse hex without # prefix", () => {
+    result = Color.fromHex("FF0000")
+    
+    match result {
+      Ok(color) => expect(color.r).toBe(255)
+      Err(e) => throw Error("Expected Ok")
+    }
+  })
+  
+  it("should handle invalid hex length", () => {
+    result = Color.fromHex("#FFFF")
+    
+    match result {
+      Ok(_) => throw Error("Expected Err")
+      Err(e) => expect(e).toContain("length")
+    }
+  })
+  
+  it("should handle invalid hex characters", () => {
+    result = Color.fromHex("#GGGGGG")
+    
+    match result {
+      Ok(_) => throw Error("Expected Err")
+      Err(e) => expect(e).toContain("format")
+    }
+  })
+})
+
+
+describe("Color HSL construction", () => {
+  it("should create from HSL values", () => {
+    # Pure red: H=0, S=1, L=0.5
+    color = Color.fromHSL(0.0, 1.0, 0.5)
+    
+    expect(color.r).toBe(255)
+    expect(color.g).toBeCloseTo(0, 1)
+    expect(color.b).toBeCloseTo(0, 1)
+  })
+  
+  it("should handle hue wraparound", () => {
+    color1 = Color.fromHSL(0.0, 1.0, 0.5)
+    color2 = Color.fromHSL(360.0, 1.0, 0.5)
+    color3 = Color.fromHSL(720.0, 1.0, 0.5)
+    
+    expect(color1.r).toBe(color2.r)
+    expect(color2.r).toBe(color3.r)
+  })
+  
+  it("should create grayscale when saturation is 0", () => {
+    color = Color.fromHSL(0.0, 0.0, 0.5)
+    
+    expect(color.r).toBe(color.g)
+    expect(color.g).toBe(color.b)
+  })
+  
+  it("should support alpha in HSL", () => {
+    color = Color.fromHSL(120.0, 1.0, 0.5, 0.5)
+    
+    expect(color.a).toBe(0.5)
+  })
+})
+
+
+describe("Color manipulation", () => {
+  it("should change opacity", () => {
+    color = Color(255, 0, 0, 1.0)
+    modified = color.withOpacity(0.5)
+    
+    expect(modified.a).toBe(0.5)
+    expect(color.a).toBe(1.0)  # Original no cambia
+  })
+  
+  it("should clamp opacity to 0.0-1.0", () => {
+    color = Color(255, 0, 0)
+    
+    tooLow = color.withOpacity(-0.5)
+    tooHigh = color.withOpacity(1.5)
+    
+    expect(tooLow.a).toBe(0.0)
+    expect(tooHigh.a).toBe(1.0)
+  })
+  
+  it("should change individual RGB components", () => {
+    color = Color(100, 100, 100)
+    
+    redChanged = color.withRed(200)
+    greenChanged = color.withGreen(200)
+    blueChanged = color.withBlue(200)
+    
+    expect(redChanged.r).toBe(200)
+    expect(greenChanged.g).toBe(200)
+    expect(blueChanged.b).toBe(200)
+  })
+  
+  it("should lighten color", () => {
+    color = Color(100, 100, 100)
+    lightened = color.lighten(0.2)
+    
+    hsl = lightened.toHSL()
+    originalHsl = color.toHSL()
+    
+    expect(hsl.l).toBeGreaterThan(originalHsl.l)
+  })
+  
+  it("should darken color", () => {
+    color = Color(200, 200, 200)
+    darkened = color.darken(0.2)
+    
+    hsl = darkened.toHSL()
+    originalHsl = color.toHSL()
+    
+    expect(hsl.l).toBeLessThan(originalHsl.l)
+  })
+  
+  it("should saturate color", () => {
+    color = Color(150, 100, 100)
+    saturated = color.saturate(0.3)
+    
+    hsl = saturated.toHSL()
+    originalHsl = color.toHSL()
+    
+    expect(hsl.s).toBeGreaterThan(originalHsl.s)
+  })
+  
+  it("should desaturate color", () => {
+    color = Color(255, 0, 0)
+    desaturated = color.desaturate(0.5)
+    
+    hsl = desaturated.toHSL()
+    originalHsl = color.toHSL()
+    
+    expect(hsl.s).toBeLessThan(originalHsl.s)
+  })
+  
+  it("should rotate hue", () => {
+    color = Color(255, 0, 0)  # Red
+    rotated = color.rotate(120.0)  # Should be green-ish
+    
+    hsl = rotated.toHSL()
+    expect(hsl.h).toBeCloseTo(120.0, 1)
+  })
+  
+  it("should get complementary color", () => {
+    color = Color(255, 0, 0)  # Red
+    complement = color.complement()
+    
+    hsl = complement.toHSL()
+    expect(hsl.h).toBeCloseTo(180.0, 1)  # Cyan
+  })
+})
+
+
+describe("Color conversion", () => {
+  it("should convert to HSL", () => {
+    color = Color(255, 0, 0)
+    hsl = color.toHSL()
+    
+    expect(hsl.h).toBeCloseTo(0.0, 1)
+    expect(hsl.s).toBeCloseTo(1.0, 0.01)
+    expect(hsl.l).toBeCloseTo(0.5, 0.01)
+  })
+  
+  it("should convert to hex", () => {
+    color = Color(255, 87, 51)
+    hex = color.toHex()
+    
+    expect(hex).toBe("#ff5733")
+  })
+  
+  it("should convert to hex with alpha", () => {
+    color = Color(255, 0, 0, 0.5)
+    hex = color.toHexWithAlpha()
+    
+    expect(hex).toContain("#ff0000")
+    expect(hex.length).toBe(9)  # #RRGGBBAA
+  })
+  
+  it("should convert to CSS rgb()", () => {
+    color = Color(255, 128, 0)
+    css = color.toCSSValue()
+    
+    expect(css).toBe("rgb(255, 128, 0)")
+  })
+  
+  it("should convert to CSS rgba() when alpha < 1.0", () => {
+    color = Color(255, 128, 0, 0.5)
+    css = color.toCSSValue()
+    
+    expect(css).toContain("rgba")
+    expect(css).toContain("0.5")
+  })
+})
+
+
+describe("Color interpolation", () => {
+  it("should interpolate between two colors", () => {
+    black = Color.black()
+    white = Color.white()
+    
+    gray = black.lerp(white, 0.5)
+    
+    expect(gray.r).toBeCloseTo(128, 1)
+    expect(gray.g).toBeCloseTo(128, 1)
+    expect(gray.b).toBeCloseTo(128, 1)
+  })
+  
+  it("should return first color when t=0", () => {
+    red = Color.red()
+    blue = Color.blue()
+    
+    result = red.lerp(blue, 0.0)
+    
+    expect(result.r).toBe(255)
+    expect(result.b).toBe(0)
+  })
+  
+  it("should return second color when t=1", () => {
+    red = Color.red()
+    blue = Color.blue()
+    
+    result = red.lerp(blue, 1.0)
+    
+    expect(result.r).toBe(0)
+    expect(result.b).toBe(255)
+  })
+  
+  it("should interpolate alpha", () => {
+    opaque = Color(100, 100, 100, 1.0)
+    transparent = Color(100, 100, 100, 0.0)
+    
+    result = opaque.lerp(transparent, 0.5)
+    
+    expect(result.a).toBe(0.5)
+  })
+  
+  it("should clamp t to 0.0-1.0", () => {
+    red = Color.red()
+    blue = Color.blue()
+    
+    result1 = red.lerp(blue, -0.5)
+    result2 = red.lerp(blue, 1.5)
+    
+    expect(result1.r).toBe(255)
+    expect(result2.b).toBe(255)
+  })
+})
+
+
+describe("Color predefined colors", () => {
+  it("should provide black", () => {
+    black = Color.black()
+    
+    expect(black.r).toBe(0)
+    expect(black.g).toBe(0)
+    expect(black.b).toBe(0)
+  })
+  
+  it("should provide white", () => {
+    white = Color.white()
+    
+    expect(white.r).toBe(255)
+    expect(white.g).toBe(255)
+    expect(white.b).toBe(255)
+  })
+  
+  it("should provide transparent", () => {
+    transparent = Color.transparent()
+    
+    expect(transparent.a).toBe(0.0)
+  })
+  
+  it("should provide primary colors", () => {
+    red = Color.red()
+    green = Color.green()
+    blue = Color.blue()
+    
+    expect(red.r).toBe(255)
+    expect(green.g).toBe(255)
+    expect(blue.b).toBe(255)
+  })
+  
+  it("should provide secondary colors", () => {
+    cyan = Color.cyan()
+    magenta = Color.magenta()
+    yellow = Color.yellow()
+    
+    expect(cyan.g).toBe(255)
+    expect(cyan.b).toBe(255)
+    expect(magenta.r).toBe(255)
+    expect(magenta.b).toBe(255)
+    expect(yellow.r).toBe(255)
+    expect(yellow.g).toBe(255)
+  })
+  
+  it("should provide Material Design colors", () => {
+    indigo = Color.indigo()
+    teal = Color.teal()
+    
+    expect(indigo.r).toBe(63)
+    expect(teal.g).toBe(150)
+  })
+})
+
+
+describe("Color immutability", () => {
+  it("should not mutate original when using withOpacity", () => {
+    original = Color(255, 0, 0, 1.0)
+    modified = original.withOpacity(0.5)
+    
+    expect(original.a).toBe(1.0)
+    expect(modified.a).toBe(0.5)
+  })
+  
+  it("should not mutate original when lightening", () => {
+    original = Color(100, 100, 100)
+    lightened = original.lighten(0.5)
+    
+    originalHsl = original.toHSL()
+    lightenedHsl = lightened.toHSL()
+    
+    expect(originalHsl.l).not.toBe(lightenedHsl.l)
+  })
+})

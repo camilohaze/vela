@@ -1,0 +1,472 @@
+"""
+Tests Unitarios para EdgeInsets System
+
+Jira: TASK-064 (parte 2/2)
+Historia: VELA-584 (US-14)
+Sprint: 22
+
+Test Coverage:
+- EdgeInsets construction (all, symmetric, only, zero)
+- Material Design spacing scale
+- Calculations (horizontal, vertical, total)
+- Property checks (uniform, symmetric, zero)
+- Immutable operations (copyWith, add, subtract, scale)
+- CSS rendering
+- Interpolation (lerp)
+- RTL support (resolve)
+- EdgeInsetsDirectional
+"""
+
+import 'system:testing' show { describe, it, expect }
+import 'module:styling' show { EdgeInsets, EdgeInsetsDirectional, TextDirection, Size }
+
+
+describe("EdgeInsets construction", () => {
+  it("should construct with all sides", () => {
+    insets = EdgeInsets(10.0, 20.0, 30.0, 40.0)
+    
+    expect(insets.left).toBe(10.0)
+    expect(insets.top).toBe(20.0)
+    expect(insets.right).toBe(30.0)
+    expect(insets.bottom).toBe(40.0)
+  })
+  
+  it("should clamp negative values to 0", () => {
+    insets = EdgeInsets(-10.0, 20.0, 30.0, 40.0)
+    
+    expect(insets.left).toBe(0.0)
+  })
+})
+
+
+describe("EdgeInsets factory constructors", () => {
+  it("should create uniform spacing with all()", () => {
+    insets = EdgeInsets.all(16.0)
+    
+    expect(insets.left).toBe(16.0)
+    expect(insets.top).toBe(16.0)
+    expect(insets.right).toBe(16.0)
+    expect(insets.bottom).toBe(16.0)
+  })
+  
+  it("should create symmetric spacing", () => {
+    insets = EdgeInsets.symmetric(vertical: 10.0, horizontal: 20.0)
+    
+    expect(insets.left).toBe(20.0)
+    expect(insets.right).toBe(20.0)
+    expect(insets.top).toBe(10.0)
+    expect(insets.bottom).toBe(10.0)
+  })
+  
+  it("should handle symmetric with only vertical", () => {
+    insets = EdgeInsets.symmetric(vertical: 10.0)
+    
+    expect(insets.top).toBe(10.0)
+    expect(insets.bottom).toBe(10.0)
+    expect(insets.left).toBe(0.0)
+    expect(insets.right).toBe(0.0)
+  })
+  
+  it("should handle symmetric with only horizontal", () => {
+    insets = EdgeInsets.symmetric(horizontal: 20.0)
+    
+    expect(insets.left).toBe(20.0)
+    expect(insets.right).toBe(20.0)
+    expect(insets.top).toBe(0.0)
+    expect(insets.bottom).toBe(0.0)
+  })
+  
+  it("should create with only() individual sides", () => {
+    insets = EdgeInsets.only(left: 10.0, top: 20.0)
+    
+    expect(insets.left).toBe(10.0)
+    expect(insets.top).toBe(20.0)
+    expect(insets.right).toBe(0.0)
+    expect(insets.bottom).toBe(0.0)
+  })
+  
+  it("should create zero spacing", () => {
+    insets = EdgeInsets.zero()
+    
+    expect(insets.left).toBe(0.0)
+    expect(insets.top).toBe(0.0)
+    expect(insets.right).toBe(0.0)
+    expect(insets.bottom).toBe(0.0)
+  })
+})
+
+
+describe("EdgeInsets Material Design spacing scale", () => {
+  it("should provide xs spacing (4px)", () => {
+    insets = EdgeInsets.xs()
+    
+    expect(insets.left).toBe(4.0)
+    expect(insets.top).toBe(4.0)
+    expect(insets.right).toBe(4.0)
+    expect(insets.bottom).toBe(4.0)
+  })
+  
+  it("should provide sm spacing (8px)", () => {
+    insets = EdgeInsets.sm()
+    
+    expect(insets.left).toBe(8.0)
+  })
+  
+  it("should provide md spacing (16px)", () => {
+    insets = EdgeInsets.md()
+    
+    expect(insets.left).toBe(16.0)
+  })
+  
+  it("should provide lg spacing (24px)", () => {
+    insets = EdgeInsets.lg()
+    
+    expect(insets.left).toBe(24.0)
+  })
+  
+  it("should provide xl spacing (32px)", () => {
+    insets = EdgeInsets.xl()
+    
+    expect(insets.left).toBe(32.0)
+  })
+  
+  it("should provide xxl spacing (48px)", () => {
+    insets = EdgeInsets.xxl()
+    
+    expect(insets.left).toBe(48.0)
+  })
+})
+
+
+describe("EdgeInsets calculations", () => {
+  it("should calculate horizontal spacing", () => {
+    insets = EdgeInsets(10.0, 20.0, 30.0, 40.0)
+    
+    expect(insets.horizontal()).toBe(40.0)  # left + right
+  })
+  
+  it("should calculate vertical spacing", () => {
+    insets = EdgeInsets(10.0, 20.0, 30.0, 40.0)
+    
+    expect(insets.vertical()).toBe(60.0)  # top + bottom
+  })
+  
+  it("should calculate total spacing", () => {
+    insets = EdgeInsets(10.0, 20.0, 30.0, 40.0)
+    
+    expect(insets.total()).toBe(100.0)  # sum of all sides
+  })
+})
+
+
+describe("EdgeInsets property checks", () => {
+  it("should detect uniform spacing", () => {
+    uniform = EdgeInsets.all(16.0)
+    nonUniform = EdgeInsets(10.0, 20.0, 30.0, 40.0)
+    
+    expect(uniform.isUniform()).toBe(true)
+    expect(nonUniform.isUniform()).toBe(false)
+  })
+  
+  it("should detect symmetric spacing", () => {
+    symmetric = EdgeInsets.symmetric(vertical: 10.0, horizontal: 20.0)
+    nonSymmetric = EdgeInsets(10.0, 20.0, 30.0, 40.0)
+    
+    expect(symmetric.isSymmetric()).toBe(true)
+    expect(nonSymmetric.isSymmetric()).toBe(false)
+  })
+  
+  it("should detect zero spacing", () => {
+    zero = EdgeInsets.zero()
+    nonZero = EdgeInsets.all(16.0)
+    
+    expect(zero.isZero()).toBe(true)
+    expect(nonZero.isZero()).toBe(false)
+  })
+})
+
+
+describe("EdgeInsets immutable operations", () => {
+  it("should copy with modified values", () => {
+    original = EdgeInsets(10.0, 20.0, 30.0, 40.0)
+    modified = original.copyWith(left: 100.0, top: 200.0)
+    
+    expect(modified.left).toBe(100.0)
+    expect(modified.top).toBe(200.0)
+    expect(modified.right).toBe(30.0)  # unchanged
+    expect(modified.bottom).toBe(40.0)  # unchanged
+    
+    # Original no cambia
+    expect(original.left).toBe(10.0)
+  })
+  
+  it("should add two EdgeInsets", () => {
+    a = EdgeInsets.all(10.0)
+    b = EdgeInsets.all(5.0)
+    
+    sum = a.add(b)
+    
+    expect(sum.left).toBe(15.0)
+    expect(sum.top).toBe(15.0)
+    expect(sum.right).toBe(15.0)
+    expect(sum.bottom).toBe(15.0)
+  })
+  
+  it("should subtract EdgeInsets", () => {
+    a = EdgeInsets.all(20.0)
+    b = EdgeInsets.all(5.0)
+    
+    diff = a.subtract(b)
+    
+    expect(diff.left).toBe(15.0)
+    expect(diff.top).toBe(15.0)
+    expect(diff.right).toBe(15.0)
+    expect(diff.bottom).toBe(15.0)
+  })
+  
+  it("should clamp subtract to 0", () => {
+    a = EdgeInsets.all(5.0)
+    b = EdgeInsets.all(10.0)
+    
+    diff = a.subtract(b)
+    
+    expect(diff.left).toBe(0.0)  # clamped, not negative
+  })
+  
+  it("should scale EdgeInsets", () => {
+    insets = EdgeInsets(10.0, 20.0, 30.0, 40.0)
+    
+    scaled = insets.scale(2.0)
+    
+    expect(scaled.left).toBe(20.0)
+    expect(scaled.top).toBe(40.0)
+    expect(scaled.right).toBe(60.0)
+    expect(scaled.bottom).toBe(80.0)
+  })
+  
+  it("should handle negative scale factors", () => {
+    insets = EdgeInsets.all(10.0)
+    
+    scaled = insets.scale(-1.0)
+    
+    expect(scaled.left).toBe(0.0)  # clamped to 0
+  })
+})
+
+
+describe("EdgeInsets interpolation", () => {
+  it("should interpolate between two EdgeInsets", () => {
+    small = EdgeInsets.all(10.0)
+    large = EdgeInsets.all(20.0)
+    
+    mid = small.lerp(large, 0.5)
+    
+    expect(mid.left).toBe(15.0)
+    expect(mid.top).toBe(15.0)
+    expect(mid.right).toBe(15.0)
+    expect(mid.bottom).toBe(15.0)
+  })
+  
+  it("should return first EdgeInsets when t=0", () => {
+    a = EdgeInsets.all(10.0)
+    b = EdgeInsets.all(20.0)
+    
+    result = a.lerp(b, 0.0)
+    
+    expect(result.left).toBe(10.0)
+  })
+  
+  it("should return second EdgeInsets when t=1", () => {
+    a = EdgeInsets.all(10.0)
+    b = EdgeInsets.all(20.0)
+    
+    result = a.lerp(b, 1.0)
+    
+    expect(result.left).toBe(20.0)
+  })
+  
+  it("should clamp t to 0.0-1.0", () => {
+    a = EdgeInsets.all(10.0)
+    b = EdgeInsets.all(20.0)
+    
+    result1 = a.lerp(b, -0.5)
+    result2 = a.lerp(b, 1.5)
+    
+    expect(result1.left).toBe(10.0)
+    expect(result2.left).toBe(20.0)
+  })
+})
+
+
+describe("EdgeInsets CSS rendering", () => {
+  it("should render CSS padding shorthand", () => {
+    insets = EdgeInsets(10.0, 20.0, 30.0, 40.0)
+    
+    css = insets.toCSSPadding()
+    
+    expect(css).toBe("20.0px 30.0px 40.0px 10.0px")  # top right bottom left
+  })
+  
+  it("should render CSS margin shorthand", () => {
+    insets = EdgeInsets(10.0, 20.0, 30.0, 40.0)
+    
+    css = insets.toCSSMargin()
+    
+    expect(css).toBe("20.0px 30.0px 40.0px 10.0px")
+  })
+  
+  it("should render individual CSS properties", () => {
+    insets = EdgeInsets(10.0, 20.0, 30.0, 40.0)
+    
+    props = insets.toCSSProperties("padding")
+    
+    expect(props["padding-left"]).toBe("10.0px")
+    expect(props["padding-top"]).toBe("20.0px")
+    expect(props["padding-right"]).toBe("30.0px")
+    expect(props["padding-bottom"]).toBe("40.0px")
+  })
+  
+  it("should handle zero values in CSS", () => {
+    insets = EdgeInsets.zero()
+    
+    css = insets.toCSSPadding()
+    
+    expect(css).toBe("0.0px 0.0px 0.0px 0.0px")
+  })
+})
+
+
+describe("EdgeInsets utilities", () => {
+  it("should deflate size (reduce by spacing)", () => {
+    insets = EdgeInsets.all(10.0)
+    childSize = Size(100.0, 100.0)
+    
+    available = insets.deflate(childSize)
+    
+    expect(available.width).toBe(80.0)  # 100 - (10 + 10)
+    expect(available.height).toBe(80.0)
+  })
+  
+  it("should clamp deflate to 0", () => {
+    insets = EdgeInsets.all(100.0)
+    childSize = Size(50.0, 50.0)
+    
+    available = insets.deflate(childSize)
+    
+    expect(available.width).toBe(0.0)  # clamped, not negative
+    expect(available.height).toBe(0.0)
+  })
+  
+  it("should inflate size (add spacing)", () => {
+    insets = EdgeInsets.all(10.0)
+    childSize = Size(100.0, 100.0)
+    
+    total = insets.inflate(childSize)
+    
+    expect(total.width).toBe(120.0)  # 100 + (10 + 10)
+    expect(total.height).toBe(120.0)
+  })
+})
+
+
+describe("EdgeInsets RTL support", () => {
+  it("should not swap for LTR", () => {
+    insets = EdgeInsets(10.0, 20.0, 30.0, 40.0)
+    
+    resolved = insets.resolve(TextDirection.LTR)
+    
+    expect(resolved.left).toBe(10.0)
+    expect(resolved.right).toBe(30.0)
+  })
+  
+  it("should swap left/right for RTL", () => {
+    insets = EdgeInsets(10.0, 20.0, 30.0, 40.0)
+    
+    resolved = insets.resolve(TextDirection.RTL)
+    
+    expect(resolved.left).toBe(30.0)  # swapped from right
+    expect(resolved.right).toBe(10.0)  # swapped from left
+    expect(resolved.top).toBe(20.0)  # unchanged
+    expect(resolved.bottom).toBe(40.0)  # unchanged
+  })
+})
+
+
+describe("EdgeInsetsDirectional", () => {
+  it("should construct with start/end", () => {
+    insets = EdgeInsetsDirectional(10.0, 20.0, 30.0, 40.0)
+    
+    expect(insets.start).toBe(10.0)
+    expect(insets.top).toBe(20.0)
+    expect(insets.end).toBe(30.0)
+    expect(insets.bottom).toBe(40.0)
+  })
+  
+  it("should provide factory constructors", () => {
+    insets = EdgeInsetsDirectional.all(16.0)
+    
+    expect(insets.start).toBe(16.0)
+    expect(insets.end).toBe(16.0)
+  })
+  
+  it("should resolve to EdgeInsets for LTR", () => {
+    directional = EdgeInsetsDirectional(10.0, 20.0, 30.0, 40.0)
+    
+    resolved = directional.resolve(TextDirection.LTR)
+    
+    expect(resolved.left).toBe(10.0)  # start → left
+    expect(resolved.right).toBe(30.0)  # end → right
+  })
+  
+  it("should resolve to EdgeInsets for RTL", () => {
+    directional = EdgeInsetsDirectional(10.0, 20.0, 30.0, 40.0)
+    
+    resolved = directional.resolve(TextDirection.RTL)
+    
+    expect(resolved.left).toBe(30.0)  # end → left
+    expect(resolved.right).toBe(10.0)  # start → right
+  })
+  
+  it("should handle symmetric directional", () => {
+    directional = EdgeInsetsDirectional.symmetric(
+      vertical: 10.0,
+      horizontal: 20.0
+    )
+    
+    expect(directional.start).toBe(20.0)
+    expect(directional.end).toBe(20.0)
+    expect(directional.top).toBe(10.0)
+    expect(directional.bottom).toBe(10.0)
+  })
+})
+
+
+describe("EdgeInsets immutability", () => {
+  it("should not mutate original when adding", () => {
+    original = EdgeInsets.all(10.0)
+    other = EdgeInsets.all(5.0)
+    
+    sum = original.add(other)
+    
+    expect(original.left).toBe(10.0)  # unchanged
+    expect(sum.left).toBe(15.0)
+  })
+  
+  it("should not mutate original when scaling", () => {
+    original = EdgeInsets.all(10.0)
+    
+    scaled = original.scale(2.0)
+    
+    expect(original.left).toBe(10.0)  # unchanged
+    expect(scaled.left).toBe(20.0)
+  })
+  
+  it("should not mutate original in copyWith", () => {
+    original = EdgeInsets(10.0, 20.0, 30.0, 40.0)
+    
+    modified = original.copyWith(left: 100.0)
+    
+    expect(original.left).toBe(10.0)  # unchanged
+    expect(modified.left).toBe(100.0)
+  })
+})
