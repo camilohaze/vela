@@ -1,0 +1,662 @@
+"""
+Router widget y sistema de routing
+
+Implementación de: VELA-585 (Sistema de navegación y routing)
+Subtask: TASK-066 (Router widget)
+Fecha: 2025-12-06
+
+Descripción:
+Sistema de routing con definiciones de rutas, matching de paths,
+extracción de parámetros, guards de autenticación/autorización, y
+manejo de rutas no encontradas (404).
+
+Inspiración:
+- Angular Router (RouteConfig, RouterModule)
+- React Router (Route, Switch, path params)
+- Flutter Navigator (RouteSettings, RouteFactory)
+- Vue Router (routes config, dynamic segments)
+- Express.js (route matching, params)
+"""
+
+import 'system:ui' show { Widget, BuildContext }
+
+
+"""
+═══════════════════════════════════════════════════════════════════════════
+ROUTE GUARD INTERFACE
+═══════════════════════════════════════════════════════════════════════════
+Guards de rutas para control de acceso (autenticación, autorización, etc.)
+Inspirado en Angular Guards (CanActivate, CanDeactivate)
+"""
+
+interface RouteGuard {
+    """
+    Interface para guards de rutas.
+    
+    Los guards permiten controlar el acceso a rutas basándose en condiciones
+    como autenticación, autorización, permisos, validaciones, etc.
+    
+    Ejemplo de uso:
+        guard AuthGuard implements RouteGuard {
+            fn canActivate(context: BuildContext, params: Map<String, String>) -> Bool {
+                return AuthService.isAuthenticated()
+            }
+        }
+    """
+    
+    fn canActivate(context: BuildContext, params: Map<String, String>) -> Bool
+}
+
+
+"""
+═══════════════════════════════════════════════════════════════════════════
+ROUTE DEFINITION
+═══════════════════════════════════════════════════════════════════════════
+Definición de una ruta con su path, builder, guards, y metadata
+"""
+
+class RouteDefinition {
+    """
+    Define una ruta en la aplicación.
+    
+    Una ruta asocia un path (con posibles parámetros) a un builder
+    que construye el widget correspondiente.
+    
+    Properties:
+        path: Patrón de ruta (ej: "/users/:id", "/posts/:slug/edit")
+        name: Nombre opcional de la ruta para navegación nombrada
+        builder: Función que construye el widget para esta ruta
+        guards: Lista de guards para control de acceso
+        metadata: Metadata adicional (title, requiresAuth, etc.)
+        
+    Ejemplos de paths:
+        "/home"                    → ruta estática
+        "/users/:id"              → ruta con parámetro
+        "/posts/:slug/edit"       → ruta con múltiples segmentos
+        "/products/:category/:id" → múltiples parámetros
+    """
+    
+    path: String
+    name: Option<String>
+    builder: (BuildContext, Map<String, String>) -> Widget
+    guards: List<RouteGuard>
+    metadata: Map<String, Any>
+    
+    # Regex compilada para matching (lazy-initialized)
+    _regex: Option<RegExp>
+    _paramNames: List<String>
+    
+    
+    constructor(
+        path: String,
+        builder: (BuildContext, Map<String, String>) -> Widget,
+        name: Option<String> = None,
+        guards: List<RouteGuard> = [],
+        metadata: Map<String, Any> = {}
+    ) {
+        this.path = path
+        this.name = name
+        this.builder = builder
+        this.guards = guards
+        this.metadata = metadata
+        this._regex = None
+        this._paramNames = []
+    }
+    
+    
+    """
+    Compila el path a regex para matching
+    
+    Convierte paths como "/users/:id" a regex como "^/users/([^/]+)$"
+    y extrae los nombres de parámetros.
+    """
+    fn _compilePattern() -> void {
+        if this._regex.isSome() {
+            return  # Ya compilado
+        }
+        
+        # Escapar caracteres especiales de regex excepto ':'
+        escaped = this.path
+            .replace(".", "\\.")
+            .replace("*", "\\*")
+            .replace("+", "\\+")
+            .replace("?", "\\?")
+        
+        # Extraer nombres de parámetros (:id, :slug, etc.)
+        paramPattern = RegExp(":([a-zA-Z_][a-zA-Z0-9_]*)")
+        matches = paramPattern.findAll(escaped)
+        
+        this._paramNames = matches.map(m => m.group(1)).toList()
+        
+        # Reemplazar :param con grupo de captura ([^/]+)
+        regexPattern = paramPattern.replace(escaped, "([^/]+)")
+        
+        # Agregar anclas de inicio y fin
+        regexPattern = "^${regexPattern}$"
+        
+        this._regex = Some(RegExp(regexPattern))
+    }
+    
+    
+    """
+    Verifica si un path coincide con esta ruta
+    
+    Returns:
+        Option<Map<String, String>> - Some(params) si coincide, None si no
+    """
+    fn matches(path: String) -> Option<Map<String, String>> {
+        this._compilePattern()
+        
+        regex = this._regex.unwrap()  # Seguro después de _compilePattern
+        
+        match regex.firstMatch(path) {
+            Some(match) => {
+                # Extraer valores de parámetros
+                params: Map<String, String> = {}
+                
+                (0..this._paramNames.length).forEach(i => {
+                    paramName = this._paramNames[i]
+                    paramValue = match.group(i + 1)  # group(0) es el match completo
+                    params[paramName] = paramValue
+                })
+                
+                return Some(params)
+            }
+            None => return None
+        }
+    }
+    
+    
+    """
+    Ejecuta todos los guards de la ruta
+    
+    Returns:
+        Bool - true si todos los guards permiten la activación
+    """
+    fn canActivate(context: BuildContext, params: Map<String, String>) -> Bool {
+        return this.guards.every(guard => guard.canActivate(context, params))
+    }
+    
+    
+    """
+    Construye el widget para esta ruta
+    """
+    fn build(context: BuildContext, params: Map<String, String>) -> Widget {
+        return this.builder(context, params)
+    }
+    
+    
+    """
+    Crea una copia con propiedades actualizadas
+    """
+    fn copyWith(
+        path: Option<String> = None,
+        name: Option<Option<String>> = None,
+        builder: Option<(BuildContext, Map<String, String>) -> Widget> = None,
+        guards: Option<List<RouteGuard>> = None,
+        metadata: Option<Map<String, Any>> = None
+    ) -> RouteDefinition {
+        return RouteDefinition(
+            path: path.unwrapOr(this.path),
+            name: name.unwrapOr(this.name),
+            builder: builder.unwrapOr(this.builder),
+            guards: guards.unwrapOr(this.guards),
+            metadata: metadata.unwrapOr(this.metadata)
+        )
+    }
+}
+
+
+"""
+═══════════════════════════════════════════════════════════════════════════
+ROUTE MATCH
+═══════════════════════════════════════════════════════════════════════════
+Resultado de matching exitoso de una ruta
+"""
+
+class RouteMatch {
+    """
+    Representa un match exitoso de ruta.
+    
+    Contiene la definición de ruta, parámetros extraídos del path,
+    y query parameters del URL.
+    
+    Properties:
+        definition: Definición de ruta que coincidió
+        params: Parámetros extraídos del path (ej: {id: "123"})
+        queryParams: Query parameters del URL (ej: {page: "2", filter: "active"})
+        path: Path original que se matcheó
+    """
+    
+    definition: RouteDefinition
+    params: Map<String, String>
+    queryParams: Map<String, String>
+    path: String
+    
+    
+    constructor(
+        definition: RouteDefinition,
+        params: Map<String, String>,
+        path: String,
+        queryParams: Map<String, String> = {}
+    ) {
+        this.definition = definition
+        this.params = params
+        this.path = path
+        this.queryParams = queryParams
+    }
+    
+    
+    """
+    Obtiene un parámetro del path
+    
+    Example:
+        match.getParam("id")  # Some("123")
+        match.getParam("missing")  # None
+    """
+    fn getParam(name: String) -> Option<String> {
+        if this.params.containsKey(name) {
+            return Some(this.params[name])
+        }
+        return None
+    }
+    
+    
+    """
+    Obtiene un query parameter
+    
+    Example:
+        match.getQueryParam("page")  # Some("2")
+        match.getQueryParam("missing")  # None
+    """
+    fn getQueryParam(name: String) -> Option<String> {
+        if this.queryParams.containsKey(name) {
+            return Some(this.queryParams[name])
+        }
+        return None
+    }
+    
+    
+    """
+    Obtiene todos los parámetros (path + query) combinados
+    """
+    fn getAllParams() -> Map<String, String> {
+        combined: Map<String, String> = {}
+        
+        # Agregar path params
+        this.params.entries().forEach(entry => {
+            combined[entry.key] = entry.value
+        })
+        
+        # Agregar query params (sobrescriben si hay conflicto)
+        this.queryParams.entries().forEach(entry => {
+            combined[entry.key] = entry.value
+        })
+        
+        return combined
+    }
+    
+    
+    """
+    Construye el widget para este match
+    """
+    fn build(context: BuildContext) -> Widget {
+        return this.definition.build(context, this.params)
+    }
+}
+
+
+"""
+═══════════════════════════════════════════════════════════════════════════
+ROUTER
+═══════════════════════════════════════════════════════════════════════════
+Router principal que gestiona todas las rutas de la aplicación
+"""
+
+class Router {
+    """
+    Router principal de la aplicación.
+    
+    Gestiona el registro de rutas, matching de paths, y construcción
+    de widgets según la ruta activa.
+    
+    Inspirado en:
+    - Angular RouterModule
+    - Vue Router
+    - React Router
+    - Flutter Navigator 2.0
+    
+    Properties:
+        routes: Lista de definiciones de rutas
+        notFoundBuilder: Builder para ruta 404 (no encontrada)
+        initialRoute: Ruta inicial de la aplicación
+        
+    Ejemplo de uso:
+        router = Router(
+            routes: [
+                RouteDefinition(
+                    path: "/",
+                    builder: (ctx, params) => HomeWidget()
+                ),
+                RouteDefinition(
+                    path: "/users/:id",
+                    builder: (ctx, params) => UserProfileWidget(userId: params["id"])
+                ),
+                RouteDefinition(
+                    path: "/posts/:slug/edit",
+                    builder: (ctx, params) => EditPostWidget(slug: params["slug"]),
+                    guards: [AuthGuard(), EditorGuard()]
+                )
+            ],
+            notFoundBuilder: (ctx) => NotFoundWidget()
+        )
+        
+        # Matching
+        match router.match("/users/123") {
+            Some(match) => {
+                widget = match.build(context)
+            }
+            None => {
+                widget = router.buildNotFound(context)
+            }
+        }
+    """
+    
+    routes: List<RouteDefinition>
+    notFoundBuilder: (BuildContext) -> Widget
+    initialRoute: String
+    
+    # Cache de rutas por nombre para navegación rápida
+    _routesByName: Map<String, RouteDefinition>
+    
+    
+    constructor(
+        routes: List<RouteDefinition>,
+        notFoundBuilder: (BuildContext) -> Widget,
+        initialRoute: String = "/"
+    ) {
+        this.routes = routes
+        this.notFoundBuilder = notFoundBuilder
+        this.initialRoute = initialRoute
+        this._routesByName = {}
+        
+        # Construir cache de rutas nombradas
+        this._buildNameCache()
+    }
+    
+    
+    """
+    Construye el cache de rutas por nombre
+    """
+    fn _buildNameCache() -> void {
+        this.routes.forEach(route => {
+            if route.name.isSome() {
+                name = route.name.unwrap()
+                this._routesByName[name] = route
+            }
+        })
+    }
+    
+    
+    """
+    Registra una nueva ruta
+    
+    Example:
+        router.register(RouteDefinition(
+            path: "/admin",
+            builder: (ctx, params) => AdminWidget(),
+            guards: [AdminGuard()]
+        ))
+    """
+    fn register(route: RouteDefinition) -> void {
+        this.routes.add(route)
+        
+        # Actualizar cache si tiene nombre
+        if route.name.isSome() {
+            name = route.name.unwrap()
+            this._routesByName[name] = route
+        }
+    }
+    
+    
+    """
+    Desregistra una ruta por path
+    """
+    fn unregister(path: String) -> Bool {
+        index = this.routes.findIndex(r => r.path == path)
+        
+        match index {
+            Some(i) => {
+                route = this.routes[i]
+                this.routes.removeAt(i)
+                
+                # Remover del cache si tiene nombre
+                if route.name.isSome() {
+                    name = route.name.unwrap()
+                    this._routesByName.remove(name)
+                }
+                
+                return true
+            }
+            None => return false
+        }
+    }
+    
+    
+    """
+    Extrae query parameters de un path
+    
+    Example:
+        _parseQueryParams("/users?page=2&filter=active")
+        # Returns: {page: "2", filter: "active"}
+    """
+    fn _parseQueryParams(path: String) -> Map<String, String> {
+        queryParams: Map<String, String> = {}
+        
+        # Separar path y query string
+        parts = path.split("?")
+        if parts.length < 2 {
+            return queryParams  # No hay query params
+        }
+        
+        queryString = parts[1]
+        
+        # Parsear cada par key=value
+        queryString.split("&").forEach(pair => {
+            pairParts = pair.split("=")
+            if pairParts.length == 2 {
+                key = Uri.decodeComponent(pairParts[0])
+                value = Uri.decodeComponent(pairParts[1])
+                queryParams[key] = value
+            }
+        })
+        
+        return queryParams
+    }
+    
+    
+    """
+    Normaliza un path removiendo query params y trailing slash
+    
+    Example:
+        _normalizePath("/users/123?page=2")  # "/users/123"
+        _normalizePath("/users/")             # "/users"
+    """
+    fn _normalizePath(path: String) -> String {
+        # Remover query params
+        normalized = path.split("?")[0]
+        
+        # Remover trailing slash (excepto para "/")
+        if normalized.length > 1 && normalized.endsWith("/") {
+            normalized = normalized.substring(0, normalized.length - 1)
+        }
+        
+        return normalized
+    }
+    
+    
+    """
+    Busca una ruta que coincida con el path dado
+    
+    Returns:
+        Option<RouteMatch> - Some(match) si encuentra, None si no
+        
+    Example:
+        match router.match("/users/123?page=2") {
+            Some(match) => {
+                userId = match.getParam("id")  # Some("123")
+                page = match.getQueryParam("page")  # Some("2")
+                widget = match.build(context)
+            }
+            None => {
+                # 404 Not Found
+                widget = router.buildNotFound(context)
+            }
+        }
+    """
+    fn match(path: String) -> Option<RouteMatch> {
+        # Extraer query params
+        queryParams = this._parseQueryParams(path)
+        
+        # Normalizar path (sin query params)
+        normalizedPath = this._normalizePath(path)
+        
+        # Intentar match con cada ruta registrada
+        return this.routes
+            .map(route => {
+                match route.matches(normalizedPath) {
+                    Some(params) => Some(RouteMatch(
+                        definition: route,
+                        params: params,
+                        path: normalizedPath,
+                        queryParams: queryParams
+                    ))
+                    None => None
+                }
+            })
+            .find(option => option.isSome())
+            .flatten()  # Option<Option<RouteMatch>> -> Option<RouteMatch>
+    }
+    
+    
+    """
+    Busca una ruta por nombre
+    
+    Example:
+        match router.matchNamed("user-profile", {id: "123"}) {
+            Some(match) => widget = match.build(context)
+            None => # Ruta no encontrada
+        }
+    """
+    fn matchNamed(
+        name: String,
+        params: Map<String, String> = {}
+    ) -> Option<RouteMatch> {
+        if !this._routesByName.containsKey(name) {
+            return None
+        }
+        
+        route = this._routesByName[name]
+        
+        # Construir path reemplazando parámetros
+        path = route.path
+        params.entries().forEach(entry => {
+            placeholder = ":${entry.key}"
+            path = path.replace(placeholder, entry.value)
+        })
+        
+        # Hacer match normal
+        return this.match(path)
+    }
+    
+    
+    """
+    Construye el widget 404 (not found)
+    """
+    fn buildNotFound(context: BuildContext) -> Widget {
+        return this.notFoundBuilder(context)
+    }
+    
+    
+    """
+    Obtiene todas las rutas registradas
+    """
+    fn getRoutes() -> List<RouteDefinition> {
+        return this.routes.toList()  # Copia defensiva
+    }
+    
+    
+    """
+    Obtiene una ruta por nombre
+    """
+    fn getRouteByName(name: String) -> Option<RouteDefinition> {
+        if this._routesByName.containsKey(name) {
+            return Some(this._routesByName[name])
+        }
+        return None
+    }
+    
+    
+    """
+    Verifica si existe una ruta con el nombre dado
+    """
+    fn hasRoute(name: String) -> Bool {
+        return this._routesByName.containsKey(name)
+    }
+    
+    
+    """
+    Limpia todas las rutas registradas
+    """
+    fn clear() -> void {
+        this.routes.clear()
+        this._routesByName.clear()
+    }
+}
+
+
+"""
+═══════════════════════════════════════════════════════════════════════════
+HELPER FUNCTIONS
+═══════════════════════════════════════════════════════════════════════════
+"""
+
+"""
+Crea un router básico con configuración común
+"""
+public fn createRouter(
+    routes: List<RouteDefinition>,
+    notFoundBuilder: Option<(BuildContext) -> Widget> = None,
+    initialRoute: String = "/"
+) -> Router {
+    defaultNotFound = (BuildContext context) => {
+        # Widget básico de 404
+        return Container(
+            child: Text("404 - Page Not Found")
+        )
+    }
+    
+    return Router(
+        routes: routes,
+        notFoundBuilder: notFoundBuilder.unwrapOr(defaultNotFound),
+        initialRoute: initialRoute
+    )
+}
+
+
+"""
+Crea una definición de ruta simple
+"""
+public fn route(
+    path: String,
+    builder: (BuildContext, Map<String, String>) -> Widget,
+    name: Option<String> = None,
+    guards: List<RouteGuard> = []
+) -> RouteDefinition {
+    return RouteDefinition(
+        path: path,
+        builder: builder,
+        name: name,
+        guards: guards
+    )
+}
