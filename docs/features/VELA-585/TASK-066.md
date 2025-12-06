@@ -443,7 +443,7 @@ routeDef = route(
 ### Configuración Básica
 
 ```vela
-import 'ui/navigation/router.vela' show { Router, RouteDefinition, createRouter, route }
+import 'core/navigation/router.vela' show { Router, RouteDefinition, createRouter, route }
 
 # Crear router
 router = createRouter(

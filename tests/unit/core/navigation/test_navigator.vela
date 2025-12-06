@@ -17,14 +17,14 @@ Cobertura:
 
 import 'system:ui' show { Widget, BuildContext, Container, Text }
 import 'system:reactive' show { signal }
-import '../../../ui/navigation/router.vela' show {
+import '../../../src/core/navigation/router.vela' show {
     Router,
     RouteDefinition,
     RouteGuard,
     createRouter,
     route
 }
-import '../../../ui/navigation/navigator.vela' show {
+import '../../../src/core/navigation/navigator.vela' show {
     Navigator,
     RouteEntry,
     NavigationResult,

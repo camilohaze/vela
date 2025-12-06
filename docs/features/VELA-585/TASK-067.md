@@ -498,8 +498,8 @@ navigator = Navigator(
 ### Configuración Básica
 
 ```vela
-import 'ui/navigation/router.vela' show { createRouter, route }
-import 'ui/navigation/navigator.vela' show { createNavigator }
+import 'core/navigation/router.vela' show { createRouter, route }
+import 'core/navigation/navigator.vela' show { createNavigator }
 
 # Crear router
 router = createRouter(
