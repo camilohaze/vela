@@ -1,0 +1,685 @@
+"""
+Tests Unitarios para TextStyle System
+
+Jira: TASK-063
+Historia: VELA-584 (US-14)
+Sprint: 22
+
+Test Coverage:
+- Enums: FontWeight, FontStyle, TextDecoration
+- TextShadow value object
+- TextStyle construction y properties
+- Merge y copyWith (immutabilidad)
+- Fluent builder API
+- CSS rendering
+- Predefined styles (Material Design)
+- Interpolación (lerp) para animaciones
+"""
+
+import 'system:testing' show { describe, it, expect, beforeEach }
+import 'module:styling' show {
+  TextStyle, FontWeight, FontStyle, TextDecoration,
+  TextDecorationStyle, TextBaseline, TextOverflow,
+  TextShadow, lerp, lerpFloat, Color
+}
+
+
+# ============================================================================
+# TESTS: FontWeight Enum
+# ============================================================================
+
+describe("FontWeight enum", () => {
+  it("should convert to numeric values correctly", () => {
+    expect(FontWeight.Thin.toValue()).toBe(100)
+    expect(FontWeight.Normal.toValue()).toBe(400)
+    expect(FontWeight.Bold.toValue()).toBe(700)
+    expect(FontWeight.Black.toValue()).toBe(900)
+  })
+  
+  it("should convert from numeric values", () => {
+    expect(FontWeight.fromValue(100)).toBe(Some(FontWeight.Thin))
+    expect(FontWeight.fromValue(400)).toBe(Some(FontWeight.Normal))
+    expect(FontWeight.fromValue(700)).toBe(Some(FontWeight.Bold))
+    expect(FontWeight.fromValue(999)).toBe(None)
+  })
+})
+
+
+# ============================================================================
+# TESTS: FontStyle Enum
+# ============================================================================
+
+describe("FontStyle enum", () => {
+  it("should convert to CSS values", () => {
+    expect(FontStyle.Normal.toCSSValue()).toBe("normal")
+    expect(FontStyle.Italic.toCSSValue()).toBe("italic")
+    expect(FontStyle.Oblique.toCSSValue()).toBe("oblique")
+  })
+})
+
+
+# ============================================================================
+# TESTS: TextDecoration Enum
+# ============================================================================
+
+describe("TextDecoration enum", () => {
+  it("should convert single decorations to CSS", () => {
+    expect(TextDecoration.None.toCSSValue()).toBe("none")
+    expect(TextDecoration.Underline.toCSSValue()).toBe("underline")
+    expect(TextDecoration.LineThrough.toCSSValue()).toBe("line-through")
+  })
+  
+  it("should combine multiple decorations", () => {
+    combined = TextDecoration.Combined([
+      TextDecoration.Underline,
+      TextDecoration.Overline
+    ])
+    
+    expect(combined.toCSSValue()).toBe("underline overline")
+  })
+  
+  it("should filter None from combined decorations", () => {
+    combined = TextDecoration.Combined([
+      TextDecoration.None,
+      TextDecoration.Underline,
+      TextDecoration.None
+    ])
+    
+    expect(combined.toCSSValue()).toBe("underline")
+  })
+})
+
+
+# ============================================================================
+# TESTS: TextShadow ValueObject
+# ============================================================================
+
+describe("TextShadow value object", () => {
+  it("should construct with required parameters", () => {
+    shadow = TextShadow(
+      color: Color.black(),
+      offsetX: 2.0,
+      offsetY: 2.0,
+      blurRadius: 4.0
+    )
+    
+    expect(shadow.offsetX).toBe(2.0)
+    expect(shadow.offsetY).toBe(2.0)
+    expect(shadow.blurRadius).toBe(4.0)
+  })
+  
+  it("should default blurRadius to 0.0", () => {
+    shadow = TextShadow(
+      color: Color.black(),
+      offsetX: 1.0,
+      offsetY: 1.0
+    )
+    
+    expect(shadow.blurRadius).toBe(0.0)
+  })
+  
+  it("should convert to CSS text-shadow format", () => {
+    shadow = TextShadow(
+      color: Color.rgb(0, 0, 0, 0.5),
+      offsetX: 2.0,
+      offsetY: 3.0,
+      blurRadius: 4.0
+    )
+    
+    cssValue = shadow.toCSSValue()
+    expect(cssValue).toContain("2.0px")
+    expect(cssValue).toContain("3.0px")
+    expect(cssValue).toContain("4.0px")
+  })
+  
+  it("should provide factory methods for common shadows", () => {
+    subtle = TextShadow.subtle()
+    expect(subtle.offsetY).toBe(1.0)
+    expect(subtle.blurRadius).toBe(2.0)
+    
+    medium = TextShadow.medium()
+    expect(medium.offsetY).toBe(2.0)
+    expect(medium.blurRadius).toBe(4.0)
+    
+    strong = TextShadow.strong()
+    expect(strong.offsetY).toBe(4.0)
+    expect(strong.blurRadius).toBe(8.0)
+  })
+})
+
+
+# ============================================================================
+# TESTS: TextStyle Construction
+# ============================================================================
+
+describe("TextStyle construction", () => {
+  it("should construct with all parameters optional", () => {
+    style = TextStyle()
+    
+    expect(style.fontFamily).toBe(None)
+    expect(style.fontSize).toBe(None)
+    expect(style.fontWeight).toBe(None)
+    expect(style.color).toBe(None)
+  })
+  
+  it("should construct with specific parameters", () => {
+    style = TextStyle(
+      fontSize: Some(16.0),
+      fontWeight: Some(FontWeight.Bold),
+      color: Some(Color.blue())
+    )
+    
+    expect(style.fontSize).toBe(Some(16.0))
+    expect(style.fontWeight).toBe(Some(FontWeight.Bold))
+    expect(style.color).toBe(Some(Color.blue()))
+  })
+  
+  it("should default shadows to empty list", () => {
+    style = TextStyle()
+    
+    expect(style.shadows.length).toBe(0)
+  })
+})
+
+
+# ============================================================================
+# TESTS: Merge & CopyWith (Immutability)
+# ============================================================================
+
+describe("TextStyle merge", () => {
+  it("should return original style when merging with None", () => {
+    original = TextStyle(fontSize: Some(14.0))
+    merged = original.merge(None)
+    
+    expect(merged.fontSize).toBe(Some(14.0))
+  })
+  
+  it("should prioritize other style properties", () => {
+    base = TextStyle(
+      fontSize: Some(14.0),
+      fontWeight: Some(FontWeight.Normal)
+    )
+    
+    override = TextStyle(
+      fontSize: Some(18.0),
+      color: Some(Color.red())
+    )
+    
+    merged = base.merge(Some(override))
+    
+    expect(merged.fontSize).toBe(Some(18.0))
+    expect(merged.fontWeight).toBe(Some(FontWeight.Normal))
+    expect(merged.color).toBe(Some(Color.red()))
+  })
+  
+  it("should not mutate original styles", () => {
+    base = TextStyle(fontSize: Some(14.0))
+    override = TextStyle(fontSize: Some(18.0))
+    
+    merged = base.merge(Some(override))
+    
+    # Verificar que originales no cambiaron
+    expect(base.fontSize).toBe(Some(14.0))
+    expect(override.fontSize).toBe(Some(18.0))
+    expect(merged.fontSize).toBe(Some(18.0))
+  })
+})
+
+
+describe("TextStyle copyWith", () => {
+  it("should create copy with updated fields", () => {
+    original = TextStyle(
+      fontSize: Some(14.0),
+      fontWeight: Some(FontWeight.Normal)
+    )
+    
+    copy = original.copyWith(
+      fontSize: Some(18.0),
+      color: Some(Color.blue())
+    )
+    
+    expect(copy.fontSize).toBe(Some(18.0))
+    expect(copy.fontWeight).toBe(Some(FontWeight.Normal))
+    expect(copy.color).toBe(Some(Color.blue()))
+  })
+  
+  it("should not mutate original style", () => {
+    original = TextStyle(fontSize: Some(14.0))
+    copy = original.copyWith(fontSize: Some(18.0))
+    
+    expect(original.fontSize).toBe(Some(14.0))
+    expect(copy.fontSize).toBe(Some(18.0))
+  })
+  
+  it("should preserve unspecified fields", () => {
+    original = TextStyle(
+      fontSize: Some(14.0),
+      fontWeight: Some(FontWeight.Bold),
+      color: Some(Color.red())
+    )
+    
+    copy = original.copyWith(fontSize: Some(18.0))
+    
+    expect(copy.fontSize).toBe(Some(18.0))
+    expect(copy.fontWeight).toBe(Some(FontWeight.Bold))
+    expect(copy.color).toBe(Some(Color.red()))
+  })
+})
+
+
+# ============================================================================
+# TESTS: Fluent Builder API
+# ============================================================================
+
+describe("TextStyle fluent builder API", () => {
+  it("should support withColor", () => {
+    style = TextStyle().withColor(Color.blue())
+    
+    expect(style.color).toBe(Some(Color.blue()))
+  })
+  
+  it("should support withSize", () => {
+    style = TextStyle().withSize(20.0)
+    
+    expect(style.fontSize).toBe(Some(20.0))
+  })
+  
+  it("should support withWeight", () => {
+    style = TextStyle().withWeight(FontWeight.Bold)
+    
+    expect(style.fontWeight).toBe(Some(FontWeight.Bold))
+  })
+  
+  it("should support bold shortcut", () => {
+    style = TextStyle().bold()
+    
+    expect(style.fontWeight).toBe(Some(FontWeight.Bold))
+  })
+  
+  it("should support italic shortcut", () => {
+    style = TextStyle().italic()
+    
+    expect(style.fontStyle).toBe(Some(FontStyle.Italic))
+  })
+  
+  it("should support underline shortcut", () => {
+    style = TextStyle().underline()
+    
+    expect(style.decoration).toBe(Some(TextDecoration.Underline))
+  })
+  
+  it("should support lineThrough shortcut", () => {
+    style = TextStyle().lineThrough()
+    
+    expect(style.decoration).toBe(Some(TextDecoration.LineThrough))
+  })
+  
+  it("should support method chaining", () => {
+    style = TextStyle()
+      .withSize(16.0)
+      .bold()
+      .italic()
+      .withColor(Color.red())
+      .underline()
+    
+    expect(style.fontSize).toBe(Some(16.0))
+    expect(style.fontWeight).toBe(Some(FontWeight.Bold))
+    expect(style.fontStyle).toBe(Some(FontStyle.Italic))
+    expect(style.color).toBe(Some(Color.red()))
+    expect(style.decoration).toBe(Some(TextDecoration.Underline))
+  })
+  
+  it("should support withShadow", () => {
+    shadow = TextShadow.subtle()
+    style = TextStyle().withShadow(shadow)
+    
+    expect(style.shadows.length).toBe(1)
+    expect(style.shadows[0]).toBe(shadow)
+  })
+  
+  it("should accumulate multiple shadows", () => {
+    shadow1 = TextShadow.subtle()
+    shadow2 = TextShadow.medium()
+    
+    style = TextStyle()
+      .withShadow(shadow1)
+      .withShadow(shadow2)
+    
+    expect(style.shadows.length).toBe(2)
+    expect(style.shadows[0]).toBe(shadow1)
+    expect(style.shadows[1]).toBe(shadow2)
+  })
+})
+
+
+# ============================================================================
+# TESTS: CSS Rendering
+# ============================================================================
+
+describe("TextStyle CSS rendering", () => {
+  it("should render empty object for default style", () => {
+    style = TextStyle()
+    props = style.toCSSProperties()
+    
+    expect(props.size()).toBe(0)
+  })
+  
+  it("should render font-family", () => {
+    style = TextStyle(fontFamily: Some("Arial"))
+    props = style.toCSSProperties()
+    
+    expect(props["font-family"]).toBe("Arial")
+  })
+  
+  it("should render font-size in pixels", () => {
+    style = TextStyle(fontSize: Some(16.0))
+    props = style.toCSSProperties()
+    
+    expect(props["font-size"]).toBe("16.0px")
+  })
+  
+  it("should render font-weight as numeric", () => {
+    style = TextStyle(fontWeight: Some(FontWeight.Bold))
+    props = style.toCSSProperties()
+    
+    expect(props["font-weight"]).toBe("700")
+  })
+  
+  it("should render font-style", () => {
+    style = TextStyle(fontStyle: Some(FontStyle.Italic))
+    props = style.toCSSProperties()
+    
+    expect(props["font-style"]).toBe("italic")
+  })
+  
+  it("should render letter-spacing", () => {
+    style = TextStyle(letterSpacing: Some(0.5))
+    props = style.toCSSProperties()
+    
+    expect(props["letter-spacing"]).toBe("0.5px")
+  })
+  
+  it("should render line-height", () => {
+    style = TextStyle(height: Some(1.5))
+    props = style.toCSSProperties()
+    
+    expect(props["line-height"]).toBe("1.5")
+  })
+  
+  it("should render color", () => {
+    style = TextStyle(color: Some(Color.blue()))
+    props = style.toCSSProperties()
+    
+    expect(props).toHaveKey("color")
+  })
+  
+  it("should render text-decoration properties", () => {
+    style = TextStyle(
+      decoration: Some(TextDecoration.Underline),
+      decorationColor: Some(Color.red()),
+      decorationStyle: Some(TextDecorationStyle.Dashed),
+      decorationThickness: Some(2.0)
+    )
+    
+    props = style.toCSSProperties()
+    
+    expect(props["text-decoration-line"]).toBe("underline")
+    expect(props["text-decoration-style"]).toBe("dashed")
+    expect(props["text-decoration-thickness"]).toBe("2.0px")
+    expect(props).toHaveKey("text-decoration-color")
+  })
+  
+  it("should render multiple text-shadows", () => {
+    shadow1 = TextShadow(Color.black(), 1.0, 1.0, 2.0)
+    shadow2 = TextShadow(Color.red(), 2.0, 2.0, 4.0)
+    
+    style = TextStyle(shadows: [shadow1, shadow2])
+    props = style.toCSSProperties()
+    
+    expect(props).toHaveKey("text-shadow")
+    shadowValue = props["text-shadow"]
+    expect(shadowValue).toContain(",")
+  })
+  
+  it("should render text-overflow with ellipsis helpers", () => {
+    style = TextStyle(overflow: Some(TextOverflow.Ellipsis))
+    props = style.toCSSProperties()
+    
+    expect(props["text-overflow"]).toBe("ellipsis")
+    expect(props["white-space"]).toBe("nowrap")
+    expect(props["overflow"]).toBe("hidden")
+  })
+  
+  it("should render complete style", () => {
+    style = TextStyle(
+      fontFamily: Some("Roboto"),
+      fontSize: Some(16.0),
+      fontWeight: Some(FontWeight.Medium),
+      fontStyle: Some(FontStyle.Italic),
+      letterSpacing: Some(0.5),
+      color: Some(Color.blue())
+    )
+    
+    props = style.toCSSProperties()
+    
+    expect(props["font-family"]).toBe("Roboto")
+    expect(props["font-size"]).toBe("16.0px")
+    expect(props["font-weight"]).toBe("500")
+    expect(props["font-style"]).toBe("italic")
+    expect(props["letter-spacing"]).toBe("0.5px")
+    expect(props).toHaveKey("color")
+  })
+})
+
+
+# ============================================================================
+# TESTS: Predefined Styles (Material Design Typography)
+# ============================================================================
+
+describe("TextStyle predefined Material Design styles", () => {
+  it("should provide displayLarge style", () => {
+    style = TextStyle.displayLarge()
+    
+    expect(style.fontSize).toBe(Some(57.0))
+    expect(style.fontWeight).toBe(Some(FontWeight.Normal))
+  })
+  
+  it("should provide headlineMedium style", () => {
+    style = TextStyle.headlineMedium()
+    
+    expect(style.fontSize).toBe(Some(28.0))
+    expect(style.fontWeight).toBe(Some(FontWeight.Normal))
+  })
+  
+  it("should provide titleMedium style", () => {
+    style = TextStyle.titleMedium()
+    
+    expect(style.fontSize).toBe(Some(16.0))
+    expect(style.fontWeight).toBe(Some(FontWeight.Medium))
+    expect(style.letterSpacing).toBe(Some(0.15))
+  })
+  
+  it("should provide bodyLarge style", () => {
+    style = TextStyle.bodyLarge()
+    
+    expect(style.fontSize).toBe(Some(16.0))
+    expect(style.fontWeight).toBe(Some(FontWeight.Normal))
+    expect(style.letterSpacing).toBe(Some(0.5))
+  })
+  
+  it("should provide bodyMedium style", () => {
+    style = TextStyle.bodyMedium()
+    
+    expect(style.fontSize).toBe(Some(14.0))
+    expect(style.letterSpacing).toBe(Some(0.25))
+  })
+  
+  it("should provide labelSmall style", () => {
+    style = TextStyle.labelSmall()
+    
+    expect(style.fontSize).toBe(Some(11.0))
+    expect(style.fontWeight).toBe(Some(FontWeight.Medium))
+  })
+  
+  it("should allow customization of predefined styles", () => {
+    style = TextStyle.bodyLarge()
+      .withColor(Color.red())
+      .bold()
+    
+    expect(style.fontSize).toBe(Some(16.0))
+    expect(style.fontWeight).toBe(Some(FontWeight.Bold))
+    expect(style.color).toBe(Some(Color.red()))
+  })
+})
+
+
+# ============================================================================
+# TESTS: Interpolation (lerp) for Animations
+# ============================================================================
+
+describe("TextStyle interpolation (lerp)", () => {
+  it("should return first style when t=0", () => {
+    a = TextStyle(fontSize: Some(14.0))
+    b = TextStyle(fontSize: Some(20.0))
+    
+    result = lerp(Some(a), Some(b), 0.0)
+    
+    expect(result).toBe(Some(a))
+  })
+  
+  it("should return second style when t=1", () => {
+    a = TextStyle(fontSize: Some(14.0))
+    b = TextStyle(fontSize: Some(20.0))
+    
+    result = lerp(Some(a), Some(b), 1.0)
+    
+    expect(result).toBe(Some(b))
+  })
+  
+  it("should interpolate fontSize linearly", () => {
+    a = TextStyle(fontSize: Some(10.0))
+    b = TextStyle(fontSize: Some(20.0))
+    
+    result = lerp(Some(a), Some(b), 0.5)
+    
+    match result {
+      Some(style) => expect(style.fontSize).toBe(Some(15.0))
+      None => throw Error("Expected Some(style)")
+    }
+  })
+  
+  it("should interpolate letterSpacing", () => {
+    a = TextStyle(letterSpacing: Some(0.0))
+    b = TextStyle(letterSpacing: Some(1.0))
+    
+    result = lerp(Some(a), Some(b), 0.25)
+    
+    match result {
+      Some(style) => expect(style.letterSpacing).toBe(Some(0.25))
+      None => throw Error("Expected Some(style)")
+    }
+  })
+  
+  it("should use threshold for discrete properties", () => {
+    a = TextStyle(fontWeight: Some(FontWeight.Normal))
+    b = TextStyle(fontWeight: Some(FontWeight.Bold))
+    
+    result1 = lerp(Some(a), Some(b), 0.4)
+    result2 = lerp(Some(a), Some(b), 0.6)
+    
+    match result1 {
+      Some(style) => expect(style.fontWeight).toBe(Some(FontWeight.Normal))
+      None => throw Error("Expected Some(style)")
+    }
+    
+    match result2 {
+      Some(style) => expect(style.fontWeight).toBe(Some(FontWeight.Bold))
+      None => throw Error("Expected Some(style)")
+    }
+  })
+  
+  it("should handle None values gracefully", () => {
+    a = TextStyle(fontSize: Some(14.0))
+    
+    result1 = lerp(Some(a), None, 0.5)
+    expect(result1).toBe(Some(a))
+    
+    result2 = lerp(None, Some(a), 0.5)
+    expect(result2).toBe(Some(a))
+    
+    result3 = lerp(None, None, 0.5)
+    expect(result3).toBe(None)
+  })
+})
+
+
+describe("lerpFloat helper", () => {
+  it("should interpolate float values", () => {
+    expect(lerpFloat(0.0, 10.0, 0.0)).toBe(0.0)
+    expect(lerpFloat(0.0, 10.0, 0.5)).toBe(5.0)
+    expect(lerpFloat(0.0, 10.0, 1.0)).toBe(10.0)
+  })
+  
+  it("should work with negative values", () => {
+    expect(lerpFloat(-10.0, 10.0, 0.5)).toBe(0.0)
+    expect(lerpFloat(-5.0, 5.0, 0.25)).toBe(-2.5)
+  })
+})
+
+
+# ============================================================================
+# TESTS: Integration & Edge Cases
+# ============================================================================
+
+describe("TextStyle integration tests", () => {
+  it("should support complete style definition with chaining", () => {
+    style = TextStyle.bodyMedium()
+      .withFamily("Roboto")
+      .withColor(Color.blue())
+      .bold()
+      .underline()
+      .withShadow(TextShadow.subtle())
+    
+    props = style.toCSSProperties()
+    
+    expect(props["font-family"]).toBe("Roboto")
+    expect(props["font-size"]).toBe("14.0px")
+    expect(props["font-weight"]).toBe("700")
+    expect(props).toHaveKey("color")
+    expect(props["text-decoration-line"]).toBe("underline")
+    expect(props).toHaveKey("text-shadow")
+  })
+  
+  it("should handle multiple merges correctly", () => {
+    base = TextStyle(fontSize: Some(14.0))
+    override1 = TextStyle(fontWeight: Some(FontWeight.Bold))
+    override2 = TextStyle(color: Some(Color.red()))
+    
+    result = base
+      .merge(Some(override1))
+      .merge(Some(override2))
+    
+    expect(result.fontSize).toBe(Some(14.0))
+    expect(result.fontWeight).toBe(Some(FontWeight.Bold))
+    expect(result.color).toBe(Some(Color.red()))
+  })
+  
+  it("should preserve immutability through complex operations", () => {
+    original = TextStyle(fontSize: Some(14.0))
+    
+    modified = original
+      .copyWith(fontSize: Some(16.0))
+      .bold()
+      .withColor(Color.blue())
+    
+    # Original no debe cambiar
+    expect(original.fontSize).toBe(Some(14.0))
+    expect(original.fontWeight).toBe(None)
+    expect(original.color).toBe(None)
+    
+    # Modified debe tener los cambios
+    expect(modified.fontSize).toBe(Some(16.0))
+    expect(modified.fontWeight).toBe(Some(FontWeight.Bold))
+    expect(modified.color).toBe(Some(Color.blue()))
+  })
+})
