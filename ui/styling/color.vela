@@ -1,0 +1,457 @@
+"""
+Color System for Vela UI Framework
+
+Implementación de: TASK-064 (parte 1/2: Color)
+Historia: VELA-584 (US-14)
+Sprint: 22
+Fecha: 2025-12-06
+
+Descripción:
+Sistema completo de manejo de colores con soporte para RGBA, HSL, hex,
+y paletas predefinidas. Inspirado en Flutter's Color y Material Design.
+
+Inspiraciones:
+- Flutter: Color class con ARGB
+- CSS: color functions (rgb, hsl, hex)
+- Material Design: Color palettes y shades
+- Tailwind CSS: Color system
+"""
+
+import 'system:math' show { floor, round, max, min }
+
+
+# ============================================================================
+# MAIN CLASS: Color
+# ============================================================================
+
+class Color {
+  # Almacenamiento interno en RGBA (0-255 para RGB, 0.0-1.0 para alpha)
+  r: Number  # Red (0-255)
+  g: Number  # Green (0-255)
+  b: Number  # Blue (0-255)
+  a: Float   # Alpha (0.0-1.0)
+  
+  constructor(r: Number, g: Number, b: Number, a: Float = 1.0) {
+    this.r = clamp(r, 0, 255)
+    this.g = clamp(g, 0, 255)
+    this.b = clamp(b, 0, 255)
+    this.a = clampFloat(a, 0.0, 1.0)
+  }
+  
+  # ========================================
+  # Factory Constructors
+  # ========================================
+  
+  fn fromRGB(r: Number, g: Number, b: Number) -> Color {
+    return Color(r, g, b, 1.0)
+  }
+  
+  fn fromRGBA(r: Number, g: Number, b: Number, a: Float) -> Color {
+    return Color(r, g, b, a)
+  }
+  
+  fn fromHex(hex: String) -> Result<Color, String> {
+    """
+    Crea Color desde string hexadecimal.
+    Formatos soportados: #RGB, #RRGGBB, #RRGGBBAA
+    """
+    cleaned = hex.trim().replace("#", "")
+    
+    return match cleaned.length {
+      3 => {
+        # #RGB → #RRGGBB
+        r = parseHexDigit(cleaned.substring(0, 1))
+        g = parseHexDigit(cleaned.substring(1, 2))
+        b = parseHexDigit(cleaned.substring(2, 3))
+        
+        match (r, g, b) {
+          (Some(rv), Some(gv), Some(bv)) => {
+            Ok(Color(rv * 17, gv * 17, bv * 17, 1.0))
+          }
+          _ => Err("Invalid hex color format")
+        }
+      }
+      
+      6 => {
+        # #RRGGBB
+        r = parseHexByte(cleaned.substring(0, 2))
+        g = parseHexByte(cleaned.substring(2, 4))
+        b = parseHexByte(cleaned.substring(4, 6))
+        
+        match (r, g, b) {
+          (Some(rv), Some(gv), Some(bv)) => {
+            Ok(Color(rv, gv, bv, 1.0))
+          }
+          _ => Err("Invalid hex color format")
+        }
+      }
+      
+      8 => {
+        # #RRGGBBAA
+        r = parseHexByte(cleaned.substring(0, 2))
+        g = parseHexByte(cleaned.substring(2, 4))
+        b = parseHexByte(cleaned.substring(4, 6))
+        a = parseHexByte(cleaned.substring(6, 8))
+        
+        match (r, g, b, a) {
+          (Some(rv), Some(gv), Some(bv), Some(av)) => {
+            Ok(Color(rv, gv, bv, av / 255.0))
+          }
+          _ => Err("Invalid hex color format")
+        }
+      }
+      
+      _ => Err("Invalid hex color length. Expected 3, 6, or 8 characters")
+    }
+  }
+  
+  fn fromHSL(h: Float, s: Float, l: Float, a: Float = 1.0) -> Color {
+    """
+    Crea Color desde HSL.
+    h: Hue (0-360)
+    s: Saturation (0.0-1.0)
+    l: Lightness (0.0-1.0)
+    a: Alpha (0.0-1.0)
+    """
+    hNorm = (h % 360.0) / 360.0
+    sNorm = clampFloat(s, 0.0, 1.0)
+    lNorm = clampFloat(l, 0.0, 1.0)
+    
+    # Conversión HSL → RGB
+    if sNorm == 0.0 {
+      # Achromatic (gris)
+      gray = round(lNorm * 255.0)
+      return Color(gray, gray, gray, a)
+    }
+    
+    q = if lNorm < 0.5 {
+      lNorm * (1.0 + sNorm)
+    } else {
+      lNorm + sNorm - (lNorm * sNorm)
+    }
+    
+    p = 2.0 * lNorm - q
+    
+    r = hueToRGB(p, q, hNorm + 1.0/3.0)
+    g = hueToRGB(p, q, hNorm)
+    b = hueToRGB(p, q, hNorm - 1.0/3.0)
+    
+    return Color(
+      round(r * 255.0),
+      round(g * 255.0),
+      round(b * 255.0),
+      a
+    )
+  }
+  
+  # ========================================
+  # Color Manipulation
+  # ========================================
+  
+  fn withOpacity(opacity: Float) -> Color {
+    """Crea nuevo color con opacidad cambiada."""
+    return Color(this.r, this.g, this.b, clampFloat(opacity, 0.0, 1.0))
+  }
+  
+  fn withAlpha(alpha: Number) -> Color {
+    """Crea nuevo color con alpha en escala 0-255."""
+    return Color(this.r, this.g, this.b, clampFloat(alpha / 255.0, 0.0, 1.0))
+  }
+  
+  fn withRed(red: Number) -> Color {
+    return Color(red, this.g, this.b, this.a)
+  }
+  
+  fn withGreen(green: Number) -> Color {
+    return Color(this.r, green, this.b, this.a)
+  }
+  
+  fn withBlue(blue: Number) -> Color {
+    return Color(this.r, this.g, blue, this.a)
+  }
+  
+  fn lighten(amount: Float) -> Color {
+    """
+    Aclara el color aumentando la luminosidad.
+    amount: 0.0-1.0 (0.1 = 10% más claro)
+    """
+    hsl = this.toHSL()
+    newL = clampFloat(hsl.l + amount, 0.0, 1.0)
+    return Color.fromHSL(hsl.h, hsl.s, newL, this.a)
+  }
+  
+  fn darken(amount: Float) -> Color {
+    """Oscurece el color disminuyendo la luminosidad."""
+    return this.lighten(-amount)
+  }
+  
+  fn saturate(amount: Float) -> Color {
+    """Aumenta la saturación."""
+    hsl = this.toHSL()
+    newS = clampFloat(hsl.s + amount, 0.0, 1.0)
+    return Color.fromHSL(hsl.h, newS, hsl.l, this.a)
+  }
+  
+  fn desaturate(amount: Float) -> Color {
+    """Disminuye la saturación."""
+    return this.saturate(-amount)
+  }
+  
+  fn rotate(degrees: Float) -> Color {
+    """Rota el hue en el círculo cromático."""
+    hsl = this.toHSL()
+    newH = (hsl.h + degrees) % 360.0
+    return Color.fromHSL(newH, hsl.s, hsl.l, this.a)
+  }
+  
+  fn complement() -> Color {
+    """Retorna el color complementario (opuesto en el círculo cromático)."""
+    return this.rotate(180.0)
+  }
+  
+  # ========================================
+  # Color Conversion
+  # ========================================
+  
+  fn toHSL() -> HSL {
+    """Convierte RGB a HSL."""
+    rNorm = this.r / 255.0
+    gNorm = this.g / 255.0
+    bNorm = this.b / 255.0
+    
+    maxVal = max(max(rNorm, gNorm), bNorm)
+    minVal = min(min(rNorm, gNorm), bNorm)
+    delta = maxVal - minVal
+    
+    # Lightness
+    l = (maxVal + minVal) / 2.0
+    
+    # Saturation
+    s = if delta == 0.0 {
+      0.0
+    } else if l < 0.5 {
+      delta / (maxVal + minVal)
+    } else {
+      delta / (2.0 - maxVal - minVal)
+    }
+    
+    # Hue
+    h = if delta == 0.0 {
+      0.0
+    } else if maxVal == rNorm {
+      60.0 * (((gNorm - bNorm) / delta) % 6.0)
+    } else if maxVal == gNorm {
+      60.0 * (((bNorm - rNorm) / delta) + 2.0)
+    } else {
+      60.0 * (((rNorm - gNorm) / delta) + 4.0)
+    }
+    
+    if h < 0.0 {
+      h = h + 360.0
+    }
+    
+    return HSL { h: h, s: s, l: l }
+  }
+  
+  fn toHex() -> String {
+    """Convierte a formato hexadecimal #RRGGBB."""
+    return "#${toHexByte(this.r)}${toHexByte(this.g)}${toHexByte(this.b)}"
+  }
+  
+  fn toHexWithAlpha() -> String {
+    """Convierte a formato hexadecimal #RRGGBBAA."""
+    alphaInt = round(this.a * 255.0)
+    return "${this.toHex()}${toHexByte(alphaInt)}"
+  }
+  
+  fn toCSSValue() -> String {
+    """Convierte a CSS rgb() o rgba()."""
+    if this.a == 1.0 {
+      return "rgb(${this.r}, ${this.g}, ${this.b})"
+    } else {
+      return "rgba(${this.r}, ${this.g}, ${this.b}, ${this.a})"
+    }
+  }
+  
+  # ========================================
+  # Interpolation (para animaciones)
+  # ========================================
+  
+  fn lerp(other: Color, t: Float) -> Color {
+    """
+    Interpola linealmente entre este color y otro.
+    t=0.0 → this, t=1.0 → other
+    """
+    tClamped = clampFloat(t, 0.0, 1.0)
+    
+    return Color(
+      round(this.r + (other.r - this.r) * tClamped),
+      round(this.g + (other.g - this.g) * tClamped),
+      round(this.b + (other.b - this.b) * tClamped),
+      this.a + (other.a - this.a) * tClamped
+    )
+  }
+  
+  # ========================================
+  # Predefined Colors (HTML/CSS standard)
+  # ========================================
+  
+  fn black() -> Color { return Color(0, 0, 0) }
+  fn white() -> Color { return Color(255, 255, 255) }
+  fn transparent() -> Color { return Color(0, 0, 0, 0.0) }
+  
+  # Grays
+  fn gray() -> Color { return Color(128, 128, 128) }
+  fn lightGray() -> Color { return Color(211, 211, 211) }
+  fn darkGray() -> Color { return Color(64, 64, 64) }
+  
+  # Primary colors
+  fn red() -> Color { return Color(255, 0, 0) }
+  fn green() -> Color { return Color(0, 255, 0) }
+  fn blue() -> Color { return Color(0, 0, 255) }
+  
+  # Secondary colors
+  fn cyan() -> Color { return Color(0, 255, 255) }
+  fn magenta() -> Color { return Color(255, 0, 255) }
+  fn yellow() -> Color { return Color(255, 255, 0) }
+  
+  # Common UI colors
+  fn orange() -> Color { return Color(255, 165, 0) }
+  fn purple() -> Color { return Color(128, 0, 128) }
+  fn pink() -> Color { return Color(255, 192, 203) }
+  fn brown() -> Color { return Color(165, 42, 42) }
+  
+  # Material Design primary colors
+  fn indigo() -> Color { return Color(63, 81, 181) }
+  fn teal() -> Color { return Color(0, 150, 136) }
+  fn amber() -> Color { return Color(255, 193, 7) }
+  fn deepOrange() -> Color { return Color(255, 87, 34) }
+  fn deepPurple() -> Color { return Color(103, 58, 183) }
+  fn lime() -> Color { return Color(205, 220, 57) }
+}
+
+
+# ============================================================================
+# HELPER STRUCTS
+# ============================================================================
+
+struct HSL {
+  h: Float  # Hue (0-360)
+  s: Float  # Saturation (0.0-1.0)
+  l: Float  # Lightness (0.0-1.0)
+}
+
+
+# ============================================================================
+# HELPER FUNCTIONS
+# ============================================================================
+
+fn clamp(value: Number, min: Number, max: Number) -> Number {
+  if value < min { return min }
+  if value > max { return max }
+  return value
+}
+
+fn clampFloat(value: Float, min: Float, max: Float) -> Float {
+  if value < min { return min }
+  if value > max { return max }
+  return value
+}
+
+fn parseHexDigit(hex: String) -> Option<Number> {
+  """Parse un dígito hexadecimal (0-F) a decimal (0-15)."""
+  return match hex.toLowerCase() {
+    "0" => Some(0)
+    "1" => Some(1)
+    "2" => Some(2)
+    "3" => Some(3)
+    "4" => Some(4)
+    "5" => Some(5)
+    "6" => Some(6)
+    "7" => Some(7)
+    "8" => Some(8)
+    "9" => Some(9)
+    "a" => Some(10)
+    "b" => Some(11)
+    "c" => Some(12)
+    "d" => Some(13)
+    "e" => Some(14)
+    "f" => Some(15)
+    _ => None
+  }
+}
+
+fn parseHexByte(hex: String) -> Option<Number> {
+  """Parse dos dígitos hexadecimales (00-FF) a decimal (0-255)."""
+  if hex.length != 2 {
+    return None
+  }
+  
+  high = parseHexDigit(hex.substring(0, 1))
+  low = parseHexDigit(hex.substring(1, 2))
+  
+  return match (high, low) {
+    (Some(h), Some(l)) => Some(h * 16 + l)
+    _ => None
+  }
+}
+
+fn toHexByte(value: Number) -> String {
+  """Convierte un byte (0-255) a hexadecimal (00-FF)."""
+  clamped = clamp(value, 0, 255)
+  high = floor(clamped / 16)
+  low = clamped % 16
+  
+  return "${toHexDigit(high)}${toHexDigit(low)}"
+}
+
+fn toHexDigit(value: Number) -> String {
+  """Convierte un número (0-15) a dígito hexadecimal (0-F)."""
+  return match value {
+    0 => "0"
+    1 => "1"
+    2 => "2"
+    3 => "3"
+    4 => "4"
+    5 => "5"
+    6 => "6"
+    7 => "7"
+    8 => "8"
+    9 => "9"
+    10 => "a"
+    11 => "b"
+    12 => "c"
+    13 => "d"
+    14 => "e"
+    15 => "f"
+    _ => "0"
+  }
+}
+
+fn hueToRGB(p: Float, q: Float, t: Float) -> Float {
+  """Helper para conversión HSL → RGB."""
+  tNorm = if t < 0.0 { t + 1.0 } else if t > 1.0 { t - 1.0 } else { t }
+  
+  if tNorm < 1.0/6.0 {
+    return p + (q - p) * 6.0 * tNorm
+  }
+  if tNorm < 1.0/2.0 {
+    return q
+  }
+  if tNorm < 2.0/3.0 {
+    return p + (q - p) * (2.0/3.0 - tNorm) * 6.0
+  }
+  return p
+}
+
+
+# ============================================================================
+# EXPORTS
+# ============================================================================
+
+public {
+  Color,
+  HSL,
+  clamp,
+  clampFloat
+}

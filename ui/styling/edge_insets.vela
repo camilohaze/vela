@@ -1,0 +1,348 @@
+"""
+EdgeInsets System for Vela UI Framework
+
+Implementación de: TASK-064 (parte 2/2: EdgeInsets)
+Historia: VELA-584 (US-14)
+Sprint: 22
+Fecha: 2025-12-06
+
+Descripción:
+Sistema de espaciado y padding para widgets UI.
+Inspirado en Flutter's EdgeInsets y CSS box model.
+
+Inspiraciones:
+- Flutter: EdgeInsets con factory methods
+- CSS: padding, margin properties
+- SwiftUI: EdgeInsets struct
+- Material Design: Spacing system (4dp grid)
+"""
+
+
+# ============================================================================
+# MAIN CLASS: EdgeInsets
+# ============================================================================
+
+class EdgeInsets {
+  left: Float
+  top: Float
+  right: Float
+  bottom: Float
+  
+  constructor(left: Float, top: Float, right: Float, bottom: Float) {
+    this.left = max(0.0, left)
+    this.top = max(0.0, top)
+    this.right = max(0.0, right)
+    this.bottom = max(0.0, bottom)
+  }
+  
+  # ========================================
+  # Factory Constructors
+  # ========================================
+  
+  fn all(value: Float) -> EdgeInsets {
+    """Aplica el mismo espaciado en todos los lados."""
+    return EdgeInsets(value, value, value, value)
+  }
+  
+  fn symmetric(vertical: Float = 0.0, horizontal: Float = 0.0) -> EdgeInsets {
+    """
+    Espaciado simétrico.
+    vertical: top y bottom
+    horizontal: left y right
+    """
+    return EdgeInsets(horizontal, vertical, horizontal, vertical)
+  }
+  
+  fn only(
+    left: Float = 0.0,
+    top: Float = 0.0,
+    right: Float = 0.0,
+    bottom: Float = 0.0
+  ) -> EdgeInsets {
+    """Especifica cada lado individualmente."""
+    return EdgeInsets(left, top, right, bottom)
+  }
+  
+  fn zero() -> EdgeInsets {
+    """Sin espaciado."""
+    return EdgeInsets(0.0, 0.0, 0.0, 0.0)
+  }
+  
+  # ========================================
+  # Material Design Spacing Scale (4dp grid)
+  # ========================================
+  
+  fn xs() -> EdgeInsets { return EdgeInsets.all(4.0) }    # Extra small
+  fn sm() -> EdgeInsets { return EdgeInsets.all(8.0) }    # Small
+  fn md() -> EdgeInsets { return EdgeInsets.all(16.0) }   # Medium (default)
+  fn lg() -> EdgeInsets { return EdgeInsets.all(24.0) }   # Large
+  fn xl() -> EdgeInsets { return EdgeInsets.all(32.0) }   # Extra large
+  fn xxl() -> EdgeInsets { return EdgeInsets.all(48.0) }  # XXL
+  
+  # ========================================
+  # Properties & Calculations
+  # ========================================
+  
+  fn horizontal() -> Float {
+    """Retorna la suma del espaciado horizontal."""
+    return this.left + this.right
+  }
+  
+  fn vertical() -> Float {
+    """Retorna la suma del espaciado vertical."""
+    return this.top + this.bottom
+  }
+  
+  fn total() -> Float {
+    """Retorna la suma total de todos los lados."""
+    return this.left + this.top + this.right + this.bottom
+  }
+  
+  fn isUniform() -> Bool {
+    """Verifica si todos los lados tienen el mismo valor."""
+    return this.left == this.top &&
+           this.top == this.right &&
+           this.right == this.bottom
+  }
+  
+  fn isSymmetric() -> Bool {
+    """Verifica si es simétrico (left==right && top==bottom)."""
+    return this.left == this.right && this.top == this.bottom
+  }
+  
+  fn isZero() -> Bool {
+    """Verifica si no hay espaciado."""
+    return this.left == 0.0 &&
+           this.top == 0.0 &&
+           this.right == 0.0 &&
+           this.bottom == 0.0
+  }
+  
+  # ========================================
+  # Immutable Updates
+  # ========================================
+  
+  fn copyWith(
+    left: Option<Float> = None,
+    top: Option<Float> = None,
+    right: Option<Float> = None,
+    bottom: Option<Float> = None
+  ) -> EdgeInsets {
+    """Crea una copia con valores actualizados."""
+    return EdgeInsets(
+      left.unwrapOr(this.left),
+      top.unwrapOr(this.top),
+      right.unwrapOr(this.right),
+      bottom.unwrapOr(this.bottom)
+    )
+  }
+  
+  fn add(other: EdgeInsets) -> EdgeInsets {
+    """Suma dos EdgeInsets."""
+    return EdgeInsets(
+      this.left + other.left,
+      this.top + other.top,
+      this.right + other.right,
+      this.bottom + other.bottom
+    )
+  }
+  
+  fn subtract(other: EdgeInsets) -> EdgeInsets {
+    """Resta EdgeInsets (mínimo 0.0 por lado)."""
+    return EdgeInsets(
+      max(0.0, this.left - other.left),
+      max(0.0, this.top - other.top),
+      max(0.0, this.right - other.right),
+      max(0.0, this.bottom - other.bottom)
+    )
+  }
+  
+  fn scale(factor: Float) -> EdgeInsets {
+    """Escala todos los lados por un factor."""
+    return EdgeInsets(
+      max(0.0, this.left * factor),
+      max(0.0, this.top * factor),
+      max(0.0, this.right * factor),
+      max(0.0, this.bottom * factor)
+    )
+  }
+  
+  # ========================================
+  # Interpolation (para animaciones)
+  # ========================================
+  
+  fn lerp(other: EdgeInsets, t: Float) -> EdgeInsets {
+    """
+    Interpola linealmente entre este EdgeInsets y otro.
+    t=0.0 → this, t=1.0 → other
+    """
+    tClamped = clampFloat(t, 0.0, 1.0)
+    
+    return EdgeInsets(
+      this.left + (other.left - this.left) * tClamped,
+      this.top + (other.top - this.top) * tClamped,
+      this.right + (other.right - this.right) * tClamped,
+      this.bottom + (other.bottom - this.bottom) * tClamped
+    )
+  }
+  
+  # ========================================
+  # Rendering to CSS
+  # ========================================
+  
+  fn toCSSPadding() -> String {
+    """Convierte a CSS padding shorthand."""
+    if this.isUniform() {
+      return "${this.top}px"
+    }
+    if this.isSymmetric() {
+      return "${this.top}px ${this.right}px"
+    }
+    return "${this.top}px ${this.right}px ${this.bottom}px ${this.left}px"
+  }
+  
+  fn toCSSMargin() -> String {
+    """Convierte a CSS margin shorthand."""
+    return this.toCSSPadding()
+  }
+  
+  fn toCSSProperties(property: String) -> Map<String, String> {
+    """
+    Convierte a propiedades CSS individuales.
+    property: "padding" o "margin"
+    """
+    return {
+      "${property}-left": "${this.left}px",
+      "${property}-top": "${this.top}px",
+      "${property}-right": "${this.right}px",
+      "${property}-bottom": "${this.bottom}px"
+    }
+  }
+  
+  # ========================================
+  # Utilities
+  # ========================================
+  
+  fn deflate(child: Size) -> Size {
+    """
+    Reduce el tamaño de un widget por el espaciado.
+    Útil para calcular tamaño disponible después de padding.
+    """
+    return Size(
+      max(0.0, child.width - this.horizontal()),
+      max(0.0, child.height - this.vertical())
+    )
+  }
+  
+  fn inflate(child: Size) -> Size {
+    """
+    Aumenta el tamaño de un widget por el espaciado.
+    Útil para calcular tamaño total incluyendo padding.
+    """
+    return Size(
+      child.width + this.horizontal(),
+      child.height + this.vertical()
+    )
+  }
+  
+  fn resolve(direction: TextDirection) -> EdgeInsets {
+    """
+    Resuelve EdgeInsets según la dirección del texto.
+    Para soporte de RTL (right-to-left).
+    """
+    return match direction {
+      TextDirection.LTR => this
+      TextDirection.RTL => EdgeInsets(
+        this.right,  # Swap left con right
+        this.top,
+        this.left,   # Swap right con left
+        this.bottom
+      )
+    }
+  }
+}
+
+
+# ============================================================================
+# ENUMS & HELPERS
+# ============================================================================
+
+enum TextDirection {
+  LTR,  # Left-to-right
+  RTL   # Right-to-left
+}
+
+struct Size {
+  width: Float
+  height: Float
+}
+
+fn max(a: Float, b: Float) -> Float {
+  return if a > b { a } else { b }
+}
+
+fn clampFloat(value: Float, min: Float, max: Float) -> Float {
+  if value < min { return min }
+  if value > max { return max }
+  return value
+}
+
+
+# ============================================================================
+# DIRECTIONAL EDGE INSETS (para RTL support)
+# ============================================================================
+
+class EdgeInsetsDirectional {
+  """
+  EdgeInsets con soporte direccional explícito.
+  Usa 'start' y 'end' en lugar de 'left' y 'right'.
+  """
+  start: Float   # Inicio del texto (left en LTR, right en RTL)
+  top: Float
+  end: Float     # Fin del texto (right en LTR, left en RTL)
+  bottom: Float
+  
+  constructor(start: Float, top: Float, end: Float, bottom: Float) {
+    this.start = max(0.0, start)
+    this.top = max(0.0, top)
+    this.end = max(0.0, end)
+    this.bottom = max(0.0, bottom)
+  }
+  
+  fn all(value: Float) -> EdgeInsetsDirectional {
+    return EdgeInsetsDirectional(value, value, value, value)
+  }
+  
+  fn symmetric(vertical: Float = 0.0, horizontal: Float = 0.0) -> EdgeInsetsDirectional {
+    return EdgeInsetsDirectional(horizontal, vertical, horizontal, vertical)
+  }
+  
+  fn only(
+    start: Float = 0.0,
+    top: Float = 0.0,
+    end: Float = 0.0,
+    bottom: Float = 0.0
+  ) -> EdgeInsetsDirectional {
+    return EdgeInsetsDirectional(start, top, end, bottom)
+  }
+  
+  fn resolve(direction: TextDirection) -> EdgeInsets {
+    """Convierte a EdgeInsets según la dirección del texto."""
+    return match direction {
+      TextDirection.LTR => EdgeInsets(this.start, this.top, this.end, this.bottom)
+      TextDirection.RTL => EdgeInsets(this.end, this.top, this.start, this.bottom)
+    }
+  }
+}
+
+
+# ============================================================================
+# EXPORTS
+# ============================================================================
+
+public {
+  EdgeInsets,
+  EdgeInsetsDirectional,
+  TextDirection,
+  Size
+}

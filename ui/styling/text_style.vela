@@ -1,0 +1,675 @@
+"""
+Text Styling System for Vela UI Framework
+
+Implementación de: TASK-063
+Historia: VELA-584 (US-14)
+Sprint: 22
+Fecha: 2025-12-06
+
+Descripción:
+Sistema completo de estilos de texto inspirado en Flutter's TextStyle.
+Incluye tipografía, decoración, sombras y transformaciones.
+
+Inspiraciones:
+- Flutter: TextStyle, FontWeight, FontStyle, TextDecoration
+- CSS: font properties, text-decoration, text-shadow
+- Material Design: Typography scales, font families
+- SwiftUI: Font system, text modifiers
+"""
+
+import 'system:ui' show { Widget, BuildContext }
+import 'module:styling' show { Color }
+
+
+# ============================================================================
+# ENUMS: Font Properties
+# ============================================================================
+
+enum FontWeight {
+  Thin,          # 100
+  ExtraLight,    # 200
+  Light,         # 300
+  Normal,        # 400 (default)
+  Medium,        # 500
+  SemiBold,      # 600
+  Bold,          # 700
+  ExtraBold,     # 800
+  Black          # 900
+  
+  fn toValue() -> Number {
+    return match this {
+      FontWeight.Thin => 100
+      FontWeight.ExtraLight => 200
+      FontWeight.Light => 300
+      FontWeight.Normal => 400
+      FontWeight.Medium => 500
+      FontWeight.SemiBold => 600
+      FontWeight.Bold => 700
+      FontWeight.ExtraBold => 800
+      FontWeight.Black => 900
+    }
+  }
+  
+  fn fromValue(value: Number) -> Option<FontWeight> {
+    return match value {
+      100 => Some(FontWeight.Thin)
+      200 => Some(FontWeight.ExtraLight)
+      300 => Some(FontWeight.Light)
+      400 => Some(FontWeight.Normal)
+      500 => Some(FontWeight.Medium)
+      600 => Some(FontWeight.SemiBold)
+      700 => Some(FontWeight.Bold)
+      800 => Some(FontWeight.ExtraBold)
+      900 => Some(FontWeight.Black)
+      _ => None
+    }
+  }
+}
+
+
+enum FontStyle {
+  Normal,
+  Italic,
+  Oblique
+  
+  fn toCSSValue() -> String {
+    return match this {
+      FontStyle.Normal => "normal"
+      FontStyle.Italic => "italic"
+      FontStyle.Oblique => "oblique"
+    }
+  }
+}
+
+
+enum TextDecoration {
+  None,
+  Underline,
+  Overline,
+  LineThrough,
+  Combined(decorations: List<TextDecoration>)
+  
+  fn toCSSValue() -> String {
+    return match this {
+      TextDecoration.None => "none"
+      TextDecoration.Underline => "underline"
+      TextDecoration.Overline => "overline"
+      TextDecoration.LineThrough => "line-through"
+      TextDecoration.Combined(decorations) => {
+        values = decorations
+          .filter(d => d != TextDecoration.None)
+          .map(d => d.toCSSValue())
+        return values.join(" ")
+      }
+    }
+  }
+}
+
+
+enum TextDecorationStyle {
+  Solid,
+  Double,
+  Dotted,
+  Dashed,
+  Wavy
+  
+  fn toCSSValue() -> String {
+    return match this {
+      TextDecorationStyle.Solid => "solid"
+      TextDecorationStyle.Double => "double"
+      TextDecorationStyle.Dotted => "dotted"
+      TextDecorationStyle.Dashed => "dashed"
+      TextDecorationStyle.Wavy => "wavy"
+    }
+  }
+}
+
+
+enum TextBaseline {
+  Alphabetic,
+  Ideographic
+  
+  fn toCSSValue() -> String {
+    return match this {
+      TextBaseline.Alphabetic => "alphabetic"
+      TextBaseline.Ideographic => "ideographic"
+    }
+  }
+}
+
+
+enum TextOverflow {
+  Clip,        # Cortar texto sin indicador
+  Fade,        # Fade out gradual
+  Ellipsis,    # Mostrar "..."
+  Visible      # Texto desborda sin recorte
+  
+  fn toCSSValue() -> String {
+    return match this {
+      TextOverflow.Clip => "clip"
+      TextOverflow.Fade => "fade"
+      TextOverflow.Ellipsis => "ellipsis"
+      TextOverflow.Visible => "visible"
+    }
+  }
+}
+
+
+# ============================================================================
+# VALUE OBJECTS: Text Shadow
+# ============================================================================
+
+valueObject TextShadow {
+  color: Color
+  offsetX: Float
+  offsetY: Float
+  blurRadius: Float
+  
+  constructor(
+    color: Color,
+    offsetX: Float,
+    offsetY: Float,
+    blurRadius: Float = 0.0
+  ) {
+    this.color = color
+    this.offsetX = offsetX
+    this.offsetY = offsetY
+    this.blurRadius = blurRadius
+  }
+  
+  fn toCSSValue() -> String {
+    return "${this.offsetX}px ${this.offsetY}px ${this.blurRadius}px ${this.color.toCSSValue()}"
+  }
+  
+  # Factory methods para sombras comunes
+  fn subtle() -> TextShadow {
+    return TextShadow(
+      color: Color.black().withOpacity(0.25),
+      offsetX: 0.0,
+      offsetY: 1.0,
+      blurRadius: 2.0
+    )
+  }
+  
+  fn medium() -> TextShadow {
+    return TextShadow(
+      color: Color.black().withOpacity(0.3),
+      offsetX: 0.0,
+      offsetY: 2.0,
+      blurRadius: 4.0
+    )
+  }
+  
+  fn strong() -> TextShadow {
+    return TextShadow(
+      color: Color.black().withOpacity(0.4),
+      offsetX: 0.0,
+      offsetY: 4.0,
+      blurRadius: 8.0
+    )
+  }
+}
+
+
+# ============================================================================
+# MAIN CLASS: TextStyle
+# ============================================================================
+
+class TextStyle {
+  # Typography
+  fontFamily: Option<String>
+  fontSize: Option<Float>
+  fontWeight: Option<FontWeight>
+  fontStyle: Option<FontStyle>
+  letterSpacing: Option<Float>
+  wordSpacing: Option<Float>
+  height: Option<Float>  # Line height multiplier
+  
+  # Color
+  color: Option<Color>
+  backgroundColor: Option<Color>
+  
+  # Decoration
+  decoration: Option<TextDecoration>
+  decorationColor: Option<Color>
+  decorationStyle: Option<TextDecorationStyle>
+  decorationThickness: Option<Float>
+  
+  # Effects
+  shadows: List<TextShadow>
+  
+  # Advanced
+  baseline: Option<TextBaseline>
+  overflow: Option<TextOverflow>
+  
+  constructor(
+    fontFamily: Option<String> = None,
+    fontSize: Option<Float> = None,
+    fontWeight: Option<FontWeight> = None,
+    fontStyle: Option<FontStyle> = None,
+    letterSpacing: Option<Float> = None,
+    wordSpacing: Option<Float> = None,
+    height: Option<Float> = None,
+    color: Option<Color> = None,
+    backgroundColor: Option<Color> = None,
+    decoration: Option<TextDecoration> = None,
+    decorationColor: Option<Color> = None,
+    decorationStyle: Option<TextDecorationStyle> = None,
+    decorationThickness: Option<Float> = None,
+    shadows: List<TextShadow> = [],
+    baseline: Option<TextBaseline> = None,
+    overflow: Option<TextOverflow> = None
+  ) {
+    this.fontFamily = fontFamily
+    this.fontSize = fontSize
+    this.fontWeight = fontWeight
+    this.fontStyle = fontStyle
+    this.letterSpacing = letterSpacing
+    this.wordSpacing = wordSpacing
+    this.height = height
+    this.color = color
+    this.backgroundColor = backgroundColor
+    this.decoration = decoration
+    this.decorationColor = decorationColor
+    this.decorationStyle = decorationStyle
+    this.decorationThickness = decorationThickness
+    this.shadows = shadows
+    this.baseline = baseline
+    this.overflow = overflow
+  }
+  
+  # ========================================
+  # Merge & CopyWith (Immutable Updates)
+  # ========================================
+  
+  fn merge(other: Option<TextStyle>) -> TextStyle {
+    """
+    Combina este estilo con otro, dando prioridad al otro estilo.
+    Similar a Flutter's TextStyle.merge().
+    """
+    return match other {
+      None => this
+      Some(other) => TextStyle(
+        fontFamily: other.fontFamily.or(this.fontFamily),
+        fontSize: other.fontSize.or(this.fontSize),
+        fontWeight: other.fontWeight.or(this.fontWeight),
+        fontStyle: other.fontStyle.or(this.fontStyle),
+        letterSpacing: other.letterSpacing.or(this.letterSpacing),
+        wordSpacing: other.wordSpacing.or(this.wordSpacing),
+        height: other.height.or(this.height),
+        color: other.color.or(this.color),
+        backgroundColor: other.backgroundColor.or(this.backgroundColor),
+        decoration: other.decoration.or(this.decoration),
+        decorationColor: other.decorationColor.or(this.decorationColor),
+        decorationStyle: other.decorationStyle.or(this.decorationStyle),
+        decorationThickness: other.decorationThickness.or(this.decorationThickness),
+        shadows: if other.shadows.length > 0 { other.shadows } else { this.shadows },
+        baseline: other.baseline.or(this.baseline),
+        overflow: other.overflow.or(this.overflow)
+      )
+    }
+  }
+  
+  fn copyWith(
+    fontFamily: Option<String> = None,
+    fontSize: Option<Float> = None,
+    fontWeight: Option<FontWeight> = None,
+    fontStyle: Option<FontStyle> = None,
+    letterSpacing: Option<Float> = None,
+    wordSpacing: Option<Float> = None,
+    height: Option<Float> = None,
+    color: Option<Color> = None,
+    backgroundColor: Option<Color> = None,
+    decoration: Option<TextDecoration> = None,
+    decorationColor: Option<Color> = None,
+    decorationStyle: Option<TextDecorationStyle> = None,
+    decorationThickness: Option<Float> = None,
+    shadows: Option<List<TextShadow>> = None,
+    baseline: Option<TextBaseline> = None,
+    overflow: Option<TextOverflow> = None
+  ) -> TextStyle {
+    """
+    Crea una copia con campos actualizados (immutable update).
+    """
+    return TextStyle(
+      fontFamily: fontFamily.or(this.fontFamily),
+      fontSize: fontSize.or(this.fontSize),
+      fontWeight: fontWeight.or(this.fontWeight),
+      fontStyle: fontStyle.or(this.fontStyle),
+      letterSpacing: letterSpacing.or(this.letterSpacing),
+      wordSpacing: wordSpacing.or(this.wordSpacing),
+      height: height.or(this.height),
+      color: color.or(this.color),
+      backgroundColor: backgroundColor.or(this.backgroundColor),
+      decoration: decoration.or(this.decoration),
+      decorationColor: decorationColor.or(this.decorationColor),
+      decorationStyle: decorationStyle.or(this.decorationStyle),
+      decorationThickness: decorationThickness.or(this.decorationThickness),
+      shadows: shadows.unwrapOr(this.shadows),
+      baseline: baseline.or(this.baseline),
+      overflow: overflow.or(this.overflow)
+    }
+  }
+  
+  # ========================================
+  # Fluent Builder API (chainable methods)
+  # ========================================
+  
+  fn withColor(color: Color) -> TextStyle {
+    return this.copyWith(color: Some(color))
+  }
+  
+  fn withSize(size: Float) -> TextStyle {
+    return this.copyWith(fontSize: Some(size))
+  }
+  
+  fn withWeight(weight: FontWeight) -> TextStyle {
+    return this.copyWith(fontWeight: Some(weight))
+  }
+  
+  fn withFamily(family: String) -> TextStyle {
+    return this.copyWith(fontFamily: Some(family))
+  }
+  
+  fn bold() -> TextStyle {
+    return this.copyWith(fontWeight: Some(FontWeight.Bold))
+  }
+  
+  fn italic() -> TextStyle {
+    return this.copyWith(fontStyle: Some(FontStyle.Italic))
+  }
+  
+  fn underline() -> TextStyle {
+    return this.copyWith(decoration: Some(TextDecoration.Underline))
+  }
+  
+  fn lineThrough() -> TextStyle {
+    return this.copyWith(decoration: Some(TextDecoration.LineThrough))
+  }
+  
+  fn withShadow(shadow: TextShadow) -> TextStyle {
+    newShadows = this.shadows.concat([shadow])
+    return this.copyWith(shadows: Some(newShadows))
+  }
+  
+  # ========================================
+  # Rendering to CSS
+  # ========================================
+  
+  fn toCSSProperties() -> Map<String, String> {
+    """
+    Convierte el TextStyle a propiedades CSS.
+    Usado por el renderer para aplicar estilos en DOM.
+    """
+    props: Map<String, String> = {}
+    
+    if let Some(family) = this.fontFamily {
+      props["font-family"] = family
+    }
+    
+    if let Some(size) = this.fontSize {
+      props["font-size"] = "${size}px"
+    }
+    
+    if let Some(weight) = this.fontWeight {
+      props["font-weight"] = "${weight.toValue()}"
+    }
+    
+    if let Some(style) = this.fontStyle {
+      props["font-style"] = style.toCSSValue()
+    }
+    
+    if let Some(spacing) = this.letterSpacing {
+      props["letter-spacing"] = "${spacing}px"
+    }
+    
+    if let Some(spacing) = this.wordSpacing {
+      props["word-spacing"] = "${spacing}px"
+    }
+    
+    if let Some(h) = this.height {
+      props["line-height"] = "${h}"
+    }
+    
+    if let Some(col) = this.color {
+      props["color"] = col.toCSSValue()
+    }
+    
+    if let Some(bg) = this.backgroundColor {
+      props["background-color"] = bg.toCSSValue()
+    }
+    
+    if let Some(dec) = this.decoration {
+      props["text-decoration-line"] = dec.toCSSValue()
+    }
+    
+    if let Some(col) = this.decorationColor {
+      props["text-decoration-color"] = col.toCSSValue()
+    }
+    
+    if let Some(style) = this.decorationStyle {
+      props["text-decoration-style"] = style.toCSSValue()
+    }
+    
+    if let Some(thickness) = this.decorationThickness {
+      props["text-decoration-thickness"] = "${thickness}px"
+    }
+    
+    if this.shadows.length > 0 {
+      shadowValues = this.shadows.map(s => s.toCSSValue())
+      props["text-shadow"] = shadowValues.join(", ")
+    }
+    
+    if let Some(overflow) = this.overflow {
+      props["text-overflow"] = overflow.toCSSValue()
+      if overflow == TextOverflow.Ellipsis {
+        props["white-space"] = "nowrap"
+        props["overflow"] = "hidden"
+      }
+    }
+    
+    return props
+  }
+  
+  # ========================================
+  # Predefined Styles (Material Design)
+  # ========================================
+  
+  fn displayLarge() -> TextStyle {
+    return TextStyle(
+      fontSize: Some(57.0),
+      fontWeight: Some(FontWeight.Normal),
+      letterSpacing: Some(-0.25)
+    )
+  }
+  
+  fn displayMedium() -> TextStyle {
+    return TextStyle(
+      fontSize: Some(45.0),
+      fontWeight: Some(FontWeight.Normal)
+    )
+  }
+  
+  fn displaySmall() -> TextStyle {
+    return TextStyle(
+      fontSize: Some(36.0),
+      fontWeight: Some(FontWeight.Normal)
+    )
+  }
+  
+  fn headlineLarge() -> TextStyle {
+    return TextStyle(
+      fontSize: Some(32.0),
+      fontWeight: Some(FontWeight.Normal)
+    )
+  }
+  
+  fn headlineMedium() -> TextStyle {
+    return TextStyle(
+      fontSize: Some(28.0),
+      fontWeight: Some(FontWeight.Normal)
+    )
+  }
+  
+  fn headlineSmall() -> TextStyle {
+    return TextStyle(
+      fontSize: Some(24.0),
+      fontWeight: Some(FontWeight.Normal)
+    )
+  }
+  
+  fn titleLarge() -> TextStyle {
+    return TextStyle(
+      fontSize: Some(22.0),
+      fontWeight: Some(FontWeight.Normal)
+    )
+  }
+  
+  fn titleMedium() -> TextStyle {
+    return TextStyle(
+      fontSize: Some(16.0),
+      fontWeight: Some(FontWeight.Medium),
+      letterSpacing: Some(0.15)
+    )
+  }
+  
+  fn titleSmall() -> TextStyle {
+    return TextStyle(
+      fontSize: Some(14.0),
+      fontWeight: Some(FontWeight.Medium),
+      letterSpacing: Some(0.1)
+    )
+  }
+  
+  fn bodyLarge() -> TextStyle {
+    return TextStyle(
+      fontSize: Some(16.0),
+      fontWeight: Some(FontWeight.Normal),
+      letterSpacing: Some(0.5)
+    )
+  }
+  
+  fn bodyMedium() -> TextStyle {
+    return TextStyle(
+      fontSize: Some(14.0),
+      fontWeight: Some(FontWeight.Normal),
+      letterSpacing: Some(0.25)
+    )
+  }
+  
+  fn bodySmall() -> TextStyle {
+    return TextStyle(
+      fontSize: Some(12.0),
+      fontWeight: Some(FontWeight.Normal),
+      letterSpacing: Some(0.4)
+    )
+  }
+  
+  fn labelLarge() -> TextStyle {
+    return TextStyle(
+      fontSize: Some(14.0),
+      fontWeight: Some(FontWeight.Medium),
+      letterSpacing: Some(0.1)
+    )
+  }
+  
+  fn labelMedium() -> TextStyle {
+    return TextStyle(
+      fontSize: Some(12.0),
+      fontWeight: Some(FontWeight.Medium),
+      letterSpacing: Some(0.5)
+    )
+  }
+  
+  fn labelSmall() -> TextStyle {
+    return TextStyle(
+      fontSize: Some(11.0),
+      fontWeight: Some(FontWeight.Medium),
+      letterSpacing: Some(0.5)
+    )
+  }
+}
+
+
+# ============================================================================
+# HELPER FUNCTIONS
+# ============================================================================
+
+fn lerp(a: Option<TextStyle>, b: Option<TextStyle>, t: Float) -> Option<TextStyle> {
+  """
+  Interpola linealmente entre dos estilos (para animaciones).
+  t=0.0 → a, t=1.0 → b
+  """
+  if t <= 0.0 {
+    return a
+  }
+  if t >= 1.0 {
+    return b
+  }
+  
+  return match (a, b) {
+    (None, None) => None
+    (Some(style), None) => Some(style)
+    (None, Some(style)) => Some(style)
+    (Some(aStyle), Some(bStyle)) => {
+      # Interpolar propiedades numéricas
+      fontSize = lerpFloat(
+        aStyle.fontSize.unwrapOr(14.0),
+        bStyle.fontSize.unwrapOr(14.0),
+        t
+      )
+      
+      letterSpacing = lerpFloat(
+        aStyle.letterSpacing.unwrapOr(0.0),
+        bStyle.letterSpacing.unwrapOr(0.0),
+        t
+      )
+      
+      # Interpolar color
+      color = if let Some(aColor) = aStyle.color {
+        if let Some(bColor) = bStyle.color {
+          Some(Color.lerp(aColor, bColor, t))
+        } else {
+          Some(aColor)
+        }
+      } else {
+        bStyle.color
+      }
+      
+      # Para propiedades discretas, usar threshold
+      fontWeight = if t < 0.5 { aStyle.fontWeight } else { bStyle.fontWeight }
+      fontStyle = if t < 0.5 { aStyle.fontStyle } else { bStyle.fontStyle }
+      
+      Some(TextStyle(
+        fontFamily: if t < 0.5 { aStyle.fontFamily } else { bStyle.fontFamily },
+        fontSize: Some(fontSize),
+        fontWeight: fontWeight,
+        fontStyle: fontStyle,
+        letterSpacing: Some(letterSpacing),
+        color: color
+      ))
+    }
+  }
+}
+
+fn lerpFloat(a: Float, b: Float, t: Float) -> Float {
+  return a + (b - a) * t
+}
+
+
+# ============================================================================
+# EXPORTS
+# ============================================================================
+
+public {
+  TextStyle,
+  FontWeight,
+  FontStyle,
+  TextDecoration,
+  TextDecorationStyle,
+  TextBaseline,
+  TextOverflow,
+  TextShadow,
+  lerp,
+  lerpFloat
+}
