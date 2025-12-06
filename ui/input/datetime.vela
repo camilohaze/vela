@@ -11,9 +11,9 @@ Sprint: 20
 Task: TASK-056
 """
 
-import 'src/ui/widget' show { Widget, StatefulWidget, StatelessWidget, BuildContext }
-import 'src/ui/layout/container' show { Container, EdgeInsets, BoxDecoration, BorderRadius, Alignment }
-import 'src/ui/input/button' show { TextButton, IconButton }
+import 'ui/widget' show { Widget, StatefulWidget, StatelessWidget, BuildContext }
+import 'ui/layout/container' show { Container, EdgeInsets, BoxDecoration, BorderRadius, Alignment }
+import 'ui/input/button' show { TextButton, IconButton }
 
 # ============================================================================
 # DATE TIME - Estructura para fecha y hora

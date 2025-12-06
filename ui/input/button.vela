@@ -11,8 +11,8 @@ Sprint: 20
 Task: TASK-056
 """
 
-import 'src/ui/widget' show { Widget, StatelessWidget, StatefulWidget, BuildContext }
-import 'src/ui/layout/container' show { Container, EdgeInsets, BoxDecoration, BorderRadius, Alignment }
+import 'ui/widget' show { Widget, StatelessWidget, StatefulWidget, BuildContext }
+import 'ui/layout/container' show { Container, EdgeInsets, BoxDecoration, BorderRadius, Alignment }
 
 # ============================================================================
 # BUTTON BASE - Clase base para todos los botones

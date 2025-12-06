@@ -11,8 +11,8 @@ Sprint: 20
 Task: TASK-056
 """
 
-import 'src/ui/widget' show { Widget, StatefulWidget, BuildContext }
-import 'src/ui/layout/container' show { Container, EdgeInsets, BoxDecoration, Border, BorderRadius, Alignment }
+import 'ui/widget' show { Widget, StatefulWidget, BuildContext }
+import 'ui/layout/container' show { Container, EdgeInsets, BoxDecoration, Border, BorderRadius, Alignment }
 
 # ============================================================================
 # CHECKBOX - Casilla de verificación

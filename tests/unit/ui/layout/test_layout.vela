@@ -12,17 +12,17 @@ Sprint: 20
 Task: TASK-055
 """
 
-import 'src/ui/widget' show { Widget, StatelessWidget, BuildContext }
-import 'src/ui/layout/container' show { 
+import 'ui/widget' show { Widget, StatelessWidget, BuildContext }
+import 'ui/layout/container' show { 
   Container, SizedBox, Padding, Center, Align, AspectRatio,
   EdgeInsets, BoxDecoration, BoxConstraints, Alignment, BoxShape,
   Flexible, Expanded, Spacer
 }
-import 'src/ui/layout/flex' show { 
+import 'ui/layout/flex' show { 
   Row, Column, MainAxisAlignment, CrossAxisAlignment, MainAxisSize,
   Wrap, ListView, SingleChildScrollView, GridView
 }
-import 'src/ui/layout/stack' show { Stack, Positioned, IndexedStack, StackFit }
+import 'ui/layout/stack' show { Stack, Positioned, IndexedStack, StackFit }
 
 # ============================================================================
 # TEST HELPERS

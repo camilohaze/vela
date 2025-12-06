@@ -17,7 +17,7 @@ Sprint: 20
 Task: TASK-055
 """
 
-import 'src/ui/widget' show { Widget, StatelessWidget, BuildContext, Color }
+import 'ui/widget' show { Widget, StatelessWidget, BuildContext, Color }
 
 # ============================================================================
 # ENUMS Y TIPOS DE LAYOUT

@@ -15,8 +15,8 @@ Sprint: 20
 Task: TASK-055
 """
 
-import 'src/ui/widget' show { Widget, StatelessWidget, BuildContext }
-import 'src/ui/layout/container' show { EdgeInsets, Flexible, Expanded }
+import 'ui/widget' show { Widget, StatelessWidget, BuildContext }
+import 'ui/layout/container' show { EdgeInsets, Flexible, Expanded }
 
 # ============================================================================
 # ENUMS DE ALINEACIÓN

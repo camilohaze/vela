@@ -14,7 +14,7 @@ Sprint: 20
 Task: TASK-054
 """
 
-import 'src/ui/widget' show {
+import 'ui/widget' show {
   Widget, StatelessWidget, StatefulWidget,
   Key, ValueKey, ObjectKey, GlobalKey,
   BuildContext, Element,

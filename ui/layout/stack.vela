@@ -14,7 +14,7 @@ Sprint: 20
 Task: TASK-055
 """
 
-import 'src/ui/widget' show { Widget, StatelessWidget, BuildContext }
+import 'ui/widget' show { Widget, StatelessWidget, BuildContext }
 import 'src/ui/layout/container' show { Alignment, Clip }
 
 # ============================================================================
