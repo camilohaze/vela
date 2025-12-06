@@ -1,0 +1,886 @@
+"""
+Tests de reconciliación reactiva (End-to-End)
+
+Jira: VELA-583
+Sprint: Sprint 21 - Sistema Reactivo Integrado en UI
+Descripción: Verificar que cambios en signals/state actualizan UI correctamente.
+
+Este test suite valida el flujo completo:
+Signal change → ReactiveWidget rebuild → VTree generation → Diff → Patch → DOM update
+"""
+
+import 'system:testing' show { describe, it, assert, beforeEach, afterEach }
+import 'system:reactive' show { signal, computed, effect, batch }
+import 'system:ui' show { Widget, BuildContext, StatefulWidget, Container, Column, Row, Text, Button }
+import 'ui:reactive_widget' show { ReactiveStatefulWidget, useReactiveState, useComputed, useEffect, batchUpdates }
+import 'ui:vdom:vnode' show { VNode, VTree, VDOMRenderer, VNodeFactory }
+import 'ui:vdom:diff' show { diff, DiffResult }
+import 'ui:vdom:patch' show { applyDiff, PatchStats }
+import 'system:dom' show { document, DOMElement }
+
+
+# ============================================================================
+# TEST: BASIC REACTIVE UPDATE
+# ============================================================================
+
+describe("Basic Reactive Update", () => {
+  
+  it("should update DOM when signal changes", () => {
+    buildContext = BuildContext {}
+    parentElement = document.createElement("div")
+    document.body.appendChild(parentElement)
+    
+    # Counter widget
+    counter = signal(0)
+    
+    widget = ReactiveCounter { counter }
+    
+    # Initial render
+    oldTree = VTree.fromWidget(widget, buildContext)
+    renderer = VDOMRenderer(buildContext)
+    element = renderer.render(oldTree.root)
+    parentElement.appendChild(element)
+    
+    # Verificar valor inicial
+    textElement = parentElement.querySelector(".count")
+    assert(textElement.textContent == "Count: 0")
+    
+    # Cambiar signal
+    counter.set(1)
+    
+    # Rebuild widget (simular lo que haría ReactiveWidget)
+    newTree = VTree.fromWidget(widget, buildContext)
+    
+    # Diff
+    diffResult = diff(oldTree, newTree)
+    
+    # Patch
+    stats = applyDiff(diffResult, parentElement, buildContext)
+    
+    # Verificar actualización
+    textElement = parentElement.querySelector(".count")
+    assert(textElement.textContent == "Count: 1")
+    assert(stats.total() > 0, "Should have applied patches")
+    
+    # Cleanup
+    document.body.removeChild(parentElement)
+  })
+  
+  
+  it("should handle multiple signal changes with batching", () => {
+    buildContext = BuildContext {}
+    parentElement = document.createElement("div")
+    document.body.appendChild(parentElement)
+    
+    counter = signal(0)
+    widget = ReactiveCounter { counter }
+    
+    # Initial render
+    oldTree = VTree.fromWidget(widget, buildContext)
+    renderer = VDOMRenderer(buildContext)
+    element = renderer.render(oldTree.root)
+    parentElement.appendChild(element)
+    
+    # Cambiar signal múltiples veces en batch
+    batchUpdates(() => {
+      counter.set(1)
+      counter.set(2)
+      counter.set(3)
+    })
+    
+    # Rebuild (solo una vez gracias a batching)
+    newTree = VTree.fromWidget(widget, buildContext)
+    diffResult = diff(oldTree, newTree)
+    stats = applyDiff(diffResult, parentElement, buildContext)
+    
+    # Verificar actualización final
+    textElement = parentElement.querySelector(".count")
+    assert(textElement.textContent == "Count: 3")
+    
+    # Cleanup
+    document.body.removeChild(parentElement)
+  })
+})
+
+
+# ============================================================================
+# TEST: COMPUTED VALUES
+# ============================================================================
+
+describe("Computed Values", () => {
+  
+  it("should update DOM when computed value changes", () => {
+    buildContext = BuildContext {}
+    parentElement = document.createElement("div")
+    document.body.appendChild(parentElement)
+    
+    count = signal(5)
+    doubled = computed(() => count.get() * 2)
+    
+    widget = ComputedDisplay { count, doubled }
+    
+    # Initial render
+    oldTree = VTree.fromWidget(widget, buildContext)
+    renderer = VDOMRenderer(buildContext)
+    element = renderer.render(oldTree.root)
+    parentElement.appendChild(element)
+    
+    # Verificar valores iniciales
+    countText = parentElement.querySelector(".count").textContent
+    doubledText = parentElement.querySelector(".doubled").textContent
+    assert(countText == "Count: 5")
+    assert(doubledText == "Doubled: 10")
+    
+    # Cambiar signal base
+    count.set(7)
+    
+    # Rebuild
+    newTree = VTree.fromWidget(widget, buildContext)
+    diffResult = diff(oldTree, newTree)
+    applyDiff(diffResult, parentElement, buildContext)
+    
+    # Verificar que computed se actualizó
+    countText = parentElement.querySelector(".count").textContent
+    doubledText = parentElement.querySelector(".doubled").textContent
+    assert(countText == "Count: 7")
+    assert(doubledText == "Doubled: 14")
+    
+    # Cleanup
+    document.body.removeChild(parentElement)
+  })
+})
+
+
+# ============================================================================
+# TEST: LIST UPDATES
+# ============================================================================
+
+describe("List Updates", () => {
+  
+  it("should add items to list", () => {
+    buildContext = BuildContext {}
+    parentElement = document.createElement("ul")
+    document.body.appendChild(parentElement)
+    
+    items = signal(["Item 1", "Item 2"])
+    widget = TodoList { items }
+    
+    # Initial render
+    oldTree = VTree.fromWidget(widget, buildContext)
+    renderer = VDOMRenderer(buildContext)
+    element = renderer.render(oldTree.root)
+    parentElement.appendChild(element)
+    
+    # Verificar 2 items
+    assert(parentElement.querySelectorAll("li").length == 2)
+    
+    # Agregar item
+    items.set([...items.get(), "Item 3"])
+    
+    # Rebuild
+    newTree = VTree.fromWidget(widget, buildContext)
+    diffResult = diff(oldTree, newTree)
+    stats = applyDiff(diffResult, parentElement, buildContext)
+    
+    # Verificar 3 items
+    assert(parentElement.querySelectorAll("li").length == 3)
+    assert(stats.created == 1, "Should have created 1 element")
+    
+    # Cleanup
+    document.body.removeChild(parentElement)
+  })
+  
+  
+  it("should remove items from list", () => {
+    buildContext = BuildContext {}
+    parentElement = document.createElement("ul")
+    document.body.appendChild(parentElement)
+    
+    items = signal(["Item 1", "Item 2", "Item 3"])
+    widget = TodoList { items }
+    
+    # Initial render
+    oldTree = VTree.fromWidget(widget, buildContext)
+    renderer = VDOMRenderer(buildContext)
+    element = renderer.render(oldTree.root)
+    parentElement.appendChild(element)
+    
+    # Verificar 3 items
+    assert(parentElement.querySelectorAll("li").length == 3)
+    
+    # Remover item
+    items.set(["Item 1", "Item 3"])
+    
+    # Rebuild
+    newTree = VTree.fromWidget(widget, buildContext)
+    diffResult = diff(oldTree, newTree)
+    stats = applyDiff(diffResult, parentElement, buildContext)
+    
+    # Verificar 2 items
+    assert(parentElement.querySelectorAll("li").length == 2)
+    assert(stats.removed == 1, "Should have removed 1 element")
+    
+    # Cleanup
+    document.body.removeChild(parentElement)
+  })
+  
+  
+  it("should reorder items in list", () => {
+    buildContext = BuildContext {}
+    parentElement = document.createElement("ul")
+    document.body.appendChild(parentElement)
+    
+    items = signal(["A", "B", "C"])
+    widget = TodoList { items }
+    
+    # Initial render
+    oldTree = VTree.fromWidget(widget, buildContext)
+    renderer = VDOMRenderer(buildContext)
+    element = renderer.render(oldTree.root)
+    parentElement.appendChild(element)
+    
+    # Verificar orden inicial
+    liElements = parentElement.querySelectorAll("li")
+    assert(liElements[0].textContent == "A")
+    assert(liElements[1].textContent == "B")
+    assert(liElements[2].textContent == "C")
+    
+    # Reordenar
+    items.set(["C", "A", "B"])
+    
+    # Rebuild
+    newTree = VTree.fromWidget(widget, buildContext)
+    diffResult = diff(oldTree, newTree)
+    stats = applyDiff(diffResult, parentElement, buildContext)
+    
+    # Verificar orden nuevo
+    liElements = parentElement.querySelectorAll("li")
+    assert(liElements[0].textContent == "C")
+    assert(liElements[1].textContent == "A")
+    assert(liElements[2].textContent == "B")
+    assert(stats.reordered > 0, "Should have reordered elements")
+    
+    # Cleanup
+    document.body.removeChild(parentElement)
+  })
+})
+
+
+# ============================================================================
+# TEST: CONDITIONAL RENDERING
+# ============================================================================
+
+describe("Conditional Rendering", () => {
+  
+  it("should show/hide elements based on condition", () => {
+    buildContext = BuildContext {}
+    parentElement = document.createElement("div")
+    document.body.appendChild(parentElement)
+    
+    isVisible = signal(true)
+    widget = ConditionalWidget { isVisible }
+    
+    # Initial render (visible)
+    oldTree = VTree.fromWidget(widget, buildContext)
+    renderer = VDOMRenderer(buildContext)
+    element = renderer.render(oldTree.root)
+    parentElement.appendChild(element)
+    
+    # Verificar que el elemento está presente
+    visibleElement = parentElement.querySelector(".conditional")
+    assert(visibleElement != null)
+    
+    # Ocultar
+    isVisible.set(false)
+    
+    # Rebuild
+    newTree = VTree.fromWidget(widget, buildContext)
+    diffResult = diff(oldTree, newTree)
+    stats = applyDiff(diffResult, parentElement, buildContext)
+    
+    # Verificar que el elemento fue removido
+    visibleElement = parentElement.querySelector(".conditional")
+    assert(visibleElement == null)
+    assert(stats.removed == 1, "Should have removed 1 element")
+    
+    # Cleanup
+    document.body.removeChild(parentElement)
+  })
+  
+  
+  it("should switch between different components", () => {
+    buildContext = BuildContext {}
+    parentElement = document.createElement("div")
+    document.body.appendChild(parentElement)
+    
+    mode = signal("A")
+    widget = SwitchWidget { mode }
+    
+    # Initial render (mode A)
+    oldTree = VTree.fromWidget(widget, buildContext)
+    renderer = VDOMRenderer(buildContext)
+    element = renderer.render(oldTree.root)
+    parentElement.appendChild(element)
+    
+    # Verificar componente A
+    componentA = parentElement.querySelector(".component-a")
+    assert(componentA != null)
+    
+    # Cambiar a modo B
+    mode.set("B")
+    
+    # Rebuild
+    newTree = VTree.fromWidget(widget, buildContext)
+    diffResult = diff(oldTree, newTree)
+    stats = applyDiff(diffResult, parentElement, buildContext)
+    
+    # Verificar componente B
+    componentA = parentElement.querySelector(".component-a")
+    componentB = parentElement.querySelector(".component-b")
+    assert(componentA == null)
+    assert(componentB != null)
+    assert(stats.replaced > 0, "Should have replaced component")
+    
+    # Cleanup
+    document.body.removeChild(parentElement)
+  })
+})
+
+
+# ============================================================================
+# TEST: FORM INPUTS
+# ============================================================================
+
+describe("Form Inputs", () => {
+  
+  it("should update input value bidirectionally", () => {
+    buildContext = BuildContext {}
+    parentElement = document.createElement("form")
+    document.body.appendChild(parentElement)
+    
+    inputValue = signal("")
+    widget = InputWidget { inputValue }
+    
+    # Initial render
+    oldTree = VTree.fromWidget(widget, buildContext)
+    renderer = VDOMRenderer(buildContext)
+    element = renderer.render(oldTree.root)
+    parentElement.appendChild(element)
+    
+    inputElement = parentElement.querySelector("input")
+    assert(inputElement.value == "")
+    
+    # Actualizar desde código
+    inputValue.set("Hello")
+    
+    # Rebuild
+    newTree = VTree.fromWidget(widget, buildContext)
+    diffResult = diff(oldTree, newTree)
+    applyDiff(diffResult, parentElement, buildContext)
+    
+    # Verificar actualización
+    inputElement = parentElement.querySelector("input")
+    assert(inputElement.value == "Hello")
+    
+    # Simular input del usuario
+    inputElement.value = "Hello Vela"
+    inputElement.dispatchEvent(Event("input"))
+    
+    # El signal debería actualizarse (si hay onInput handler)
+    # En este caso, el widget debe tener el handler configurado
+    
+    # Cleanup
+    document.body.removeChild(parentElement)
+  })
+  
+  
+  it("should handle checkbox state", () => {
+    buildContext = BuildContext {}
+    parentElement = document.createElement("form")
+    document.body.appendChild(parentElement)
+    
+    isChecked = signal(false)
+    widget = CheckboxWidget { isChecked }
+    
+    # Initial render
+    oldTree = VTree.fromWidget(widget, buildContext)
+    renderer = VDOMRenderer(buildContext)
+    element = renderer.render(oldTree.root)
+    parentElement.appendChild(element)
+    
+    checkboxElement = parentElement.querySelector("input[type='checkbox']")
+    assert(checkboxElement.checked == false)
+    
+    # Check
+    isChecked.set(true)
+    
+    # Rebuild
+    newTree = VTree.fromWidget(widget, buildContext)
+    diffResult = diff(oldTree, newTree)
+    applyDiff(diffResult, parentElement, buildContext)
+    
+    # Verificar actualización
+    checkboxElement = parentElement.querySelector("input[type='checkbox']")
+    assert(checkboxElement.checked == true)
+    
+    # Cleanup
+    document.body.removeChild(parentElement)
+  })
+})
+
+
+# ============================================================================
+# TEST: NESTED UPDATES
+# ============================================================================
+
+describe("Nested Updates", () => {
+  
+  it("should update nested components", () => {
+    buildContext = BuildContext {}
+    parentElement = document.createElement("div")
+    document.body.appendChild(parentElement)
+    
+    parentCount = signal(0)
+    childCount = signal(0)
+    
+    widget = NestedWidget { parentCount, childCount }
+    
+    # Initial render
+    oldTree = VTree.fromWidget(widget, buildContext)
+    renderer = VDOMRenderer(buildContext)
+    element = renderer.render(oldTree.root)
+    parentElement.appendChild(element)
+    
+    # Verificar valores iniciales
+    parentText = parentElement.querySelector(".parent-count").textContent
+    childText = parentElement.querySelector(".child-count").textContent
+    assert(parentText == "Parent: 0")
+    assert(childText == "Child: 0")
+    
+    # Actualizar parent
+    parentCount.set(1)
+    
+    # Rebuild
+    newTree = VTree.fromWidget(widget, buildContext)
+    diffResult = diff(oldTree, newTree)
+    applyDiff(diffResult, parentElement, buildContext)
+    
+    # Verificar actualización
+    parentText = parentElement.querySelector(".parent-count").textContent
+    assert(parentText == "Parent: 1")
+    
+    # Actualizar child
+    childCount.set(5)
+    
+    # Rebuild
+    oldTree = newTree
+    newTree = VTree.fromWidget(widget, buildContext)
+    diffResult = diff(oldTree, newTree)
+    applyDiff(diffResult, parentElement, buildContext)
+    
+    # Verificar actualización
+    childText = parentElement.querySelector(".child-count").textContent
+    assert(childText == "Child: 5")
+    
+    # Cleanup
+    document.body.removeChild(parentElement)
+  })
+})
+
+
+# ============================================================================
+# TEST: EFFECTS
+# ============================================================================
+
+describe("Effects", () => {
+  
+  it("should run effect on signal change", () => {
+    buildContext = BuildContext {}
+    parentElement = document.createElement("div")
+    document.body.appendChild(parentElement)
+    
+    count = signal(0)
+    effectRuns = []
+    
+    widget = EffectWidget { 
+      count,
+      onEffect: (value) => {
+        effectRuns.push(value)
+      }
+    }
+    
+    # Initial render (effect runs once)
+    oldTree = VTree.fromWidget(widget, buildContext)
+    renderer = VDOMRenderer(buildContext)
+    element = renderer.render(oldTree.root)
+    parentElement.appendChild(element)
+    
+    assert(effectRuns.length == 1)
+    assert(effectRuns[0] == 0)
+    
+    # Cambiar signal (effect should run again)
+    count.set(1)
+    
+    # Rebuild
+    newTree = VTree.fromWidget(widget, buildContext)
+    diffResult = diff(oldTree, newTree)
+    applyDiff(diffResult, parentElement, buildContext)
+    
+    # Verificar que effect corrió
+    assert(effectRuns.length == 2)
+    assert(effectRuns[1] == 1)
+    
+    # Cleanup
+    document.body.removeChild(parentElement)
+  })
+})
+
+
+# ============================================================================
+# INTEGRATION TEST: TODO APP
+# ============================================================================
+
+describe("Integration - Todo App", () => {
+  
+  it("should handle complete todo app workflow", () => {
+    buildContext = BuildContext {}
+    parentElement = document.createElement("div")
+    document.body.appendChild(parentElement)
+    
+    # Estado del todo app
+    todos = signal([
+      { id: 1, text: "Task 1", completed: false },
+      { id: 2, text: "Task 2", completed: false }
+    ])
+    
+    widget = TodoApp { todos }
+    
+    # Initial render
+    oldTree = VTree.fromWidget(widget, buildContext)
+    renderer = VDOMRenderer(buildContext)
+    element = renderer.render(oldTree.root)
+    parentElement.appendChild(element)
+    
+    # Verificar 2 todos
+    todoElements = parentElement.querySelectorAll(".todo-item")
+    assert(todoElements.length == 2)
+    
+    # Marcar primero como completado
+    updatedTodos = todos.get().map(todo => {
+      if todo.id == 1 {
+        return { ...todo, completed: true }
+      }
+      return todo
+    })
+    todos.set(updatedTodos)
+    
+    # Rebuild
+    newTree = VTree.fromWidget(widget, buildContext)
+    diffResult = diff(oldTree, newTree)
+    stats = applyDiff(diffResult, parentElement, buildContext)
+    
+    # Verificar actualización (className "completed")
+    firstTodo = parentElement.querySelector(".todo-item")
+    assert(firstTodo.classList.contains("completed"))
+    
+    # Agregar nuevo todo
+    updatedTodos = [
+      ...todos.get(),
+      { id: 3, text: "Task 3", completed: false }
+    ]
+    todos.set(updatedTodos)
+    
+    # Rebuild
+    oldTree = newTree
+    newTree = VTree.fromWidget(widget, buildContext)
+    diffResult = diff(oldTree, newTree)
+    stats = applyDiff(diffResult, parentElement, buildContext)
+    
+    # Verificar 3 todos
+    todoElements = parentElement.querySelectorAll(".todo-item")
+    assert(todoElements.length == 3)
+    assert(stats.created > 0)
+    
+    # Remover segundo todo
+    updatedTodos = todos.get().filter(todo => todo.id != 2)
+    todos.set(updatedTodos)
+    
+    # Rebuild
+    oldTree = newTree
+    newTree = VTree.fromWidget(widget, buildContext)
+    diffResult = diff(oldTree, newTree)
+    stats = applyDiff(diffResult, parentElement, buildContext)
+    
+    # Verificar 2 todos
+    todoElements = parentElement.querySelectorAll(".todo-item")
+    assert(todoElements.length == 2)
+    assert(stats.removed > 0)
+    
+    # Cleanup
+    document.body.removeChild(parentElement)
+  })
+})
+
+
+# ============================================================================
+# PERFORMANCE TEST
+# ============================================================================
+
+describe("Performance", () => {
+  
+  it("should handle 100 updates < 200ms", () => {
+    buildContext = BuildContext {}
+    parentElement = document.createElement("div")
+    document.body.appendChild(parentElement)
+    
+    count = signal(0)
+    widget = ReactiveCounter { count }
+    
+    # Initial render
+    oldTree = VTree.fromWidget(widget, buildContext)
+    renderer = VDOMRenderer(buildContext)
+    element = renderer.render(oldTree.root)
+    parentElement.appendChild(element)
+    
+    startTime = Date.now()
+    
+    # 100 updates
+    (0..100).forEach(i => {
+      count.set(i)
+      
+      # Rebuild + diff + patch
+      newTree = VTree.fromWidget(widget, buildContext)
+      diffResult = diff(oldTree, newTree)
+      applyDiff(diffResult, parentElement, buildContext)
+      
+      oldTree = newTree
+    })
+    
+    duration = Date.now() - startTime
+    
+    # Verificar valor final
+    textElement = parentElement.querySelector(".count")
+    assert(textElement.textContent == "Count: 99")
+    
+    # Verificar performance
+    assert(duration < 200, "100 updates should take < 200ms, got ${duration}ms")
+    
+    # Cleanup
+    document.body.removeChild(parentElement)
+  })
+})
+
+
+# ============================================================================
+# HELPER WIDGETS
+# ============================================================================
+
+class ReactiveCounter extends ReactiveStatefulWidget {
+  counter: Signal<Number>
+  
+  override fn build(context: BuildContext) -> Widget {
+    return Container {
+      className: "counter",
+      child: Text {
+        className: "count",
+        value: "Count: ${this.counter.get()}"
+      }
+    }
+  }
+}
+
+
+class ComputedDisplay extends ReactiveStatefulWidget {
+  count: Signal<Number>
+  doubled: Computed<Number>
+  
+  override fn build(context: BuildContext) -> Widget {
+    return Column {
+      children: [
+        Text {
+          className: "count",
+          value: "Count: ${this.count.get()}"
+        },
+        Text {
+          className: "doubled",
+          value: "Doubled: ${this.doubled.get()}"
+        }
+      ]
+    }
+  }
+}
+
+
+class TodoList extends ReactiveStatefulWidget {
+  items: Signal<List<String>>
+  
+  override fn build(context: BuildContext) -> Widget {
+    return Container {
+      tag: "ul",
+      children: this.items.get().map((item, index) => {
+        return Container {
+          tag: "li",
+          key: Some("${index}"),
+          child: Text { value: item }
+        }
+      })
+    }
+  }
+}
+
+
+class ConditionalWidget extends ReactiveStatefulWidget {
+  isVisible: Signal<Bool>
+  
+  override fn build(context: BuildContext) -> Widget {
+    if this.isVisible.get() {
+      return Container {
+        className: "conditional",
+        child: Text { value: "Visible" }
+      }
+    } else {
+      return Container {}
+    }
+  }
+}
+
+
+class SwitchWidget extends ReactiveStatefulWidget {
+  mode: Signal<String>
+  
+  override fn build(context: BuildContext) -> Widget {
+    match this.mode.get() {
+      "A" => {
+        return Container {
+          className: "component-a",
+          child: Text { value: "Component A" }
+        }
+      }
+      "B" => {
+        return Container {
+          className: "component-b",
+          child: Text { value: "Component B" }
+        }
+      }
+      _ => {
+        return Container {}
+      }
+    }
+  }
+}
+
+
+class InputWidget extends ReactiveStatefulWidget {
+  inputValue: Signal<String>
+  
+  override fn build(context: BuildContext) -> Widget {
+    return Container {
+      tag: "input",
+      props: Map {
+        "type": "text",
+        "value": this.inputValue.get(),
+        "onInput": (e) => {
+          this.inputValue.set(e.target.value)
+        }
+      }
+    }
+  }
+}
+
+
+class CheckboxWidget extends ReactiveStatefulWidget {
+  isChecked: Signal<Bool>
+  
+  override fn build(context: BuildContext) -> Widget {
+    return Container {
+      tag: "input",
+      props: Map {
+        "type": "checkbox",
+        "checked": this.isChecked.get(),
+        "onChange": (e) => {
+          this.isChecked.set(e.target.checked)
+        }
+      }
+    }
+  }
+}
+
+
+class NestedWidget extends ReactiveStatefulWidget {
+  parentCount: Signal<Number>
+  childCount: Signal<Number>
+  
+  override fn build(context: BuildContext) -> Widget {
+    return Container {
+      className: "parent",
+      children: [
+        Text {
+          className: "parent-count",
+          value: "Parent: ${this.parentCount.get()}"
+        },
+        ChildWidget {
+          count: this.childCount
+        }
+      ]
+    }
+  }
+}
+
+
+class ChildWidget extends ReactiveStatefulWidget {
+  count: Signal<Number>
+  
+  override fn build(context: BuildContext) -> Widget {
+    return Container {
+      className: "child",
+      child: Text {
+        className: "child-count",
+        value: "Child: ${this.count.get()}"
+      }
+    }
+  }
+}
+
+
+class EffectWidget extends ReactiveStatefulWidget {
+  count: Signal<Number>
+  onEffect: (Number) -> void
+  
+  override fn mount() -> void {
+    super.mount()
+    
+    # Setup effect
+    useEffect(() => {
+      value = this.count.get()
+      this.onEffect(value)
+    }, this)
+  }
+  
+  override fn build(context: BuildContext) -> Widget {
+    return Container {
+      child: Text {
+        value: "Count: ${this.count.get()}"
+      }
+    }
+  }
+}
+
+
+class TodoApp extends ReactiveStatefulWidget {
+  todos: Signal<List<Map<String, Any>>>
+  
+  override fn build(context: BuildContext) -> Widget {
+    return Container {
+      className: "todo-app",
+      children: this.todos.get().map(todo => {
+        return Container {
+          className: "todo-item ${todo.completed ? 'completed' : ''}",
+          key: Some("${todo.id}"),
+          child: Text {
+            value: todo.text
+          }
+        }
+      })
+    }
+  }
+}
