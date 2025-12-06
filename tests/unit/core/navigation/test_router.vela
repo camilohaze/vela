@@ -16,7 +16,7 @@ Cobertura:
 """
 
 import 'system:ui' show { Widget, BuildContext, Container, Text }
-import '../../../src/core/navigation/router.vela' show {
+import '../../../../core/navigation/router.vela' show {
     RouteDefinition,
     RouteMatch,
     Router,
