@@ -1,0 +1,895 @@
+"""
+Theme System para Vela UI Framework
+
+Este módulo implementa el sistema de theming completo, incluyendo:
+- ThemeData: Definición de tema completo (colors, typography, spacing)
+- ColorScheme: Sistema de colores Material Design 3
+- TextTheme: Sistema de tipografía Material Design
+- SpacingScale: Escala de espaciado consistente
+- InheritedTheme: Widget para propagación de tema vía context
+- ThemeMode: Light/Dark/System mode support
+
+Jira: TASK-065
+Historia: VELA-584 (US-14)
+Sprint: 22
+
+Referencias:
+- Material Design 3: https://m3.material.io/
+- Flutter ThemeData: https://api.flutter.dev/flutter/material/ThemeData-class.html
+"""
+
+import 'system:ui' show { Widget, InheritedWidget, BuildContext }
+import 'system:reactive' show { signal, computed }
+import 'module:styling' show { Color, TextStyle, EdgeInsets, FontWeight }
+
+
+# ============================================================================
+# THEME MODE
+# ============================================================================
+
+"""
+Theme mode enumeration.
+Determina si usar tema light, dark o seguir el sistema.
+"""
+enum ThemeMode {
+  Light,   # Usar tema claro siempre
+  Dark,    # Usar tema oscuro siempre
+  System   # Seguir preferencia del sistema
+}
+
+
+# ============================================================================
+# COLOR SCHEME (Material Design 3)
+# ============================================================================
+
+"""
+Color scheme basado en Material Design 3.
+Define todos los colores semánticos de una aplicación.
+
+Referencias:
+- https://m3.material.io/styles/color/roles
+"""
+class ColorScheme {
+  # Primary colors (brand colors principales)
+  primary: Color
+  onPrimary: Color          # Text/icons sobre primary
+  primaryContainer: Color   # Containers con primary
+  onPrimaryContainer: Color
+  
+  # Secondary colors (accents)
+  secondary: Color
+  onSecondary: Color
+  secondaryContainer: Color
+  onSecondaryContainer: Color
+  
+  # Tertiary colors (complementarios)
+  tertiary: Color
+  onTertiary: Color
+  tertiaryContainer: Color
+  onTertiaryContainer: Color
+  
+  # Error colors
+  error: Color
+  onError: Color
+  errorContainer: Color
+  onErrorContainer: Color
+  
+  # Background & Surface colors
+  background: Color
+  onBackground: Color
+  surface: Color
+  onSurface: Color
+  surfaceVariant: Color
+  onSurfaceVariant: Color
+  
+  # Outline colors
+  outline: Color
+  outlineVariant: Color
+  
+  # Shadow & Scrim
+  shadow: Color
+  scrim: Color
+  
+  # Inverse colors (para snackbars, tooltips)
+  inverseSurface: Color
+  onInverseSurface: Color
+  inversePrimary: Color
+  
+  # Brightness (light o dark)
+  brightness: Brightness
+  
+  
+  """Constructor completo con todos los colores."""
+  constructor(
+    primary: Color,
+    onPrimary: Color,
+    primaryContainer: Color,
+    onPrimaryContainer: Color,
+    secondary: Color,
+    onSecondary: Color,
+    secondaryContainer: Color,
+    onSecondaryContainer: Color,
+    tertiary: Color,
+    onTertiary: Color,
+    tertiaryContainer: Color,
+    onTertiaryContainer: Color,
+    error: Color,
+    onError: Color,
+    errorContainer: Color,
+    onErrorContainer: Color,
+    background: Color,
+    onBackground: Color,
+    surface: Color,
+    onSurface: Color,
+    surfaceVariant: Color,
+    onSurfaceVariant: Color,
+    outline: Color,
+    outlineVariant: Color,
+    shadow: Color,
+    scrim: Color,
+    inverseSurface: Color,
+    onInverseSurface: Color,
+    inversePrimary: Color,
+    brightness: Brightness
+  ) {
+    this.primary = primary
+    this.onPrimary = onPrimary
+    this.primaryContainer = primaryContainer
+    this.onPrimaryContainer = onPrimaryContainer
+    this.secondary = secondary
+    this.onSecondary = onSecondary
+    this.secondaryContainer = secondaryContainer
+    this.onSecondaryContainer = onSecondaryContainer
+    this.tertiary = tertiary
+    this.onTertiary = onTertiary
+    this.tertiaryContainer = tertiaryContainer
+    this.onTertiaryContainer = onTertiaryContainer
+    this.error = error
+    this.onError = onError
+    this.errorContainer = errorContainer
+    this.onErrorContainer = onErrorContainer
+    this.background = background
+    this.onBackground = onBackground
+    this.surface = surface
+    this.onSurface = onSurface
+    this.surfaceVariant = surfaceVariant
+    this.onSurfaceVariant = onSurfaceVariant
+    this.outline = outline
+    this.outlineVariant = outlineVariant
+    this.shadow = shadow
+    this.scrim = scrim
+    this.inverseSurface = inverseSurface
+    this.onInverseSurface = onInverseSurface
+    this.inversePrimary = inversePrimary
+    this.brightness = brightness
+  }
+  
+  
+  """
+  Material Design 3 Light scheme por defecto.
+  Usa colores indigo como primary.
+  """
+  public fn light() -> ColorScheme {
+    return ColorScheme(
+      # Primary (Indigo)
+      primary: Color(103, 80, 164),           # Indigo 500
+      onPrimary: Color.white(),
+      primaryContainer: Color(209, 196, 233), # Indigo 100
+      onPrimaryContainer: Color(48, 25, 52),
+      
+      # Secondary (Teal)
+      secondary: Color(0, 150, 136),          # Teal 500
+      onSecondary: Color.white(),
+      secondaryContainer: Color(178, 223, 219), # Teal 100
+      onSecondaryContainer: Color(0, 56, 51),
+      
+      # Tertiary (Deep Orange)
+      tertiary: Color(255, 87, 34),           # Deep Orange 500
+      onTertiary: Color.white(),
+      tertiaryContainer: Color(255, 204, 188), # Deep Orange 100
+      onTertiaryContainer: Color(76, 26, 10),
+      
+      # Error
+      error: Color(211, 47, 47),              # Red 700
+      onError: Color.white(),
+      errorContainer: Color(255, 205, 210),   # Red 100
+      onErrorContainer: Color(76, 17, 17),
+      
+      # Background & Surface
+      background: Color(255, 251, 254),
+      onBackground: Color(28, 27, 31),
+      surface: Color(255, 251, 254),
+      onSurface: Color(28, 27, 31),
+      surfaceVariant: Color(231, 224, 236),
+      onSurfaceVariant: Color(73, 69, 78),
+      
+      # Outline
+      outline: Color(121, 116, 126),
+      outlineVariant: Color(202, 196, 208),
+      
+      # Shadow & Scrim
+      shadow: Color.black(),
+      scrim: Color.black(),
+      
+      # Inverse
+      inverseSurface: Color(49, 48, 51),
+      onInverseSurface: Color(244, 239, 244),
+      inversePrimary: Color(209, 196, 233),
+      
+      brightness: Brightness.Light
+    )
+  }
+  
+  
+  """
+  Material Design 3 Dark scheme por defecto.
+  Usa colores indigo como primary.
+  """
+  public fn dark() -> ColorScheme {
+    return ColorScheme(
+      # Primary (Indigo)
+      primary: Color(209, 196, 233),          # Indigo 200
+      onPrimary: Color(56, 30, 114),
+      primaryContainer: Color(79, 55, 139),
+      onPrimaryContainer: Color(234, 221, 255),
+      
+      # Secondary (Teal)
+      secondary: Color(178, 223, 219),        # Teal 200
+      onSecondary: Color(0, 56, 51),
+      secondaryContainer: Color(0, 77, 70),
+      onSecondaryContainer: Color(204, 255, 248),
+      
+      # Tertiary (Deep Orange)
+      tertiary: Color(255, 176, 149),         # Deep Orange 200
+      onTertiary: Color(86, 35, 17),
+      tertiaryContainer: Color(122, 49, 24),
+      onTertiaryContainer: Color(255, 219, 209),
+      
+      # Error
+      error: Color(242, 184, 181),            # Red 200
+      onError: Color(105, 0, 5),
+      errorContainer: Color(147, 0, 10),
+      onErrorContainer: Color(255, 218, 214),
+      
+      # Background & Surface
+      background: Color(28, 27, 31),
+      onBackground: Color(230, 225, 229),
+      surface: Color(28, 27, 31),
+      onSurface: Color(230, 225, 229),
+      surfaceVariant: Color(73, 69, 78),
+      onSurfaceVariant: Color(202, 196, 208),
+      
+      # Outline
+      outline: Color(147, 143, 153),
+      outlineVariant: Color(73, 69, 78),
+      
+      # Shadow & Scrim
+      shadow: Color.black(),
+      scrim: Color.black(),
+      
+      # Inverse
+      inverseSurface: Color(230, 225, 229),
+      onInverseSurface: Color(49, 48, 51),
+      inversePrimary: Color(103, 80, 164),
+      
+      brightness: Brightness.Dark
+    )
+  }
+  
+  
+  """
+  Crea un ColorScheme desde un color seed usando algoritmo Material You.
+  Genera todos los colores del scheme a partir de un solo color.
+  """
+  public fn fromSeed(seedColor: Color, brightness: Brightness) -> ColorScheme {
+    # Algoritmo simplificado de Material You
+    # En producción, usaría HCT color space (Hue, Chroma, Tone)
+    
+    if brightness == Brightness.Light {
+      return ColorScheme(
+        primary: seedColor,
+        onPrimary: Color.white(),
+        primaryContainer: seedColor.lighten(0.4),
+        onPrimaryContainer: seedColor.darken(0.6),
+        
+        secondary: seedColor.rotate(30.0),
+        onSecondary: Color.white(),
+        secondaryContainer: seedColor.rotate(30.0).lighten(0.4),
+        onSecondaryContainer: seedColor.rotate(30.0).darken(0.6),
+        
+        tertiary: seedColor.complement(),
+        onTertiary: Color.white(),
+        tertiaryContainer: seedColor.complement().lighten(0.4),
+        onTertiaryContainer: seedColor.complement().darken(0.6),
+        
+        error: Color(211, 47, 47),
+        onError: Color.white(),
+        errorContainer: Color(255, 205, 210),
+        onErrorContainer: Color(76, 17, 17),
+        
+        background: Color(255, 251, 254),
+        onBackground: Color(28, 27, 31),
+        surface: Color(255, 251, 254),
+        onSurface: Color(28, 27, 31),
+        surfaceVariant: seedColor.desaturate(0.8).lighten(0.3),
+        onSurfaceVariant: Color(73, 69, 78),
+        
+        outline: Color(121, 116, 126),
+        outlineVariant: Color(202, 196, 208),
+        
+        shadow: Color.black(),
+        scrim: Color.black(),
+        
+        inverseSurface: Color(49, 48, 51),
+        onInverseSurface: Color(244, 239, 244),
+        inversePrimary: seedColor.lighten(0.4),
+        
+        brightness: Brightness.Light
+      )
+    } else {
+      return ColorScheme(
+        primary: seedColor.lighten(0.3),
+        onPrimary: seedColor.darken(0.5),
+        primaryContainer: seedColor.darken(0.2),
+        onPrimaryContainer: seedColor.lighten(0.5),
+        
+        secondary: seedColor.rotate(30.0).lighten(0.3),
+        onSecondary: seedColor.rotate(30.0).darken(0.5),
+        secondaryContainer: seedColor.rotate(30.0).darken(0.2),
+        onSecondaryContainer: seedColor.rotate(30.0).lighten(0.5),
+        
+        tertiary: seedColor.complement().lighten(0.3),
+        onTertiary: seedColor.complement().darken(0.5),
+        tertiaryContainer: seedColor.complement().darken(0.2),
+        onTertiaryContainer: seedColor.complement().lighten(0.5),
+        
+        error: Color(242, 184, 181),
+        onError: Color(105, 0, 5),
+        errorContainer: Color(147, 0, 10),
+        onErrorContainer: Color(255, 218, 214),
+        
+        background: Color(28, 27, 31),
+        onBackground: Color(230, 225, 229),
+        surface: Color(28, 27, 31),
+        onSurface: Color(230, 225, 229),
+        surfaceVariant: seedColor.desaturate(0.8).darken(0.3),
+        onSurfaceVariant: Color(202, 196, 208),
+        
+        outline: Color(147, 143, 153),
+        outlineVariant: Color(73, 69, 78),
+        
+        shadow: Color.black(),
+        scrim: Color.black(),
+        
+        inverseSurface: Color(230, 225, 229),
+        onInverseSurface: Color(49, 48, 51),
+        inversePrimary: seedColor,
+        
+        brightness: Brightness.Dark
+      )
+    }
+  }
+  
+  
+  """
+  Interpola entre dos ColorSchemes.
+  Útil para animaciones de theme switching.
+  """
+  public fn lerp(other: ColorScheme, t: Float) -> ColorScheme {
+    return ColorScheme(
+      primary: this.primary.lerp(other.primary, t),
+      onPrimary: this.onPrimary.lerp(other.onPrimary, t),
+      primaryContainer: this.primaryContainer.lerp(other.primaryContainer, t),
+      onPrimaryContainer: this.onPrimaryContainer.lerp(other.onPrimaryContainer, t),
+      
+      secondary: this.secondary.lerp(other.secondary, t),
+      onSecondary: this.onSecondary.lerp(other.onSecondary, t),
+      secondaryContainer: this.secondaryContainer.lerp(other.secondaryContainer, t),
+      onSecondaryContainer: this.onSecondaryContainer.lerp(other.onSecondaryContainer, t),
+      
+      tertiary: this.tertiary.lerp(other.tertiary, t),
+      onTertiary: this.onTertiary.lerp(other.onTertiary, t),
+      tertiaryContainer: this.tertiaryContainer.lerp(other.tertiaryContainer, t),
+      onTertiaryContainer: this.onTertiaryContainer.lerp(other.onTertiaryContainer, t),
+      
+      error: this.error.lerp(other.error, t),
+      onError: this.onError.lerp(other.onError, t),
+      errorContainer: this.errorContainer.lerp(other.errorContainer, t),
+      onErrorContainer: this.onErrorContainer.lerp(other.onErrorContainer, t),
+      
+      background: this.background.lerp(other.background, t),
+      onBackground: this.onBackground.lerp(other.onBackground, t),
+      surface: this.surface.lerp(other.surface, t),
+      onSurface: this.onSurface.lerp(other.onSurface, t),
+      surfaceVariant: this.surfaceVariant.lerp(other.surfaceVariant, t),
+      onSurfaceVariant: this.onSurfaceVariant.lerp(other.onSurfaceVariant, t),
+      
+      outline: this.outline.lerp(other.outline, t),
+      outlineVariant: this.outlineVariant.lerp(other.outlineVariant, t),
+      
+      shadow: this.shadow.lerp(other.shadow, t),
+      scrim: this.scrim.lerp(other.scrim, t),
+      
+      inverseSurface: this.inverseSurface.lerp(other.inverseSurface, t),
+      onInverseSurface: this.onInverseSurface.lerp(other.onInverseSurface, t),
+      inversePrimary: this.inversePrimary.lerp(other.inversePrimary, t),
+      
+      brightness: t < 0.5 ? this.brightness : other.brightness
+    )
+  }
+}
+
+
+"""Brightness enumeration."""
+enum Brightness {
+  Light,
+  Dark
+}
+
+
+# ============================================================================
+# TEXT THEME (Material Design Typography)
+# ============================================================================
+
+"""
+Text theme con todos los estilos de tipografía Material Design 3.
+Agrupa los estilos de TextStyle para uso consistente.
+"""
+class TextTheme {
+  # Display (largest text)
+  displayLarge: Option<TextStyle>
+  displayMedium: Option<TextStyle>
+  displaySmall: Option<TextStyle>
+  
+  # Headline
+  headlineLarge: Option<TextStyle>
+  headlineMedium: Option<TextStyle>
+  headlineSmall: Option<TextStyle>
+  
+  # Title
+  titleLarge: Option<TextStyle>
+  titleMedium: Option<TextStyle>
+  titleSmall: Option<TextStyle>
+  
+  # Body
+  bodyLarge: Option<TextStyle>
+  bodyMedium: Option<TextStyle>
+  bodySmall: Option<TextStyle>
+  
+  # Label
+  labelLarge: Option<TextStyle>
+  labelMedium: Option<TextStyle>
+  labelSmall: Option<TextStyle>
+  
+  
+  """Constructor con todos los estilos opcionales."""
+  constructor(
+    displayLarge: Option<TextStyle> = None,
+    displayMedium: Option<TextStyle> = None,
+    displaySmall: Option<TextStyle> = None,
+    headlineLarge: Option<TextStyle> = None,
+    headlineMedium: Option<TextStyle> = None,
+    headlineSmall: Option<TextStyle> = None,
+    titleLarge: Option<TextStyle> = None,
+    titleMedium: Option<TextStyle> = None,
+    titleSmall: Option<TextStyle> = None,
+    bodyLarge: Option<TextStyle> = None,
+    bodyMedium: Option<TextStyle> = None,
+    bodySmall: Option<TextStyle> = None,
+    labelLarge: Option<TextStyle> = None,
+    labelMedium: Option<TextStyle> = None,
+    labelSmall: Option<TextStyle> = None
+  ) {
+    this.displayLarge = displayLarge
+    this.displayMedium = displayMedium
+    this.displaySmall = displaySmall
+    this.headlineLarge = headlineLarge
+    this.headlineMedium = headlineMedium
+    this.headlineSmall = headlineSmall
+    this.titleLarge = titleLarge
+    this.titleMedium = titleMedium
+    this.titleSmall = titleSmall
+    this.bodyLarge = bodyLarge
+    this.bodyMedium = bodyMedium
+    this.bodySmall = bodySmall
+    this.labelLarge = labelLarge
+    this.labelMedium = labelMedium
+    this.labelSmall = labelSmall
+  }
+  
+  
+  """
+  Material Design 3 text theme por defecto.
+  Usa la escala de tipografía estándar.
+  """
+  public fn material3() -> TextTheme {
+    return TextTheme(
+      displayLarge: Some(TextStyle.displayLarge()),
+      displayMedium: Some(TextStyle.displayMedium()),
+      displaySmall: Some(TextStyle.displaySmall()),
+      headlineLarge: Some(TextStyle.headlineLarge()),
+      headlineMedium: Some(TextStyle.headlineMedium()),
+      headlineSmall: Some(TextStyle.headlineSmall()),
+      titleLarge: Some(TextStyle.titleLarge()),
+      titleMedium: Some(TextStyle.titleMedium()),
+      titleSmall: Some(TextStyle.titleSmall()),
+      bodyLarge: Some(TextStyle.bodyLarge()),
+      bodyMedium: Some(TextStyle.bodyMedium()),
+      bodySmall: Some(TextStyle.bodySmall()),
+      labelLarge: Some(TextStyle.labelLarge()),
+      labelMedium: Some(TextStyle.labelMedium()),
+      labelSmall: Some(TextStyle.labelSmall())
+    )
+  }
+  
+  
+  """
+  Aplica un color a todos los estilos del theme.
+  Útil para aplicar colorScheme.onBackground a todo el texto.
+  """
+  public fn apply(color: Option<Color> = None, fontFamily: Option<String> = None) -> TextTheme {
+    applyToStyle = (style: Option<TextStyle>) => {
+      match style {
+        Some(s) => Some(s.copyWith(color: color, fontFamily: fontFamily))
+        None => None
+      }
+    }
+    
+    return TextTheme(
+      displayLarge: applyToStyle(this.displayLarge),
+      displayMedium: applyToStyle(this.displayMedium),
+      displaySmall: applyToStyle(this.displaySmall),
+      headlineLarge: applyToStyle(this.headlineLarge),
+      headlineMedium: applyToStyle(this.headlineMedium),
+      headlineSmall: applyToStyle(this.headlineSmall),
+      titleLarge: applyToStyle(this.titleLarge),
+      titleMedium: applyToStyle(this.titleMedium),
+      titleSmall: applyToStyle(this.titleSmall),
+      bodyLarge: applyToStyle(this.bodyLarge),
+      bodyMedium: applyToStyle(this.bodyMedium),
+      bodySmall: applyToStyle(this.bodySmall),
+      labelLarge: applyToStyle(this.labelLarge),
+      labelMedium: applyToStyle(this.labelMedium),
+      labelSmall: applyToStyle(this.labelSmall)
+    )
+  }
+  
+  
+  """Merge con otro TextTheme (other sobreescribe this cuando está definido)."""
+  public fn merge(other: TextTheme) -> TextTheme {
+    return TextTheme(
+      displayLarge: other.displayLarge.isSome() ? other.displayLarge : this.displayLarge,
+      displayMedium: other.displayMedium.isSome() ? other.displayMedium : this.displayMedium,
+      displaySmall: other.displaySmall.isSome() ? other.displaySmall : this.displaySmall,
+      headlineLarge: other.headlineLarge.isSome() ? other.headlineLarge : this.headlineLarge,
+      headlineMedium: other.headlineMedium.isSome() ? other.headlineMedium : this.headlineMedium,
+      headlineSmall: other.headlineSmall.isSome() ? other.headlineSmall : this.headlineSmall,
+      titleLarge: other.titleLarge.isSome() ? other.titleLarge : this.titleLarge,
+      titleMedium: other.titleMedium.isSome() ? other.titleMedium : this.titleMedium,
+      titleSmall: other.titleSmall.isSome() ? other.titleSmall : this.titleSmall,
+      bodyLarge: other.bodyLarge.isSome() ? other.bodyLarge : this.bodyLarge,
+      bodyMedium: other.bodyMedium.isSome() ? other.bodyMedium : this.bodyMedium,
+      bodySmall: other.bodySmall.isSome() ? other.bodySmall : this.bodySmall,
+      labelLarge: other.labelLarge.isSome() ? other.labelLarge : this.labelLarge,
+      labelMedium: other.labelMedium.isSome() ? other.labelMedium : this.labelMedium,
+      labelSmall: other.labelSmall.isSome() ? other.labelSmall : this.labelSmall
+    )
+  }
+}
+
+
+# ============================================================================
+# SPACING SCALE
+# ============================================================================
+
+"""
+Spacing scale basado en Material Design.
+Agrupa todos los tamaños de espaciado para consistencia.
+"""
+class SpacingScale {
+  xs: EdgeInsets      # 4px
+  sm: EdgeInsets      # 8px
+  md: EdgeInsets      # 16px
+  lg: EdgeInsets      # 24px
+  xl: EdgeInsets      # 32px
+  xxl: EdgeInsets     # 48px
+  
+  
+  """Constructor por defecto con Material Design spacing."""
+  constructor() {
+    this.xs = EdgeInsets.xs()
+    this.sm = EdgeInsets.sm()
+    this.md = EdgeInsets.md()
+    this.lg = EdgeInsets.lg()
+    this.xl = EdgeInsets.xl()
+    this.xxl = EdgeInsets.xxl()
+  }
+  
+  
+  """
+  Crear spacing scale con factor multiplicador.
+  Útil para ajustar espaciado en diferentes densidades.
+  """
+  public fn scaled(factor: Float) -> SpacingScale {
+    scaled = SpacingScale()
+    scaled.xs = this.xs.scale(factor)
+    scaled.sm = this.sm.scale(factor)
+    scaled.md = this.md.scale(factor)
+    scaled.lg = this.lg.scale(factor)
+    scaled.xl = this.xl.scale(factor)
+    scaled.xxl = this.xxl.scale(factor)
+    return scaled
+  }
+}
+
+
+# ============================================================================
+# THEME DATA
+# ============================================================================
+
+"""
+ThemeData completo que define toda la apariencia visual de la app.
+Incluye colors, typography, spacing, y otras propiedades visuales.
+"""
+class ThemeData {
+  # Color scheme
+  colorScheme: ColorScheme
+  
+  # Typography
+  textTheme: TextTheme
+  
+  # Spacing
+  spacing: SpacingScale
+  
+  # Brightness
+  brightness: Brightness
+  
+  
+  """Constructor completo."""
+  constructor(
+    colorScheme: ColorScheme,
+    textTheme: TextTheme,
+    spacing: SpacingScale,
+    brightness: Brightness
+  ) {
+    this.colorScheme = colorScheme
+    this.textTheme = textTheme
+    this.spacing = spacing
+    this.brightness = brightness
+  }
+  
+  
+  """
+  Material Design 3 light theme por defecto.
+  """
+  public fn light() -> ThemeData {
+    colorScheme = ColorScheme.light()
+    textTheme = TextTheme.material3().apply(
+      color: Some(colorScheme.onBackground)
+    )
+    
+    return ThemeData(
+      colorScheme: colorScheme,
+      textTheme: textTheme,
+      spacing: SpacingScale(),
+      brightness: Brightness.Light
+    )
+  }
+  
+  
+  """
+  Material Design 3 dark theme por defecto.
+  """
+  public fn dark() -> ThemeData {
+    colorScheme = ColorScheme.dark()
+    textTheme = TextTheme.material3().apply(
+      color: Some(colorScheme.onBackground)
+    )
+    
+    return ThemeData(
+      colorScheme: colorScheme,
+      textTheme: textTheme,
+      spacing: SpacingScale(),
+      brightness: Brightness.Dark
+    )
+  }
+  
+  
+  """
+  Crear theme desde color seed usando Material You.
+  """
+  public fn fromSeed(seedColor: Color, brightness: Brightness) -> ThemeData {
+    colorScheme = ColorScheme.fromSeed(seedColor, brightness)
+    textTheme = TextTheme.material3().apply(
+      color: Some(colorScheme.onBackground)
+    )
+    
+    return ThemeData(
+      colorScheme: colorScheme,
+      textTheme: textTheme,
+      spacing: SpacingScale(),
+      brightness: brightness
+    )
+  }
+  
+  
+  """
+  Actualizar theme con valores parciales (copyWith pattern).
+  """
+  public fn copyWith(
+    colorScheme: Option<ColorScheme> = None,
+    textTheme: Option<TextTheme> = None,
+    spacing: Option<SpacingScale> = None,
+    brightness: Option<Brightness> = None
+  ) -> ThemeData {
+    return ThemeData(
+      colorScheme: colorScheme.unwrapOr(this.colorScheme),
+      textTheme: textTheme.unwrapOr(this.textTheme),
+      spacing: spacing.unwrapOr(this.spacing),
+      brightness: brightness.unwrapOr(this.brightness)
+    )
+  }
+  
+  
+  """
+  Interpolar entre dos themes (para animaciones de theme switching).
+  """
+  public fn lerp(other: ThemeData, t: Float) -> ThemeData {
+    return ThemeData(
+      colorScheme: this.colorScheme.lerp(other.colorScheme, t),
+      textTheme: this.textTheme,  # Text theme no se interpola
+      spacing: this.spacing,       # Spacing no se interpola
+      brightness: t < 0.5 ? this.brightness : other.brightness
+    )
+  }
+}
+
+
+# ============================================================================
+# INHERITED THEME (Context Propagation)
+# ============================================================================
+
+"""
+InheritedTheme widget para propagar theme por el árbol de widgets.
+Usa InheritedWidget pattern de Flutter para context-based access.
+
+Ejemplo:
+  Theme(
+    data: ThemeData.light(),
+    child: MyApp()
+  )
+  
+  # En widgets hijos:
+  theme = Theme.of(context)
+  Container(
+    color: theme.colorScheme.primary,
+    child: Text("Hello", style: theme.textTheme.bodyLarge)
+  )
+"""
+class Theme extends InheritedWidget {
+  data: ThemeData
+  
+  
+  """Constructor del Theme widget."""
+  constructor(data: ThemeData, child: Widget) {
+    super(child: child)
+    this.data = data
+  }
+  
+  
+  """
+  Obtener theme actual del contexto.
+  Busca el Theme más cercano en el árbol de widgets.
+  """
+  public fn of(context: BuildContext) -> ThemeData {
+    theme = context.dependOnInheritedWidgetOfExactType<Theme>()
+    
+    match theme {
+      Some(t) => return t.data
+      None => return ThemeData.light()  # Fallback a light theme
+    }
+  }
+  
+  
+  """
+  Verificar si el widget debe notificar cambios a dependents.
+  """
+  override fn updateShouldNotify(oldWidget: Theme) -> Bool {
+    return this.data != oldWidget.data
+  }
+}
+
+
+# ============================================================================
+# THEME PROVIDER (Reactive Theme Management)
+# ============================================================================
+
+"""
+ThemeProvider widget con soporte reactivo para theme switching.
+Maneja light/dark/system mode y notifica cambios automáticamente.
+
+Ejemplo:
+  ThemeProvider(
+    mode: ThemeMode.System,
+    lightTheme: ThemeData.light(),
+    darkTheme: ThemeData.dark(),
+    child: App()
+  )
+"""
+class ThemeProvider extends StatefulWidget {
+  mode: ThemeMode
+  lightTheme: ThemeData
+  darkTheme: ThemeData
+  child: Widget
+  
+  
+  """Constructor del ThemeProvider."""
+  constructor(
+    mode: ThemeMode,
+    lightTheme: ThemeData,
+    darkTheme: ThemeData,
+    child: Widget
+  ) {
+    this.mode = mode
+    this.lightTheme = lightTheme
+    this.darkTheme = darkTheme
+    this.child = child
+  }
+  
+  
+  """Estado del ThemeProvider."""
+  fn createState() -> ThemeProviderState {
+    return ThemeProviderState()
+  }
+}
+
+
+class ThemeProviderState extends State<ThemeProvider> {
+  # Reactive theme mode signal
+  state themeMode: ThemeMode = ThemeMode.Light
+  
+  # Computed current theme basado en mode
+  computed currentTheme: ThemeData {
+    match this.themeMode {
+      ThemeMode.Light => return widget.lightTheme
+      ThemeMode.Dark => return widget.darkTheme
+      ThemeMode.System => {
+        # En producción, chequear MediaQuery.platformBrightness
+        systemIsDark = false  # Simplificado
+        return systemIsDark ? widget.darkTheme : widget.lightTheme
+      }
+    }
+  }
+  
+  
+  """Inicializar estado con mode del widget."""
+  mount() {
+    this.themeMode = widget.mode
+  }
+  
+  
+  """
+  Cambiar theme mode programáticamente.
+  El computed currentTheme se actualiza automáticamente.
+  """
+  public fn setThemeMode(mode: ThemeMode) -> void {
+    this.themeMode = mode
+  }
+  
+  
+  """Toggle entre light y dark mode."""
+  public fn toggleTheme() -> void {
+    this.themeMode = this.themeMode == ThemeMode.Light 
+      ? ThemeMode.Dark 
+      : ThemeMode.Light
+  }
+  
+  
+  """Build method con Theme widget."""
+  fn build(context: BuildContext) -> Widget {
+    return Theme(
+      data: this.currentTheme,
+      child: widget.child
+    )
+  }
+}

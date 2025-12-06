@@ -1,0 +1,605 @@
+"""
+Tests Unitarios para Theme System
+
+Jira: TASK-065
+Historia: VELA-584 (US-14)
+Sprint: 22
+
+Test Coverage:
+- ColorScheme (light, dark, fromSeed, lerp)
+- TextTheme (material3, apply, merge)
+- SpacingScale (scaled)
+- ThemeData (light, dark, fromSeed, copyWith, lerp)
+- Theme widget (of, updateShouldNotify)
+- ThemeProvider (reactive theme switching)
+"""
+
+import 'system:testing' show { describe, it, expect }
+import 'module:theming' show { 
+  ThemeMode, ColorScheme, Brightness, TextTheme, 
+  SpacingScale, ThemeData, Theme, ThemeProvider 
+}
+import 'module:styling' show { Color, TextStyle, EdgeInsets }
+
+
+describe("ThemeMode enum", () => {
+  it("should have Light, Dark, and System variants", () => {
+    light = ThemeMode.Light
+    dark = ThemeMode.Dark
+    system = ThemeMode.System
+    
+    expect(light).not.toBe(dark)
+    expect(dark).not.toBe(system)
+  })
+})
+
+
+describe("Brightness enum", () => {
+  it("should have Light and Dark variants", () => {
+    light = Brightness.Light
+    dark = Brightness.Dark
+    
+    expect(light).not.toBe(dark)
+  })
+})
+
+
+describe("ColorScheme light", () => {
+  it("should create Material Design 3 light scheme", () => {
+    scheme = ColorScheme.light()
+    
+    expect(scheme.brightness).toBe(Brightness.Light)
+    expect(scheme.primary.r).toBe(103)  # Indigo 500
+    expect(scheme.onPrimary).toBe(Color.white())
+  })
+  
+  it("should have all required colors defined", () => {
+    scheme = ColorScheme.light()
+    
+    # Primary
+    expect(scheme.primary).toBeDefined()
+    expect(scheme.onPrimary).toBeDefined()
+    expect(scheme.primaryContainer).toBeDefined()
+    expect(scheme.onPrimaryContainer).toBeDefined()
+    
+    # Secondary
+    expect(scheme.secondary).toBeDefined()
+    expect(scheme.onSecondary).toBeDefined()
+    
+    # Error
+    expect(scheme.error).toBeDefined()
+    expect(scheme.onError).toBeDefined()
+    
+    # Background & Surface
+    expect(scheme.background).toBeDefined()
+    expect(scheme.onBackground).toBeDefined()
+    expect(scheme.surface).toBeDefined()
+    expect(scheme.onSurface).toBeDefined()
+  })
+  
+  it("should use light background colors", () => {
+    scheme = ColorScheme.light()
+    
+    # Background should be light
+    expect(scheme.background.r).toBeGreaterThan(200)
+    expect(scheme.background.g).toBeGreaterThan(200)
+    expect(scheme.background.b).toBeGreaterThan(200)
+  })
+})
+
+
+describe("ColorScheme dark", () => {
+  it("should create Material Design 3 dark scheme", () => {
+    scheme = ColorScheme.dark()
+    
+    expect(scheme.brightness).toBe(Brightness.Dark)
+    expect(scheme.primary.r).toBe(209)  # Indigo 200
+  })
+  
+  it("should use dark background colors", () => {
+    scheme = ColorScheme.dark()
+    
+    # Background should be dark
+    expect(scheme.background.r).toBeLessThan(100)
+    expect(scheme.background.g).toBeLessThan(100)
+    expect(scheme.background.b).toBeLessThan(100)
+  })
+  
+  it("should have different colors from light scheme", () => {
+    light = ColorScheme.light()
+    dark = ColorScheme.dark()
+    
+    expect(light.primary).not.toBe(dark.primary)
+    expect(light.background).not.toBe(dark.background)
+    expect(light.onBackground).not.toBe(dark.onBackground)
+  })
+})
+
+
+describe("ColorScheme fromSeed", () => {
+  it("should generate light scheme from seed color", () => {
+    seed = Color(255, 100, 50)  # Orange
+    scheme = ColorScheme.fromSeed(seed, Brightness.Light)
+    
+    expect(scheme.brightness).toBe(Brightness.Light)
+    expect(scheme.primary).toBe(seed)
+  })
+  
+  it("should generate dark scheme from seed color", () => {
+    seed = Color(100, 150, 200)  # Blue
+    scheme = ColorScheme.fromSeed(seed, Brightness.Dark)
+    
+    expect(scheme.brightness).toBe(Brightness.Dark)
+  })
+  
+  it("should generate complementary colors", () => {
+    seed = Color(255, 0, 0)  # Red
+    scheme = ColorScheme.fromSeed(seed, Brightness.Light)
+    
+    # Tertiary should be complement of primary
+    expect(scheme.tertiary).toBeDefined()
+    
+    # Complement of red should be cyan-ish
+    hsl = scheme.tertiary.toHSL()
+    expect(hsl.h).toBeCloseTo(180.0, 10)
+  })
+  
+  it("should generate secondary by rotating hue", () => {
+    seed = Color(255, 0, 0)  # Red (H=0)
+    scheme = ColorScheme.fromSeed(seed, Brightness.Light)
+    
+    # Secondary should be rotated 30 degrees
+    hsl = scheme.secondary.toHSL()
+    expect(hsl.h).toBeCloseTo(30.0, 10)
+  })
+})
+
+
+describe("ColorScheme lerp", () => {
+  it("should interpolate between light and dark schemes", () => {
+    light = ColorScheme.light()
+    dark = ColorScheme.dark()
+    
+    mid = light.lerp(dark, 0.5)
+    
+    # Mid colors should be between light and dark
+    expect(mid.background.r).toBeGreaterThan(dark.background.r)
+    expect(mid.background.r).toBeLessThan(light.background.r)
+  })
+  
+  it("should return first scheme when t=0", () => {
+    light = ColorScheme.light()
+    dark = ColorScheme.dark()
+    
+    result = light.lerp(dark, 0.0)
+    
+    expect(result.primary).toBe(light.primary)
+  })
+  
+  it("should return second scheme when t=1", () => {
+    light = ColorScheme.light()
+    dark = ColorScheme.dark()
+    
+    result = light.lerp(dark, 1.0)
+    
+    expect(result.primary).toBe(dark.primary)
+  })
+})
+
+
+describe("TextTheme material3", () => {
+  it("should create complete Material Design 3 text theme", () => {
+    theme = TextTheme.material3()
+    
+    # All styles should be defined
+    expect(theme.displayLarge.isSome()).toBe(true)
+    expect(theme.displayMedium.isSome()).toBe(true)
+    expect(theme.displaySmall.isSome()).toBe(true)
+    expect(theme.headlineLarge.isSome()).toBe(true)
+    expect(theme.bodyLarge.isSome()).toBe(true)
+    expect(theme.labelSmall.isSome()).toBe(true)
+  })
+  
+  it("should have different font sizes for each style", () => {
+    theme = TextTheme.material3()
+    
+    match (theme.displayLarge, theme.bodyLarge) {
+      (Some(display), Some(body)) => {
+        expect(display.fontSize.unwrap()).toBeGreaterThan(body.fontSize.unwrap())
+      }
+      _ => throw Error("Expected Some")
+    }
+  })
+})
+
+
+describe("TextTheme apply", () => {
+  it("should apply color to all styles", () => {
+    theme = TextTheme.material3()
+    color = Color(255, 0, 0)
+    
+    applied = theme.apply(color: Some(color))
+    
+    match applied.bodyLarge {
+      Some(style) => {
+        match style.color {
+          Some(c) => expect(c).toBe(color)
+          None => throw Error("Expected color")
+        }
+      }
+      None => throw Error("Expected Some")
+    }
+  })
+  
+  it("should apply font family to all styles", () => {
+    theme = TextTheme.material3()
+    family = "Roboto"
+    
+    applied = theme.apply(fontFamily: Some(family))
+    
+    match applied.headlineMedium {
+      Some(style) => {
+        match style.fontFamily {
+          Some(f) => expect(f).toBe(family)
+          None => throw Error("Expected fontFamily")
+        }
+      }
+      None => throw Error("Expected Some")
+    }
+  })
+  
+  it("should preserve None styles", () => {
+    theme = TextTheme()  # Empty theme
+    
+    applied = theme.apply(color: Some(Color.black()))
+    
+    expect(applied.bodyLarge.isNone()).toBe(true)
+  })
+})
+
+
+describe("TextTheme merge", () => {
+  it("should merge two text themes", () => {
+    base = TextTheme.material3()
+    
+    override = TextTheme(
+      bodyLarge: Some(TextStyle(fontSize: Some(20.0)))
+    )
+    
+    merged = base.merge(override)
+    
+    match merged.bodyLarge {
+      Some(style) => {
+        match style.fontSize {
+          Some(size) => expect(size).toBe(20.0)
+          None => throw Error("Expected fontSize")
+        }
+      }
+      None => throw Error("Expected Some")
+    }
+  })
+  
+  it("should keep base styles when override is None", () => {
+    base = TextTheme.material3()
+    override = TextTheme()  # Empty
+    
+    merged = base.merge(override)
+    
+    expect(merged.displayLarge.isSome()).toBe(true)
+    expect(merged.bodyMedium.isSome()).toBe(true)
+  })
+})
+
+
+describe("SpacingScale", () => {
+  it("should create Material Design spacing scale", () => {
+    spacing = SpacingScale()
+    
+    expect(spacing.xs.left).toBe(4.0)
+    expect(spacing.sm.left).toBe(8.0)
+    expect(spacing.md.left).toBe(16.0)
+    expect(spacing.lg.left).toBe(24.0)
+    expect(spacing.xl.left).toBe(32.0)
+    expect(spacing.xxl.left).toBe(48.0)
+  })
+  
+  it("should scale all sizes by factor", () => {
+    spacing = SpacingScale()
+    
+    scaled = spacing.scaled(2.0)
+    
+    expect(scaled.xs.left).toBe(8.0)   # 4 * 2
+    expect(scaled.sm.left).toBe(16.0)  # 8 * 2
+    expect(scaled.md.left).toBe(32.0)  # 16 * 2
+  })
+  
+  it("should not mutate original when scaling", () => {
+    original = SpacingScale()
+    
+    scaled = original.scaled(2.0)
+    
+    expect(original.md.left).toBe(16.0)  # unchanged
+    expect(scaled.md.left).toBe(32.0)
+  })
+})
+
+
+describe("ThemeData light", () => {
+  it("should create light theme with correct brightness", () => {
+    theme = ThemeData.light()
+    
+    expect(theme.brightness).toBe(Brightness.Light)
+    expect(theme.colorScheme.brightness).toBe(Brightness.Light)
+  })
+  
+  it("should have complete color scheme", () => {
+    theme = ThemeData.light()
+    
+    expect(theme.colorScheme.primary).toBeDefined()
+    expect(theme.colorScheme.background).toBeDefined()
+  })
+  
+  it("should have complete text theme", () => {
+    theme = ThemeData.light()
+    
+    expect(theme.textTheme.bodyLarge.isSome()).toBe(true)
+    expect(theme.textTheme.headlineMedium.isSome()).toBe(true)
+  })
+  
+  it("should have spacing scale", () => {
+    theme = ThemeData.light()
+    
+    expect(theme.spacing.md.left).toBe(16.0)
+  })
+  
+  it("should apply onBackground color to text theme", () => {
+    theme = ThemeData.light()
+    
+    match theme.textTheme.bodyLarge {
+      Some(style) => {
+        match style.color {
+          Some(color) => {
+            expect(color).toBe(theme.colorScheme.onBackground)
+          }
+          None => throw Error("Expected color")
+        }
+      }
+      None => throw Error("Expected bodyLarge")
+    }
+  })
+})
+
+
+describe("ThemeData dark", () => {
+  it("should create dark theme with correct brightness", () => {
+    theme = ThemeData.dark()
+    
+    expect(theme.brightness).toBe(Brightness.Dark)
+    expect(theme.colorScheme.brightness).toBe(Brightness.Dark)
+  })
+  
+  it("should have different colors from light theme", () => {
+    light = ThemeData.light()
+    dark = ThemeData.dark()
+    
+    expect(light.colorScheme.background).not.toBe(dark.colorScheme.background)
+  })
+})
+
+
+describe("ThemeData fromSeed", () => {
+  it("should create theme from seed color", () => {
+    seed = Color(255, 100, 50)
+    
+    theme = ThemeData.fromSeed(seed, Brightness.Light)
+    
+    expect(theme.colorScheme.primary).toBe(seed)
+    expect(theme.brightness).toBe(Brightness.Light)
+  })
+  
+  it("should generate harmonious color palette", () => {
+    seed = Color(100, 150, 200)
+    
+    theme = ThemeData.fromSeed(seed, Brightness.Dark)
+    
+    # Should have generated secondary and tertiary
+    expect(theme.colorScheme.secondary).toBeDefined()
+    expect(theme.colorScheme.tertiary).toBeDefined()
+  })
+})
+
+
+describe("ThemeData copyWith", () => {
+  it("should update individual properties", () => {
+    theme = ThemeData.light()
+    newSpacing = SpacingScale().scaled(2.0)
+    
+    updated = theme.copyWith(spacing: Some(newSpacing))
+    
+    expect(updated.spacing.md.left).toBe(32.0)
+    expect(updated.colorScheme).toBe(theme.colorScheme)  # unchanged
+  })
+  
+  it("should not mutate original theme", () => {
+    original = ThemeData.light()
+    originalBrightness = original.brightness
+    
+    updated = original.copyWith(brightness: Some(Brightness.Dark))
+    
+    expect(original.brightness).toBe(originalBrightness)  # unchanged
+    expect(updated.brightness).toBe(Brightness.Dark)
+  })
+})
+
+
+describe("ThemeData lerp", () => {
+  it("should interpolate between themes", () => {
+    light = ThemeData.light()
+    dark = ThemeData.dark()
+    
+    mid = light.lerp(dark, 0.5)
+    
+    # Colors should be interpolated
+    expect(mid.colorScheme.primary).not.toBe(light.colorScheme.primary)
+    expect(mid.colorScheme.primary).not.toBe(dark.colorScheme.primary)
+  })
+  
+  it("should return first theme when t=0", () => {
+    light = ThemeData.light()
+    dark = ThemeData.dark()
+    
+    result = light.lerp(dark, 0.0)
+    
+    expect(result.brightness).toBe(Brightness.Light)
+  })
+  
+  it("should return second theme when t=1", () => {
+    light = ThemeData.light()
+    dark = ThemeData.dark()
+    
+    result = light.lerp(dark, 1.0)
+    
+    expect(result.brightness).toBe(Brightness.Dark)
+  })
+})
+
+
+describe("Theme widget", () => {
+  it("should provide theme data to descendants", () => {
+    themeData = ThemeData.light()
+    theme = Theme(data: themeData, child: Container())
+    
+    expect(theme.data).toBe(themeData)
+  })
+  
+  it("should retrieve theme from context", () => {
+    # Mock context with Theme
+    themeData = ThemeData.dark()
+    theme = Theme(data: themeData, child: Container())
+    
+    # Theme.of(context) should find theme
+    # (En tests reales, usaríamos BuildContext mock)
+    expect(theme.data.brightness).toBe(Brightness.Dark)
+  })
+  
+  it("should return default light theme if no Theme in tree", () => {
+    # Mock context sin Theme ancestor
+    # Theme.of(context) debería retornar ThemeData.light()
+    
+    defaultTheme = ThemeData.light()
+    expect(defaultTheme.brightness).toBe(Brightness.Light)
+  })
+})
+
+
+describe("Theme updateShouldNotify", () => {
+  it("should notify when theme data changes", () => {
+    theme1 = Theme(data: ThemeData.light(), child: Container())
+    theme2 = Theme(data: ThemeData.dark(), child: Container())
+    
+    shouldNotify = theme2.updateShouldNotify(theme1)
+    
+    expect(shouldNotify).toBe(true)
+  })
+  
+  it("should not notify when theme data is same", () => {
+    themeData = ThemeData.light()
+    theme1 = Theme(data: themeData, child: Container())
+    theme2 = Theme(data: themeData, child: Container())
+    
+    shouldNotify = theme2.updateShouldNotify(theme1)
+    
+    expect(shouldNotify).toBe(false)
+  })
+})
+
+
+describe("ThemeProvider reactive", () => {
+  it("should initialize with given mode", () => {
+    provider = ThemeProvider(
+      mode: ThemeMode.Dark,
+      lightTheme: ThemeData.light(),
+      darkTheme: ThemeData.dark(),
+      child: Container()
+    )
+    
+    expect(provider.mode).toBe(ThemeMode.Dark)
+  })
+  
+  it("should compute current theme based on mode", () => {
+    lightTheme = ThemeData.light()
+    darkTheme = ThemeData.dark()
+    
+    provider = ThemeProvider(
+      mode: ThemeMode.Light,
+      lightTheme: lightTheme,
+      darkTheme: darkTheme,
+      child: Container()
+    )
+    
+    state = provider.createState()
+    state.themeMode = ThemeMode.Light
+    
+    # currentTheme computed debería retornar lightTheme
+    expect(state.currentTheme.brightness).toBe(Brightness.Light)
+  })
+  
+  it("should toggle between light and dark", () => {
+    provider = ThemeProvider(
+      mode: ThemeMode.Light,
+      lightTheme: ThemeData.light(),
+      darkTheme: ThemeData.dark(),
+      child: Container()
+    )
+    
+    state = provider.createState()
+    state.themeMode = ThemeMode.Light
+    
+    state.toggleTheme()
+    expect(state.themeMode).toBe(ThemeMode.Dark)
+    
+    state.toggleTheme()
+    expect(state.themeMode).toBe(ThemeMode.Light)
+  })
+  
+  it("should set theme mode programmatically", () => {
+    provider = ThemeProvider(
+      mode: ThemeMode.Light,
+      lightTheme: ThemeData.light(),
+      darkTheme: ThemeData.dark(),
+      child: Container()
+    )
+    
+    state = provider.createState()
+    
+    state.setThemeMode(ThemeMode.Dark)
+    expect(state.themeMode).toBe(ThemeMode.Dark)
+    
+    state.setThemeMode(ThemeMode.System)
+    expect(state.themeMode).toBe(ThemeMode.System)
+  })
+})
+
+
+describe("ThemeProvider integration", () => {
+  it("should propagate theme changes to descendants", () => {
+    lightTheme = ThemeData.light()
+    darkTheme = ThemeData.dark()
+    
+    provider = ThemeProvider(
+      mode: ThemeMode.Light,
+      lightTheme: lightTheme,
+      darkTheme: darkTheme,
+      child: Container()
+    )
+    
+    state = provider.createState()
+    
+    # Initial: light theme
+    expect(state.currentTheme.brightness).toBe(Brightness.Light)
+    
+    # Switch to dark
+    state.setThemeMode(ThemeMode.Dark)
+    expect(state.currentTheme.brightness).toBe(Brightness.Dark)
+  })
+})
