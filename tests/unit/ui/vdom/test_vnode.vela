@@ -1,0 +1,552 @@
+"""
+Tests unitarios para vnode.vela (Virtual DOM)
+
+Jira: VELA-583
+Sprint: 21
+Task: TASK-059
+"""
+
+import 'system:testing' show { describe, it, expect, beforeEach }
+import 'ui:vdom:vnode' show {
+  VNode,
+  VTextNode,
+  VFragmentNode,
+  VCommentNode,
+  VNodeFactory,
+  VTree,
+  VDOMRenderer
+}
+import 'system:ui' show { Widget, BuildContext, Container, Text, Column, Button }
+
+
+# ============================================================================
+# TEST: VNODE BÁSICO
+# ============================================================================
+
+describe("VNode", () => {
+  
+  it("should create vnode with type and props", () => {
+    vnode = VNode(
+      type: "Container",
+      props: Map { "width": 100, "height": 100 },
+      children: []
+    )
+    
+    expect(vnode.type).toBe("Container")
+    expect(vnode.props.get("width")).toBe(100)
+    expect(vnode.children.length).toBe(0)
+  })
+  
+  
+  it("should create vnode with key", () => {
+    vnode = VNode(
+      type: "Text",
+      props: Map { "text": "Hello" },
+      children: [],
+      key: Some("my-text")
+    )
+    
+    expect(vnode.key.unwrap()).toBe("my-text")
+  })
+  
+  
+  it("should detect native elements", () => {
+    divNode = VNode(type: "div", props: Map {})
+    buttonNode = VNode(type: "button", props: Map {})
+    customNode = VNode(type: "MyWidget", props: Map {})
+    
+    expect(divNode.isNative).toBe(true)
+    expect(buttonNode.isNative).toBe(true)
+    expect(customNode.isNative).toBe(false)
+  })
+  
+  
+  it("should compare vnode types", () => {
+    vnode1 = VNode(type: "Container", props: Map {})
+    vnode2 = VNode(type: "Container", props: Map {})
+    vnode3 = VNode(type: "Column", props: Map {})
+    
+    expect(vnode1.isSameType(vnode2)).toBe(true)
+    expect(vnode1.isSameType(vnode3)).toBe(false)
+  })
+  
+  
+  it("should compare vnodes with keys", () => {
+    vnode1 = VNode(type: "Text", props: Map {}, key: Some("text-1"))
+    vnode2 = VNode(type: "Text", props: Map {}, key: Some("text-1"))
+    vnode3 = VNode(type: "Text", props: Map {}, key: Some("text-2"))
+    
+    expect(vnode1.isSameType(vnode2)).toBe(true)
+    expect(vnode1.isSameType(vnode3)).toBe(false)
+  })
+  
+  
+  it("should clone vnode", () => {
+    original = VNode(
+      type: "Container",
+      props: Map { "width": 100 },
+      children: [
+        VNode(type: "Text", props: Map { "text": "Child" })
+      ]
+    )
+    
+    cloned = original.clone()
+    
+    expect(cloned.type).toBe(original.type)
+    expect(cloned.props.get("width")).toBe(100)
+    expect(cloned.children.length).toBe(1)
+    
+    # Verificar deep clone
+    cloned.props.set("width", 200)
+    expect(original.props.get("width")).toBe(100)
+  })
+  
+  
+  it("should convert to string", () => {
+    vnode = VNode(
+      type: "Container",
+      props: Map {},
+      children: [VNode(type: "Text", props: Map {})]
+    )
+    
+    str = vnode.toString()
+    
+    expect(str).toContain("Container")
+    expect(str).toContain("1 children")
+  })
+})
+
+
+# ============================================================================
+# TEST: VTEXT NODE
+# ============================================================================
+
+describe("VTextNode", () => {
+  
+  it("should create text node", () => {
+    textNode = VTextNode("Hello World")
+    
+    expect(textNode.type).toBe("#text")
+    expect(textNode.text).toBe("Hello World")
+    expect(textNode.isNative).toBe(true)
+    expect(textNode.children.length).toBe(0)
+  })
+  
+  
+  it("should have text in props", () => {
+    textNode = VTextNode("Test")
+    
+    expect(textNode.props.get("text")).toBe("Test")
+  })
+  
+  
+  it("should convert to string", () => {
+    textNode = VTextNode("Hello")
+    
+    str = textNode.toString()
+    
+    expect(str).toBe("\"Hello\"")
+  })
+})
+
+
+# ============================================================================
+# TEST: VFRAGMENT NODE
+# ============================================================================
+
+describe("VFragmentNode", () => {
+  
+  it("should create fragment with children", () => {
+    children = [
+      VTextNode("Child 1"),
+      VTextNode("Child 2")
+    ]
+    
+    fragment = VFragmentNode(children)
+    
+    expect(fragment.type).toBe("#fragment")
+    expect(fragment.children.length).toBe(2)
+    expect(fragment.isComponent).toBe(false)
+  })
+  
+  
+  it("should convert to string", () => {
+    fragment = VFragmentNode([
+      VTextNode("A"),
+      VTextNode("B")
+    ])
+    
+    str = fragment.toString()
+    
+    expect(str).toContain("Fragment")
+    expect(str).toContain("2 children")
+  })
+})
+
+
+# ============================================================================
+# TEST: VCOMMENT NODE
+# ============================================================================
+
+describe("VCommentNode", () => {
+  
+  it("should create comment node", () => {
+    comment = VCommentNode("This is a comment")
+    
+    expect(comment.type).toBe("#comment")
+    expect(comment.comment).toBe("This is a comment")
+  })
+  
+  
+  it("should convert to string", () => {
+    comment = VCommentNode("Debug info")
+    
+    str = comment.toString()
+    
+    expect(str).toBe("<!-- Debug info -->")
+  })
+})
+
+
+# ============================================================================
+# TEST: VNODE FACTORY
+# ============================================================================
+
+describe("VNodeFactory", () => {
+  
+  it("should create vnode from widget", () => {
+    widget = Container(width: 100, height: 100)
+    context = BuildContext.mock()
+    
+    vnode = VNodeFactory.createFromWidget(widget, context)
+    
+    expect(vnode.type).toBe("Container")
+    expect(vnode.widget.isSome()).toBe(true)
+  })
+  
+  
+  it("should extract props from widget", () => {
+    widget = Text(text: "Hello", style: TextStyle { fontSize: 16 })
+    context = BuildContext.mock()
+    
+    vnode = VNodeFactory.createFromWidget(widget, context)
+    
+    expect(vnode.props.get("text")).toBe("Hello")
+  })
+  
+  
+  it("should extract children from widget", () => {
+    widget = Column(
+      children: [
+        Text("Child 1"),
+        Text("Child 2")
+      ]
+    )
+    context = BuildContext.mock()
+    
+    vnode = VNodeFactory.createFromWidget(widget, context)
+    
+    expect(vnode.children.length).toBe(2)
+  })
+  
+  
+  it("should preserve key from widget", () => {
+    widget = Text(text: "Hello", key: "my-key")
+    context = BuildContext.mock()
+    
+    vnode = VNodeFactory.createFromWidget(widget, context)
+    
+    expect(vnode.key.unwrap()).toBe("my-key")
+  })
+  
+  
+  it("should create text vnode", () => {
+    textNode = VNodeFactory.createText("Hello")
+    
+    expect(textNode.type).toBe("#text")
+    expect(textNode.text).toBe("Hello")
+  })
+  
+  
+  it("should create fragment vnode", () => {
+    children = [
+      VTextNode("A"),
+      VTextNode("B")
+    ]
+    
+    fragment = VNodeFactory.createFragment(children)
+    
+    expect(fragment.type).toBe("#fragment")
+    expect(fragment.children.length).toBe(2)
+  })
+  
+  
+  it("should create comment vnode", () => {
+    comment = VNodeFactory.createComment("Test comment")
+    
+    expect(comment.type).toBe("#comment")
+    expect(comment.comment).toBe("Test comment")
+  })
+})
+
+
+# ============================================================================
+# TEST: VTREE
+# ============================================================================
+
+describe("VTree", () => {
+  
+  it("should create tree from vnode", () => {
+    root = VNode(type: "Container", props: Map {})
+    tree = VTree(root)
+    
+    expect(tree.root.type).toBe("Container")
+    expect(tree.version).toBe(0)
+  })
+  
+  
+  it("should create tree from widget", () => {
+    widget = Container(
+      child: Text("Hello")
+    )
+    context = BuildContext.mock()
+    
+    tree = VTree.fromWidget(widget, context)
+    
+    expect(tree.root.type).toBe("Container")
+    expect(tree.root.children.length).toBeGreaterThan(0)
+  })
+  
+  
+  it("should traverse tree", () => {
+    tree = VTree(
+      VNode(
+        type: "Container",
+        props: Map {},
+        children: [
+          VNode(type: "Text", props: Map {}),
+          VNode(type: "Button", props: Map {})
+        ]
+      )
+    )
+    
+    visited = []
+    tree.traverse((node: VNode) => {
+      visited.push(node.type)
+    })
+    
+    expect(visited.length).toBe(3)
+    expect(visited).toContain("Container")
+    expect(visited).toContain("Text")
+    expect(visited).toContain("Button")
+  })
+  
+  
+  it("should find node by key", () => {
+    tree = VTree(
+      VNode(
+        type: "Container",
+        props: Map {},
+        children: [
+          VNode(type: "Text", props: Map {}, key: Some("text-1")),
+          VNode(type: "Button", props: Map {}, key: Some("btn-1"))
+        ]
+      )
+    )
+    
+    node = tree.findByKey("text-1")
+    
+    expect(node.isSome()).toBe(true)
+    expect(node.unwrap().type).toBe("Text")
+  })
+  
+  
+  it("should find nodes by type", () => {
+    tree = VTree(
+      VNode(
+        type: "Container",
+        props: Map {},
+        children: [
+          VNode(type: "Text", props: Map {}),
+          VNode(type: "Text", props: Map {}),
+          VNode(type: "Button", props: Map {})
+        ]
+      )
+    )
+    
+    textNodes = tree.findByType("Text")
+    
+    expect(textNodes.length).toBe(2)
+  })
+  
+  
+  it("should clone tree", () => {
+    original = VTree(
+      VNode(type: "Container", props: Map { "width": 100 })
+    )
+    
+    cloned = original.clone()
+    
+    expect(cloned.root.type).toBe("Container")
+    expect(cloned.root.props.get("width")).toBe(100)
+    
+    # Verificar independencia
+    cloned.root.props.set("width", 200)
+    expect(original.root.props.get("width")).toBe(100)
+  })
+  
+  
+  it("should increment version", () => {
+    tree = VTree(VNode(type: "Container", props: Map {}))
+    
+    initialVersion = tree.version
+    
+    tree.incrementVersion()
+    
+    expect(tree.version).toBe(initialVersion + 1)
+  })
+  
+  
+  it("should convert tree to string", () => {
+    tree = VTree(
+      VNode(
+        type: "Container",
+        props: Map {},
+        children: [
+          VNode(type: "Text", props: Map {})
+        ]
+      )
+    )
+    
+    str = tree.toString()
+    
+    expect(str).toContain("Container")
+    expect(str).toContain("Text")
+  })
+})
+
+
+# ============================================================================
+# TEST: VDOM RENDERER
+# ============================================================================
+
+describe("VDOMRenderer", () => {
+  
+  it("should render native element", () => {
+    vnode = VNode(type: "div", props: Map { "class": "container" })
+    context = BuildContext.mock()
+    renderer = VDOMRenderer(context)
+    
+    element = renderer.render(vnode)
+    
+    expect(element.tagName).toBe("DIV")
+    expect(element.getAttribute("class")).toBe("container")
+  })
+  
+  
+  it("should render text node", () => {
+    textNode = VTextNode("Hello World")
+    context = BuildContext.mock()
+    renderer = VDOMRenderer(context)
+    
+    element = renderer.render(textNode)
+    
+    expect(element.nodeType).toBe(Node.TEXT_NODE)
+    expect(element.textContent).toBe("Hello World")
+  })
+  
+  
+  it("should render with children", () => {
+    vnode = VNode(
+      type: "div",
+      props: Map {},
+      children: [
+        VTextNode("Child 1"),
+        VTextNode("Child 2")
+      ]
+    )
+    context = BuildContext.mock()
+    renderer = VDOMRenderer(context)
+    
+    element = renderer.render(vnode)
+    
+    expect(element.children.length).toBe(2)
+  })
+  
+  
+  it("should render fragment", () => {
+    fragment = VFragmentNode([
+      VTextNode("A"),
+      VTextNode("B")
+    ])
+    context = BuildContext.mock()
+    renderer = VDOMRenderer(context)
+    
+    element = renderer.render(fragment)
+    
+    expect(element.nodeType).toBe(Node.DOCUMENT_FRAGMENT_NODE)
+    expect(element.childNodes.length).toBe(2)
+  })
+})
+
+
+# ============================================================================
+# TEST: INTEGRATION
+# ============================================================================
+
+describe("Integration: Widget to VDOM to DOM", () => {
+  
+  it("should convert widget tree to vdom to dom", () => {
+    # Widget original
+    widget = Container(
+      child: Column(
+        children: [
+          Text("Title"),
+          Button(text: "Click me")
+        ]
+      )
+    )
+    
+    context = BuildContext.mock()
+    
+    # Widget -> VTree
+    vtree = VTree.fromWidget(widget, context)
+    expect(vtree.root.type).toBe("Container")
+    
+    # VTree -> DOM
+    renderer = VDOMRenderer(context)
+    domElement = renderer.render(vtree.root)
+    expect(domElement).not.toBeNull()
+  })
+  
+  
+  it("should preserve widget structure in vdom", () => {
+    widget = Column(
+      children: [
+        Text("A"),
+        Text("B"),
+        Text("C")
+      ]
+    )
+    
+    context = BuildContext.mock()
+    vtree = VTree.fromWidget(widget, context)
+    
+    # Verificar estructura
+    expect(vtree.root.type).toBe("Column")
+    expect(vtree.root.children.length).toBe(3)
+    
+    textNodes = vtree.findByType("Text")
+    expect(textNodes.length).toBe(3)
+  })
+})
+
+
+# ============================================================================
+# RUN TESTS
+# ============================================================================
+
+@test
+fn runAllVNodeTests() -> void {
+  print("Running TASK-059 Virtual DOM Tests...")
+}
