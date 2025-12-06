@@ -1,0 +1,602 @@
+"""
+Container Widget - Widget fundamental de layout con decoración
+
+Container es el widget más versátil y usado en Vela UI.
+Similar a div en HTML o Container en Flutter.
+
+Características:
+- Sizing (width, height, constraints)
+- Padding y margin
+- Decoration (background, border, shadow, border-radius)
+- Alignment del child
+- Transform (rotate, scale, translate)
+- Clipping
+- Event handling (onClick, onHover, etc.)
+
+Sprint: 20
+Task: TASK-055
+"""
+
+import 'ui/widget' show { Widget, StatelessWidget, BuildContext, Color }
+
+# ============================================================================
+# ENUMS Y TIPOS DE LAYOUT
+# ============================================================================
+
+"""Alineación horizontal y vertical"""
+enum Alignment {
+  TopLeft, TopCenter, TopRight,
+  CenterLeft, Center, CenterRight,
+  BottomLeft, BottomCenter, BottomRight
+}
+
+"""Forma del widget"""
+enum BoxShape {
+  Rectangle,  # Rectángulo (con border-radius opcional)
+  Circle      # Círculo perfecto
+}
+
+"""Modo de ajuste del child"""
+enum BoxFit {
+  Fill,       # Estirar para llenar completamente
+  Contain,    # Escalar manteniendo aspect ratio, caber dentro
+  Cover,      # Escalar manteniendo aspect ratio, cubrir todo
+  FitWidth,   # Ajustar al ancho
+  FitHeight,  # Ajustar al alto
+  None        # Tamaño original
+}
+
+# ============================================================================
+# EDGE INSETS - Padding y Margin
+# ============================================================================
+
+"""
+EdgeInsets: Espaciado en los 4 lados (top, right, bottom, left).
+Similar a CSS padding/margin.
+"""
+struct EdgeInsets {
+  top: Number
+  right: Number
+  bottom: Number
+  left: Number
+  
+  """Mismo valor en todos los lados"""
+  static fn all(value: Number) -> EdgeInsets {
+    return EdgeInsets { top: value, right: value, bottom: value, left: value }
+  }
+  
+  """Solo horizontal (left, right)"""
+  static fn horizontal(value: Number) -> EdgeInsets {
+    return EdgeInsets { top: 0, right: value, bottom: 0, left: value }
+  }
+  
+  """Solo vertical (top, bottom)"""
+  static fn vertical(value: Number) -> EdgeInsets {
+    return EdgeInsets { top: value, right: 0, bottom: value, left: 0 }
+  }
+  
+  """Simétrico (vertical, horizontal)"""
+  static fn symmetric(vertical: Number, horizontal: Number) -> EdgeInsets {
+    return EdgeInsets { top: vertical, right: horizontal, bottom: vertical, left: horizontal }
+  }
+  
+  """Cada lado específico"""
+  static fn only(top: Number = 0, right: Number = 0, bottom: Number = 0, left: Number = 0) -> EdgeInsets {
+    return EdgeInsets { top, right, bottom, left }
+  }
+  
+  """Sin espaciado"""
+  static fn zero() -> EdgeInsets {
+    return EdgeInsets { top: 0, right: 0, bottom: 0, left: 0 }
+  }
+}
+
+# ============================================================================
+# BOX DECORATION - Estilo visual del Container
+# ============================================================================
+
+"""
+BoxDecoration: Decoración visual del Container.
+Incluye color, gradient, image, border, shadow, border-radius.
+"""
+struct BoxDecoration {
+  color: Option<Color> = None
+  gradient: Option<Gradient> = None
+  image: Option<DecorationImage> = None
+  border: Option<Border> = None
+  borderRadius: Option<BorderRadius> = None
+  boxShadow: List<BoxShadow> = []
+  shape: BoxShape = BoxShape.Rectangle
+}
+
+"""Gradiente linear o radial"""
+enum Gradient {
+  Linear { colors: List<Color>, begin: Alignment, end: Alignment },
+  Radial { colors: List<Color>, center: Alignment, radius: Number }
+}
+
+"""Imagen de decoración"""
+struct DecorationImage {
+  url: String
+  fit: BoxFit = BoxFit.Cover
+  alignment: Alignment = Alignment.Center
+  repeat: Bool = false
+}
+
+"""Borde del Container"""
+struct Border {
+  top: BorderSide
+  right: BorderSide
+  bottom: BorderSide
+  left: BorderSide
+  
+  """Borde uniforme en todos los lados"""
+  static fn all(color: Color, width: Number = 1) -> Border {
+    side: BorderSide = BorderSide { color, width }
+    return Border { top: side, right: side, bottom: side, left: side }
+  }
+  
+  """Borde simétrico"""
+  static fn symmetric(vertical: BorderSide, horizontal: BorderSide) -> Border {
+    return Border { top: vertical, right: horizontal, bottom: vertical, left: horizontal }
+  }
+}
+
+"""Lado del borde"""
+struct BorderSide {
+  color: Color
+  width: Number = 1
+  style: BorderStyle = BorderStyle.Solid
+}
+
+"""Estilo de línea del borde"""
+enum BorderStyle {
+  Solid,   # Línea sólida
+  Dashed,  # Línea discontinua
+  Dotted,  # Puntos
+  None     # Sin borde
+}
+
+"""Border radius (esquinas redondeadas)"""
+struct BorderRadius {
+  topLeft: Number
+  topRight: Number
+  bottomRight: Number
+  bottomLeft: Number
+  
+  """Mismo radio en todas las esquinas"""
+  static fn circular(radius: Number) -> BorderRadius {
+    return BorderRadius { topLeft: radius, topRight: radius, bottomRight: radius, bottomLeft: radius }
+  }
+  
+  """Solo esquinas superiores"""
+  static fn onlyTop(radius: Number) -> BorderRadius {
+    return BorderRadius { topLeft: radius, topRight: radius, bottomRight: 0, bottomLeft: 0 }
+  }
+  
+  """Solo esquinas inferiores"""
+  static fn onlyBottom(radius: Number) -> BorderRadius {
+    return BorderRadius { topLeft: 0, topRight: 0, bottomRight: radius, bottomLeft: radius }
+  }
+}
+
+"""Sombra del Container"""
+struct BoxShadow {
+  color: Color
+  offset: Offset
+  blurRadius: Number = 0
+  spreadRadius: Number = 0
+}
+
+"""Offset (desplazamiento x, y)"""
+struct Offset {
+  x: Number
+  y: Number
+  
+  static fn zero() -> Offset {
+    return Offset { x: 0, y: 0 }
+  }
+}
+
+# ============================================================================
+# BOX CONSTRAINTS - Restricciones de tamaño
+# ============================================================================
+
+"""
+BoxConstraints: Restricciones de tamaño mínimo y máximo.
+El widget debe respetar estas restricciones durante layout.
+"""
+struct BoxConstraints {
+  minWidth: Number = 0
+  maxWidth: Number = Number.INFINITY
+  minHeight: Number = 0
+  maxHeight: Number = Number.INFINITY
+  
+  """Tamaño exacto (tight constraints)"""
+  static fn tight(width: Number, height: Number) -> BoxConstraints {
+    return BoxConstraints { minWidth: width, maxWidth: width, minHeight: height, maxHeight: height }
+  }
+  
+  """Tamaño mínimo"""
+  static fn min(width: Number, height: Number) -> BoxConstraints {
+    return BoxConstraints { minWidth: width, minHeight: height, maxWidth: Number.INFINITY, maxHeight: Number.INFINITY }
+  }
+  
+  """Tamaño máximo"""
+  static fn max(width: Number, height: Number) -> BoxConstraints {
+    return BoxConstraints { minWidth: 0, minHeight: 0, maxWidth: width, maxHeight: height }
+  }
+  
+  """Expandir para llenar padre"""
+  static fn expand() -> BoxConstraints {
+    return BoxConstraints { 
+      minWidth: Number.INFINITY, 
+      maxWidth: Number.INFINITY, 
+      minHeight: Number.INFINITY, 
+      maxHeight: Number.INFINITY 
+    }
+  }
+  
+  """Sin restricciones"""
+  static fn loose() -> BoxConstraints {
+    return BoxConstraints { minWidth: 0, minHeight: 0, maxWidth: Number.INFINITY, maxHeight: Number.INFINITY }
+  }
+}
+
+# ============================================================================
+# CONTAINER WIDGET
+# ============================================================================
+
+"""
+Container: Widget fundamental de layout con decoración.
+
+El Container es el widget más usado en Vela UI. Combina:
+- Sizing (width, height, constraints)
+- Padding y margin
+- Decoration (color, border, shadow, etc.)
+- Alignment del child
+- Transform
+- Event handling
+
+Ejemplo básico:
+```vela
+Container(
+  width: 200,
+  height: 100,
+  padding: EdgeInsets.all(16),
+  decoration: BoxDecoration(
+    color: Color.Blue,
+    borderRadius: BorderRadius.circular(8)
+  ),
+  child: Text("Hello")
+)
+```
+"""
+widget Container extends StatelessWidget {
+  # Sizing
+  width: Option<Number> = None
+  height: Option<Number> = None
+  constraints: Option<BoxConstraints> = None
+  
+  # Spacing
+  padding: EdgeInsets = EdgeInsets.zero()
+  margin: EdgeInsets = EdgeInsets.zero()
+  
+  # Decoration
+  decoration: Option<BoxDecoration> = None
+  foregroundDecoration: Option<BoxDecoration> = None
+  
+  # Alignment
+  alignment: Alignment = Alignment.Center
+  
+  # Transform
+  transform: Option<Matrix4> = None
+  
+  # Clipping
+  clipBehavior: Clip = Clip.None
+  
+  # Child
+  child: Option<Widget> = None
+  
+  # Events
+  onClick: Option<() -> void> = None
+  onHover: Option<(Bool) -> void> = None
+  
+  fn build(context: BuildContext) -> Widget {
+    # Container es un widget "leaf" que renderiza directamente
+    # En un framework real, esto se pasaría al renderer
+    return this
+  }
+  
+  """
+  Helper: Container con solo color de fondo
+  """
+  static fn colored(color: Color, child: Option<Widget> = None) -> Container {
+    return Container {
+      decoration: Some(BoxDecoration { color: Some(color) }),
+      child: child
+    }
+  }
+  
+  """
+  Helper: Container con ancho/alto específico
+  """
+  static fn sized(width: Number, height: Number, child: Option<Widget> = None) -> Container {
+    return Container {
+      width: Some(width),
+      height: Some(height),
+      child: child
+    }
+  }
+}
+
+# ============================================================================
+# SIZED BOX - Container con solo tamaño
+# ============================================================================
+
+"""
+SizedBox: Container simplificado que solo especifica tamaño.
+Más eficiente que Container cuando solo necesitas sizing.
+
+Ejemplo:
+```vela
+SizedBox(
+  width: 200,
+  height: 100,
+  child: Text("Hello")
+)
+```
+"""
+widget SizedBox extends StatelessWidget {
+  width: Option<Number> = None
+  height: Option<Number> = None
+  child: Option<Widget> = None
+  
+  fn build(context: BuildContext) -> Widget {
+    return Container {
+      width: this.width,
+      height: this.height,
+      child: this.child
+    }
+  }
+  
+  """Box cuadrado"""
+  static fn square(size: Number, child: Option<Widget> = None) -> SizedBox {
+    return SizedBox { width: Some(size), height: Some(size), child: child }
+  }
+  
+  """Espaciador con tamaño fijo"""
+  static fn spacer(size: Number) -> SizedBox {
+    return SizedBox { width: Some(size), height: Some(size) }
+  }
+}
+
+# ============================================================================
+# PADDING WIDGET
+# ============================================================================
+
+"""
+Padding: Agrega padding alrededor del child.
+Versión simplificada de Container cuando solo necesitas padding.
+
+Ejemplo:
+```vela
+Padding(
+  padding: EdgeInsets.all(16),
+  child: Text("Hello")
+)
+```
+"""
+widget Padding extends StatelessWidget {
+  padding: EdgeInsets
+  child: Widget
+  
+  fn build(context: BuildContext) -> Widget {
+    return Container {
+      padding: this.padding,
+      child: Some(this.child)
+    }
+  }
+}
+
+# ============================================================================
+# CENTER WIDGET
+# ============================================================================
+
+"""
+Center: Centra el child dentro del espacio disponible.
+
+Ejemplo:
+```vela
+Center(
+  child: Text("Centered")
+)
+```
+"""
+widget Center extends StatelessWidget {
+  child: Widget
+  widthFactor: Option<Number> = None
+  heightFactor: Option<Number> = None
+  
+  fn build(context: BuildContext) -> Widget {
+    return Container {
+      alignment: Alignment.Center,
+      child: Some(this.child)
+    }
+  }
+}
+
+# ============================================================================
+# ALIGN WIDGET
+# ============================================================================
+
+"""
+Align: Alinea el child según un alignment específico.
+
+Ejemplo:
+```vela
+Align(
+  alignment: Alignment.TopRight,
+  child: Text("Top Right")
+)
+```
+"""
+widget Align extends StatelessWidget {
+  alignment: Alignment
+  child: Widget
+  widthFactor: Option<Number> = None
+  heightFactor: Option<Number> = None
+  
+  fn build(context: BuildContext) -> Widget {
+    return Container {
+      alignment: this.alignment,
+      child: Some(this.child)
+    }
+  }
+}
+
+# ============================================================================
+# ASPECT RATIO WIDGET
+# ============================================================================
+
+"""
+AspectRatio: Mantiene un aspect ratio específico.
+Útil para imágenes, videos, etc.
+
+Ejemplo:
+```vela
+AspectRatio(
+  aspectRatio: 16.0 / 9.0,  # 16:9
+  child: Image(url: "video.jpg")
+)
+```
+"""
+widget AspectRatio extends StatelessWidget {
+  aspectRatio: Number  # width / height
+  child: Widget
+  
+  fn build(context: BuildContext) -> Widget {
+    # En un framework real, esto se calcula durante layout
+    return this
+  }
+}
+
+# ============================================================================
+# FLEXIBLE & EXPANDED (para Row/Column)
+# ============================================================================
+
+"""
+Flexible: Child flexible en Row/Column.
+Toma espacio disponible según flex factor.
+"""
+widget Flexible extends StatelessWidget {
+  flex: Number = 1
+  fit: FlexFit = FlexFit.Loose
+  child: Widget
+  
+  fn build(context: BuildContext) -> Widget {
+    return this
+  }
+}
+
+"""Modo de fit del flexible child"""
+enum FlexFit {
+  Tight,  # Debe llenar el espacio asignado
+  Loose   # Puede ser menor que el espacio asignado
+}
+
+"""
+Expanded: Shortcut para Flexible con fit = Tight.
+Llena todo el espacio disponible.
+
+Ejemplo:
+```vela
+Row(
+  children: [
+    Text("Fixed"),
+    Expanded(child: Text("Takes remaining space"))
+  ]
+)
+```
+"""
+widget Expanded extends StatelessWidget {
+  flex: Number = 1
+  child: Widget
+  
+  fn build(context: BuildContext) -> Widget {
+    return Flexible {
+      flex: this.flex,
+      fit: FlexFit.Tight,
+      child: this.child
+    }
+  }
+}
+
+# ============================================================================
+# SPACER - Espaciador flexible
+# ============================================================================
+
+"""
+Spacer: Espaciador flexible en Row/Column.
+Empuja widgets a los lados.
+
+Ejemplo:
+```vela
+Row(
+  children: [
+    Text("Left"),
+    Spacer(),  # Empuja todo a los lados
+    Text("Right")
+  ]
+)
+```
+"""
+widget Spacer extends StatelessWidget {
+  flex: Number = 1
+  
+  fn build(context: BuildContext) -> Widget {
+    return Flexible {
+      flex: this.flex,
+      fit: FlexFit.Tight,
+      child: SizedBox { width: Some(0), height: Some(0) }
+    }
+  }
+}
+
+# ============================================================================
+# HELPER TYPES
+# ============================================================================
+
+"""Modo de clipping"""
+enum Clip {
+  None,           # Sin clipping
+  HardEdge,       # Clip con hard edge (sin anti-aliasing)
+  AntiAlias,      # Clip con anti-aliasing
+  AntiAliasWithSaveLayer  # Clip con anti-aliasing y save layer
+}
+
+"""Matriz 4x4 para transformaciones"""
+struct Matrix4 {
+  # 4x4 matrix para transformaciones 3D
+  # Implementación completa omitida por brevedad
+  
+  """Identidad (sin transformación)"""
+  static fn identity() -> Matrix4 {
+    return Matrix4 { }
+  }
+  
+  """Translación (desplazamiento)"""
+  static fn translation(x: Number, y: Number, z: Number = 0) -> Matrix4 {
+    return Matrix4 { }
+  }
+  
+  """Rotación (en radianes)"""
+  static fn rotationZ(radians: Number) -> Matrix4 {
+    return Matrix4 { }
+  }
+  
+  """Escala"""
+  static fn scale(x: Number, y: Number, z: Number = 1) -> Matrix4 {
+    return Matrix4 { }
+  }
+}

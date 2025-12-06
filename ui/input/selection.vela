@@ -1,0 +1,867 @@
+"""
+Selection Input Widgets - Checkbox, Radio, Switch, Slider
+
+Inspirado en:
+- Flutter: Checkbox, Radio, Switch, Slider
+- HTML: <input type="checkbox">, <input type="radio">
+- Material Design: Selection controls
+- iOS: UISwitch, UISlider
+
+Sprint: 20
+Task: TASK-056
+"""
+
+import 'ui/widget' show { Widget, StatefulWidget, BuildContext }
+import 'ui/layout/container' show { Container, EdgeInsets, BoxDecoration, Border, BorderRadius, Alignment }
+
+# ============================================================================
+# CHECKBOX - Casilla de verificación
+# ============================================================================
+
+"""
+Checkbox: Casilla de verificación (checked/unchecked).
+
+Ejemplo:
+```vela
+Checkbox(
+  value: this.accepted,
+  onChanged: (newValue) => { this.accepted = newValue }
+)
+```
+
+Ejemplo con label:
+```vela
+Row(
+  children: [
+    Checkbox(
+      value: this.subscribeNewsletter,
+      onChanged: (value) => { this.subscribeNewsletter = value }
+    ),
+    SizedBox { width: Some(8) },
+    Text("Subscribe to newsletter")
+  ]
+)
+```
+
+Ejemplo tristate (checked/unchecked/indeterminate):
+```vela
+Checkbox(
+  value: this.allSelected,
+  tristate: true,
+  onChanged: (value) => { this.toggleAll(value) }
+)
+```
+"""
+widget Checkbox extends StatefulWidget {
+  """Valor (true = checked, false = unchecked, None = indeterminate)"""
+  value: Option<Bool>
+  
+  """Callback cuando cambia"""
+  onChanged: Option<(Option<Bool>) -> void> = None
+  
+  """Si permite estado indeterminado (None)"""
+  tristate: Bool = false
+  
+  """Color cuando está checked"""
+  activeColor: Color = Color.primary
+  
+  """Color del checkmark"""
+  checkColor: Color = Color.white
+  
+  """Tamaño del checkbox"""
+  size: Number = 20
+  
+  """Estado hover"""
+  state isHovered: Bool = false
+  
+  fn isEnabled() -> Bool {
+    return this.onChanged.isSome()
+  }
+  
+  fn handleTap() -> void {
+    if !this.isEnabled() {
+      return
+    }
+    
+    # Ciclar estados: unchecked -> checked -> (indeterminate si tristate)
+    newValue = match this.value {
+      Some(true) => {
+        if this.tristate {
+          None  # checked -> indeterminate
+        } else {
+          Some(false)  # checked -> unchecked
+        }
+      }
+      Some(false) => Some(true)  # unchecked -> checked
+      None => Some(false)  # indeterminate -> unchecked
+    }
+    
+    if let Some(callback) = this.onChanged {
+      callback(newValue)
+    }
+  }
+  
+  fn build(context: BuildContext) -> Widget {
+    isChecked = this.value == Some(true)
+    isIndeterminate = this.value.isNone()
+    
+    bgColor = if isChecked || isIndeterminate {
+      this.activeColor
+    } else {
+      Color.transparent
+    }
+    
+    borderColor = if isChecked || isIndeterminate {
+      this.activeColor
+    } else if this.isEnabled() {
+      Color.gray
+    } else {
+      Color.gray.withOpacity(0.5)
+    }
+    
+    opacity = if this.isEnabled() {
+      if this.isHovered { 0.9 } else { 1.0 }
+    } else {
+      0.5
+    }
+    
+    return Container(
+      width: Some(this.size),
+      height: Some(this.size),
+      decoration: Some(BoxDecoration {
+        color: Some(bgColor),
+        border: Some(Border.all(color: borderColor, width: 2)),
+        borderRadius: Some(BorderRadius.circular(3))
+      }),
+      alignment: Some(Alignment.Center),
+      child: if isChecked {
+        Some(
+          Icon(
+            name: "check",
+            size: this.size * 0.7,
+            color: this.checkColor
+          )
+        )
+      } else if isIndeterminate {
+        Some(
+          Container(
+            width: Some(this.size * 0.5),
+            height: Some(2),
+            color: Some(this.checkColor)
+          )
+        )
+      } else {
+        None
+      },
+      onTap: Some(() => this.handleTap()),
+      onHover: Some((hovered) => { this.isHovered = hovered }),
+      cursor: if this.isEnabled() { Cursor.Pointer } else { Cursor.NotAllowed }
+    ).withOpacity(opacity)
+  }
+}
+
+# ============================================================================
+# CHECKBOX LIST TILE - Checkbox con label
+# ============================================================================
+
+"""
+CheckboxListTile: Checkbox con título y subtítulo opcionales.
+
+Ejemplo:
+```vela
+CheckboxListTile(
+  title: "Accept terms and conditions",
+  value: this.acceptedTerms,
+  onChanged: (value) => { this.acceptedTerms = value }
+)
+```
+
+Ejemplo con subtitle:
+```vela
+CheckboxListTile(
+  title: "Marketing emails",
+  subtitle: Some("Receive promotional emails and offers"),
+  value: this.marketingEmails,
+  onChanged: (value) => { this.marketingEmails = value }
+)
+```
+"""
+widget CheckboxListTile extends StatelessWidget {
+  title: String
+  subtitle: Option<String> = None
+  value: Option<Bool>
+  onChanged: Option<(Option<Bool>) -> void> = None
+  tristate: Bool = false
+  activeColor: Color = Color.primary
+  
+  fn build(context: BuildContext) -> Widget {
+    return Container(
+      padding: Some(EdgeInsets.symmetric(horizontal: 16, vertical: 8)),
+      child: Some(
+        Row(
+          children: [
+            Checkbox {
+              value: this.value,
+              onChanged: this.onChanged,
+              tristate: this.tristate,
+              activeColor: this.activeColor
+            },
+            SizedBox { width: Some(12) },
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.Start,
+                children: [
+                  Text(
+                    this.title,
+                    style: TextStyle { fontSize: 14 }
+                  ),
+                  if let Some(sub) = this.subtitle {
+                    SizedBox { height: Some(4) },
+                    Text(
+                      sub,
+                      style: TextStyle {
+                        fontSize: 12,
+                        color: Color.gray
+                      }
+                    )
+                  }
+                ]
+              )
+            )
+          ]
+        )
+      ),
+      onTap: this.onChanged.map(|callback| () => {
+        # Toggle checkbox al hacer tap en el tile
+        newValue = match this.value {
+          Some(true) => Some(false)
+          _ => Some(true)
+        }
+        callback(newValue)
+      }),
+      cursor: if this.onChanged.isSome() { Cursor.Pointer } else { Cursor.Default }
+    )
+  }
+}
+
+# ============================================================================
+# RADIO BUTTON - Botón de opción única
+# ============================================================================
+
+"""
+Radio: Botón de radio (solo uno seleccionado en un grupo).
+
+Ejemplo:
+```vela
+Column(
+  children: [
+    Radio(
+      value: "small",
+      groupValue: this.selectedSize,
+      onChanged: (value) => { this.selectedSize = value }
+    ),
+    Radio(
+      value: "medium",
+      groupValue: this.selectedSize,
+      onChanged: (value) => { this.selectedSize = value }
+    ),
+    Radio(
+      value: "large",
+      groupValue: this.selectedSize,
+      onChanged: (value) => { this.selectedSize = value }
+    )
+  ]
+)
+```
+"""
+widget Radio<T> extends StatefulWidget {
+  """Valor de este radio button"""
+  value: T
+  
+  """Valor actualmente seleccionado del grupo"""
+  groupValue: Option<T>
+  
+  """Callback cuando se selecciona"""
+  onChanged: Option<(T) -> void> = None
+  
+  """Color cuando está activo"""
+  activeColor: Color = Color.primary
+  
+  """Tamaño del radio"""
+  size: Number = 20
+  
+  """Estado hover"""
+  state isHovered: Bool = false
+  
+  fn isSelected() -> Bool {
+    if let Some(group) = this.groupValue {
+      return group == this.value
+    }
+    return false
+  }
+  
+  fn isEnabled() -> Bool {
+    return this.onChanged.isSome()
+  }
+  
+  fn handleTap() -> void {
+    if !this.isEnabled() || this.isSelected() {
+      return
+    }
+    
+    if let Some(callback) = this.onChanged {
+      callback(this.value)
+    }
+  }
+  
+  fn build(context: BuildContext) -> Widget {
+    selected = this.isSelected()
+    
+    borderColor = if selected {
+      this.activeColor
+    } else if this.isEnabled() {
+      Color.gray
+    } else {
+      Color.gray.withOpacity(0.5)
+    }
+    
+    opacity = if this.isEnabled() {
+      if this.isHovered { 0.9 } else { 1.0 }
+    } else {
+      0.5
+    }
+    
+    return Container(
+      width: Some(this.size),
+      height: Some(this.size),
+      decoration: Some(BoxDecoration {
+        shape: BoxShape.Circle,
+        border: Some(Border.all(color: borderColor, width: 2))
+      }),
+      alignment: Some(Alignment.Center),
+      child: if selected {
+        Some(
+          Container(
+            width: Some(this.size * 0.5),
+            height: Some(this.size * 0.5),
+            decoration: Some(BoxDecoration {
+              shape: BoxShape.Circle,
+              color: Some(this.activeColor)
+            })
+          )
+        )
+      } else {
+        None
+      },
+      onTap: Some(() => this.handleTap()),
+      onHover: Some((hovered) => { this.isHovered = hovered }),
+      cursor: if this.isEnabled() { Cursor.Pointer } else { Cursor.NotAllowed }
+    ).withOpacity(opacity)
+  }
+}
+
+# ============================================================================
+# RADIO LIST TILE - Radio con label
+# ============================================================================
+
+"""
+RadioListTile: Radio button con título y subtítulo.
+
+Ejemplo:
+```vela
+Column(
+  children: [
+    RadioListTile(
+      title: "Small",
+      subtitle: Some("10-20 items"),
+      value: "small",
+      groupValue: this.size,
+      onChanged: (value) => { this.size = value }
+    ),
+    RadioListTile(
+      title: "Medium",
+      subtitle: Some("20-50 items"),
+      value: "medium",
+      groupValue: this.size,
+      onChanged: (value) => { this.size = value }
+    ),
+    RadioListTile(
+      title: "Large",
+      subtitle: Some("50+ items"),
+      value: "large",
+      groupValue: this.size,
+      onChanged: (value) => { this.size = value }
+    )
+  ]
+)
+```
+"""
+widget RadioListTile<T> extends StatelessWidget {
+  title: String
+  subtitle: Option<String> = None
+  value: T
+  groupValue: Option<T>
+  onChanged: Option<(T) -> void> = None
+  activeColor: Color = Color.primary
+  
+  fn build(context: BuildContext) -> Widget {
+    return Container(
+      padding: Some(EdgeInsets.symmetric(horizontal: 16, vertical: 8)),
+      child: Some(
+        Row(
+          children: [
+            Radio {
+              value: this.value,
+              groupValue: this.groupValue,
+              onChanged: this.onChanged,
+              activeColor: this.activeColor
+            },
+            SizedBox { width: Some(12) },
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.Start,
+                children: [
+                  Text(
+                    this.title,
+                    style: TextStyle { fontSize: 14 }
+                  ),
+                  if let Some(sub) = this.subtitle {
+                    SizedBox { height: Some(4) },
+                    Text(
+                      sub,
+                      style: TextStyle {
+                        fontSize: 12,
+                        color: Color.gray
+                      }
+                    )
+                  }
+                ]
+              )
+            )
+          ]
+        )
+      ),
+      onTap: this.onChanged.map(|callback| () => callback(this.value)),
+      cursor: if this.onChanged.isSome() { Cursor.Pointer } else { Cursor.Default }
+    )
+  }
+}
+
+# ============================================================================
+# SWITCH - Interruptor on/off
+# ============================================================================
+
+"""
+Switch: Interruptor tipo toggle (on/off).
+
+Ejemplo:
+```vela
+Switch(
+  value: this.notificationsEnabled,
+  onChanged: (value) => { this.notificationsEnabled = value }
+)
+```
+
+Ejemplo con label:
+```vela
+Row(
+  mainAxisAlignment: MainAxisAlignment.SpaceBetween,
+  children: [
+    Text("Dark mode"),
+    Switch(
+      value: this.darkMode,
+      onChanged: (value) => { this.darkMode = value }
+    )
+  ]
+)
+```
+"""
+widget Switch extends StatefulWidget {
+  """Valor (true = on, false = off)"""
+  value: Bool
+  
+  """Callback cuando cambia"""
+  onChanged: Option<(Bool) -> void> = None
+  
+  """Color cuando está activo (on)"""
+  activeColor: Color = Color.primary
+  
+  """Color cuando está inactivo (off)"""
+  inactiveColor: Color = Color.gray.withOpacity(0.5)
+  
+  """Color del thumb (círculo)"""
+  thumbColor: Color = Color.white
+  
+  """Width del switch"""
+  width: Number = 52
+  
+  """Height del switch"""
+  height: Number = 30
+  
+  """Estado hover"""
+  state isHovered: Bool = false
+  
+  fn isEnabled() -> Bool {
+    return this.onChanged.isSome()
+  }
+  
+  fn handleTap() -> void {
+    if !this.isEnabled() {
+      return
+    }
+    
+    if let Some(callback) = this.onChanged {
+      callback(!this.value)
+    }
+  }
+  
+  fn build(context: BuildContext) -> Widget {
+    trackColor = if this.value {
+      this.activeColor
+    } else {
+      this.inactiveColor
+    }
+    
+    # Posición del thumb (0 = left, 1 = right)
+    thumbPosition = if this.value { 1.0 } else { 0.0 }
+    thumbOffset = (this.width - this.height) * thumbPosition
+    
+    opacity = if this.isEnabled() {
+      if this.isHovered { 0.9 } else { 1.0 }
+    } else {
+      0.5
+    }
+    
+    return Container(
+      width: Some(this.width),
+      height: Some(this.height),
+      decoration: Some(BoxDecoration {
+        color: Some(trackColor),
+        borderRadius: Some(BorderRadius.circular(this.height / 2))
+      }),
+      child: Some(
+        # Thumb (círculo que se mueve)
+        AnimatedAlign(
+          alignment: if this.value { Alignment.CenterRight } else { Alignment.CenterLeft },
+          duration: 200,  # ms
+          child: Container(
+            width: Some(this.height - 4),
+            height: Some(this.height - 4),
+            margin: Some(EdgeInsets.all(2)),
+            decoration: Some(BoxDecoration {
+              shape: BoxShape.Circle,
+              color: Some(this.thumbColor),
+              boxShadow: Some([
+                BoxShadow {
+                  color: Color.black.withOpacity(0.2),
+                  blurRadius: 4,
+                  offset: Offset { x: 0, y: 2 }
+                }
+              ])
+            })
+          )
+        )
+      ),
+      onTap: Some(() => this.handleTap()),
+      onHover: Some((hovered) => { this.isHovered = hovered }),
+      cursor: if this.isEnabled() { Cursor.Pointer } else { Cursor.NotAllowed }
+    ).withOpacity(opacity)
+  }
+}
+
+# ============================================================================
+# SWITCH LIST TILE - Switch con label
+# ============================================================================
+
+"""
+SwitchListTile: Switch con título y subtítulo.
+
+Ejemplo:
+```vela
+SwitchListTile(
+  title: "Push notifications",
+  subtitle: Some("Receive notifications on your device"),
+  value: this.pushNotifications,
+  onChanged: (value) => { this.pushNotifications = value }
+)
+```
+"""
+widget SwitchListTile extends StatelessWidget {
+  title: String
+  subtitle: Option<String> = None
+  value: Bool
+  onChanged: Option<(Bool) -> void> = None
+  activeColor: Color = Color.primary
+  
+  fn build(context: BuildContext) -> Widget {
+    return Container(
+      padding: Some(EdgeInsets.symmetric(horizontal: 16, vertical: 8)),
+      child: Some(
+        Row(
+          mainAxisAlignment: MainAxisAlignment.SpaceBetween,
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.Start,
+                children: [
+                  Text(
+                    this.title,
+                    style: TextStyle { fontSize: 14 }
+                  ),
+                  if let Some(sub) = this.subtitle {
+                    SizedBox { height: Some(4) },
+                    Text(
+                      sub,
+                      style: TextStyle {
+                        fontSize: 12,
+                        color: Color.gray
+                      }
+                    )
+                  }
+                ]
+              )
+            ),
+            SizedBox { width: Some(16) },
+            Switch {
+              value: this.value,
+              onChanged: this.onChanged,
+              activeColor: this.activeColor
+            }
+          ]
+        )
+      )
+    )
+  }
+}
+
+# ============================================================================
+# SLIDER - Control deslizante
+# ============================================================================
+
+"""
+Slider: Control deslizante para seleccionar un valor en un rango.
+
+Ejemplo:
+```vela
+Slider(
+  value: this.volume,
+  min: 0,
+  max: 100,
+  onChanged: (value) => { this.volume = value }
+)
+```
+
+Ejemplo con labels y divisions:
+```vela
+Slider(
+  value: this.rating,
+  min: 0,
+  max: 5,
+  divisions: Some(5),
+  label: Some("${this.rating} stars"),
+  onChanged: (value) => { this.rating = value }
+)
+```
+"""
+widget Slider extends StatefulWidget {
+  """Valor actual"""
+  value: Number
+  
+  """Valor mínimo"""
+  min: Number = 0
+  
+  """Valor máximo"""
+  max: Number = 100
+  
+  """Número de divisiones (steps) - None = continuo"""
+  divisions: Option<Number> = None
+  
+  """Label que se muestra al arrastrar"""
+  label: Option<String> = None
+  
+  """Callback cuando cambia"""
+  onChanged: Option<(Number) -> void> = None
+  
+  """Callback cuando termina de cambiar (mouse up)"""
+  onChangeEnd: Option<(Number) -> void> = None
+  
+  """Color activo (parte llenada)"""
+  activeColor: Color = Color.primary
+  
+  """Color inactivo (parte vacía)"""
+  inactiveColor: Color = Color.gray.withOpacity(0.3)
+  
+  """Color del thumb"""
+  thumbColor: Color = Color.primary
+  
+  """Estado dragging"""
+  state isDragging: Bool = false
+  
+  fn isEnabled() -> Bool {
+    return this.onChanged.isSome()
+  }
+  
+  fn handleChange(newValue: Number) -> void {
+    if !this.isEnabled() {
+      return
+    }
+    
+    # Clamp al rango
+    clamped = newValue.clamp(this.min, this.max)
+    
+    # Aplicar divisions si existe
+    finalValue = if let Some(divs) = this.divisions {
+      step = (this.max - this.min) / divs
+      rounded = (clamped / step).round() * step
+      rounded
+    } else {
+      clamped
+    }
+    
+    if let Some(callback) = this.onChanged {
+      callback(finalValue)
+    }
+  }
+  
+  fn handleDragEnd() -> void {
+    this.isDragging = false
+    
+    if let Some(callback) = this.onChangeEnd {
+      callback(this.value)
+    }
+  }
+  
+  fn build(context: BuildContext) -> Widget {
+    # Calcular porcentaje (0.0 a 1.0)
+    percentage = (this.value - this.min) / (this.max - this.min)
+    
+    return Container(
+      height: Some(40),
+      child: Some(
+        Stack(
+          alignment: Alignment.CenterLeft,
+          children: [
+            # Track (fondo)
+            Container(
+              height: Some(4),
+              decoration: Some(BoxDecoration {
+                color: Some(this.inactiveColor),
+                borderRadius: Some(BorderRadius.circular(2))
+              })
+            ),
+            
+            # Active track (parte llenada)
+            Container(
+              width: Some(percentage * 100.percent()),  # Ancho en porcentaje
+              height: Some(4),
+              decoration: Some(BoxDecoration {
+                color: Some(this.activeColor),
+                borderRadius: Some(BorderRadius.circular(2))
+              })
+            ),
+            
+            # Thumb (círculo que se arrastra)
+            Positioned(
+              left: Some(percentage * 100.percent()),
+              child: Container(
+                width: Some(20),
+                height: Some(20),
+                decoration: Some(BoxDecoration {
+                  shape: BoxShape.Circle,
+                  color: Some(this.thumbColor),
+                  boxShadow: Some([
+                    BoxShadow {
+                      color: Color.black.withOpacity(0.2),
+                      blurRadius: 4,
+                      offset: Offset { x: 0, y: 2 }
+                    }
+                  ])
+                })
+              )
+            ),
+            
+            # Label (si existe y está dragging)
+            if this.isDragging && let Some(labelText) = this.label {
+              Positioned(
+                left: Some(percentage * 100.percent()),
+                top: Some(-30),
+                child: Container(
+                  padding: Some(EdgeInsets.symmetric(horizontal: 8, vertical: 4)),
+                  decoration: Some(BoxDecoration {
+                    color: Some(Color.black.withOpacity(0.8)),
+                    borderRadius: Some(BorderRadius.circular(4))
+                  }),
+                  child: Some(
+                    Text(
+                      labelText,
+                      style: TextStyle { color: Color.white, fontSize: 12 }
+                    )
+                  )
+                )
+              )
+            }
+          ]
+        )
+      ),
+      onDrag: Some((position) => {
+        this.isDragging = true
+        # Calcular nuevo valor basado en posición X
+        # newValue = ...
+        this.handleChange(newValue)
+      }),
+      onDragEnd: Some(() => this.handleDragEnd()),
+      cursor: if this.isEnabled() { Cursor.Grab } else { Cursor.NotAllowed }
+    )
+  }
+}
+
+# ============================================================================
+# ANIMATED ALIGN - Helper para animaciones
+# ============================================================================
+
+"""
+AnimatedAlign: Anima cambios de alineación.
+Usado por Switch para animar el thumb.
+"""
+widget AnimatedAlign extends StatelessWidget {
+  alignment: Alignment
+  duration: Number  # milliseconds
+  child: Widget
+  
+  fn build(context: BuildContext) -> Widget {
+    # En un framework real, esto animaría el alignment
+    return Align {
+      alignment: this.alignment,
+      child: this.child
+    }
+  }
+}
+
+# ============================================================================
+# NUMBER EXTENSIONS
+# ============================================================================
+
+"""Extensions para Number"""
+extension NumberExtensions on Number {
+  """Clamp valor entre min y max"""
+  fn clamp(min: Number, max: Number) -> Number {
+    if this < min {
+      return min
+    }
+    if this > max {
+      return max
+    }
+    return this
+  }
+  
+  """Redondear a entero más cercano"""
+  fn round() -> Number {
+    # En un framework real, esto haría round real
+    return this  # Placeholder
+  }
+  
+  """Convertir a porcentaje (para CSS)"""
+  fn percent() -> String {
+    return "${this}%"
+  }
+}

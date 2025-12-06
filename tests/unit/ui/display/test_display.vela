@@ -1,0 +1,648 @@
+"""
+Tests para Display Widgets: Text, Image, Icon, Card, ListTile, Divider, Badge, Chip, Avatar, Progress
+
+Tests:
+1. Text: básico, styling, overflow, maxLines, RichText
+2. Image: network, asset, loading, error
+3. Icon: básico, tamaño, color
+4. Card: básico, elevación, color
+5. ListTile: básico, leading, trailing, onTap
+6. Divider: horizontal, vertical, grosor
+7. Badge: con contenido, sin contenido, posición
+8. Chip: básico, con avatar, con delete
+9. CircleAvatar: con child, con backgroundImage
+10. LinearProgressIndicator: determinado, indeterminado
+11. CircularProgressIndicator: determinado, indeterminado
+12. SnackBar: básico, con acción
+13. Toast: mostrar mensaje
+14. Skeleton: rectangular, circular
+
+Sprint: 20
+Task: TASK-057
+"""
+
+import 'ui/widget' show { Widget, StatelessWidget, BuildContext }
+import 'ui/display/text' show { 
+  Text, RichText, TextSpan, TextStyle, TextAlign, TextOverflow,
+  FontWeight, FontStyle, TextDecoration
+}
+import 'ui/display/image' show { 
+  Image, ImageSource, ImageLoadingState, BoxFit
+}
+import 'ui/display/widgets' show { 
+  Icon, Card, ListTile, Divider, VerticalDivider,
+  Badge, Chip, CircleAvatar, Clip
+}
+import 'ui/display/progress' show { 
+  LinearProgressIndicator, CircularProgressIndicator,
+  SnackBar, SnackBarAction, Toast, ToastPosition,
+  RefreshIndicator, Skeleton, SkeletonShape, Duration
+}
+
+# ============================================================================
+# TEST HELPERS
+# ============================================================================
+
+"""Mock callback tracker"""
+class CallbackTracker {
+  state called: Bool = false
+  state callCount: Number = 0
+  
+  fn track() -> void {
+    this.called = true
+    this.callCount = this.callCount + 1
+  }
+  
+  fn reset() -> void {
+    this.called = false
+    this.callCount = 0
+  }
+}
+
+"""Color helper"""
+struct Color {
+  red: Number
+  green: Number
+  blue: Number
+  alpha: Float
+  
+  static black: Color = Color { red: 0, green: 0, blue: 0, alpha: 1.0 }
+  static white: Color = Color { red: 255, green: 255, blue: 255, alpha: 1.0 }
+  static blue: Color = Color { red: 0, green: 0, blue: 255, alpha: 1.0 }
+  static red: Color = Color { red: 255, green: 0, blue: 0, alpha: 1.0 }
+  static yellow: Color = Color { red: 255, green: 255, blue: 0, alpha: 1.0 }
+}
+
+# ============================================================================
+# TESTS: TEXT WIDGET
+# ============================================================================
+
+"""Test: Text básico"""
+@test
+fn test_text_basic() -> void {
+  text = Text { data: "Hello World" }
+  
+  assert(text.data == "Hello World", "Data debe ser 'Hello World'")
+  assert(text.textAlign == TextAlign.Start, "TextAlign default debe ser Start")
+  assert(text.softWrap, "SoftWrap debe ser true por defecto")
+}
+
+"""Test: Text con estilo"""
+@test
+fn test_text_with_style() -> void {
+  style = TextStyle {
+    fontSize: Some(24),
+    fontWeight: Some(FontWeight.Bold),
+    color: Some(Color.blue)
+  }
+  
+  text = Text {
+    data: "Title",
+    style: Some(style)
+  }
+  
+  assert(text.style.isSome(), "Style debe estar presente")
+  match text.style {
+    Some(s) => {
+      assert(s.fontSize == Some(24), "FontSize debe ser 24")
+      assert(s.fontWeight == Some(FontWeight.Bold), "FontWeight debe ser Bold")
+    }
+    None => assert(false, "Style no debe ser None")
+  }
+}
+
+"""Test: Text overflow"""
+@test
+fn test_text_overflow() -> void {
+  text = Text {
+    data: "Very long text that should be truncated",
+    maxLines: Some(1),
+    overflow: TextOverflow.Ellipsis
+  }
+  
+  assert(text.maxLines == Some(1), "MaxLines debe ser 1")
+  assert(text.overflow == TextOverflow.Ellipsis, "Overflow debe ser Ellipsis")
+}
+
+"""Test: RichText con múltiples spans"""
+@test
+fn test_rich_text() -> void {
+  richText = RichText {
+    text: TextSpan {
+      children: [
+        TextSpan {
+          text: Some("Hello "),
+          style: Some(TextStyle { color: Some(Color.blue) })
+        },
+        TextSpan {
+          text: Some("World"),
+          style: Some(TextStyle { fontWeight: Some(FontWeight.Bold) })
+        }
+      ]
+    }
+  }
+  
+  plainText = richText.text.toPlainText()
+  assert(plainText == "Hello World", "Plain text debe ser 'Hello World'")
+}
+
+"""Test: TextStyle copyWith"""
+@test
+fn test_text_style_copy_with() -> void {
+  original = TextStyle {
+    fontSize: Some(16),
+    color: Some(Color.black)
+  }
+  
+  modified = original.copyWith(
+    fontSize: Some(24),
+    fontWeight: Some(FontWeight.Bold)
+  )
+  
+  assert(modified.fontSize == Some(24), "FontSize debe actualizarse")
+  assert(modified.fontWeight == Some(FontWeight.Bold), "FontWeight debe agregarse")
+  assert(modified.color == Some(Color.black), "Color debe mantenerse")
+}
+
+"""Test: FontWeight to number"""
+@test
+fn test_font_weight_to_number() -> void {
+  assert(FontWeight.Thin.toNumber() == 100, "Thin debe ser 100")
+  assert(FontWeight.Normal.toNumber() == 400, "Normal debe ser 400")
+  assert(FontWeight.Bold.toNumber() == 700, "Bold debe ser 700")
+  assert(FontWeight.Black.toNumber() == 900, "Black debe ser 900")
+}
+
+# ============================================================================
+# TESTS: IMAGE WIDGET
+# ============================================================================
+
+"""Test: Image network"""
+@test
+fn test_image_network() -> void {
+  image = Image.network("https://example.com/image.png")
+  
+  match image.source {
+    ImageSource.Network { url } => {
+      assert(url == "https://example.com/image.png", "URL debe coincidir")
+    }
+    _ => assert(false, "Source debe ser Network")
+  }
+}
+
+"""Test: Image asset"""
+@test
+fn test_image_asset() -> void {
+  image = Image.asset("assets/logo.png")
+  
+  match image.source {
+    ImageSource.Asset { path } => {
+      assert(path == "assets/logo.png", "Path debe coincidir")
+    }
+    _ => assert(false, "Source debe ser Asset")
+  }
+}
+
+"""Test: Image loading state"""
+@test
+fn test_image_loading_state() -> void {
+  image = Image.network("https://example.com/image.png")
+  
+  # Estado inicial debe ser Loading
+  assert(image.loadingState == ImageLoadingState.Loading, "Estado inicial debe ser Loading")
+}
+
+"""Test: Image fit"""
+@test
+fn test_image_fit() -> void {
+  image = Image {
+    source: ImageSource.Network { url: "https://example.com/image.png" },
+    fit: BoxFit.Cover,
+    width: Some(200),
+    height: Some(150)
+  }
+  
+  assert(image.fit == BoxFit.Cover, "Fit debe ser Cover")
+  assert(image.width == Some(200), "Width debe ser 200")
+  assert(image.height == Some(150), "Height debe ser 150")
+}
+
+# ============================================================================
+# TESTS: ICON WIDGET
+# ============================================================================
+
+"""Test: Icon básico"""
+@test
+fn test_icon_basic() -> void {
+  icon = Icon { name: "home" }
+  
+  assert(icon.name == "home", "Name debe ser 'home'")
+  assert(icon.size == 24, "Size default debe ser 24")
+}
+
+"""Test: Icon con tamaño y color"""
+@test
+fn test_icon_with_size_and_color() -> void {
+  icon = Icon {
+    name: "star",
+    size: 32,
+    color: Some(Color.yellow)
+  }
+  
+  assert(icon.name == "star", "Name debe ser 'star'")
+  assert(icon.size == 32, "Size debe ser 32")
+  assert(icon.color == Some(Color.yellow), "Color debe ser yellow")
+}
+
+# ============================================================================
+# TESTS: CARD WIDGET
+# ============================================================================
+
+"""Test: Card básico"""
+@test
+fn test_card_basic() -> void {
+  card = Card {}
+  
+  assert(card.elevation == 1, "Elevation default debe ser 1")
+  assert(card.semanticContainer, "SemanticContainer debe ser true")
+}
+
+"""Test: Card con elevación custom"""
+@test
+fn test_card_with_elevation() -> void {
+  card = Card {
+    elevation: 4,
+    color: Some(Color.white)
+  }
+  
+  assert(card.elevation == 4, "Elevation debe ser 4")
+  assert(card.color == Some(Color.white), "Color debe ser white")
+}
+
+# ============================================================================
+# TESTS: LIST TILE WIDGET
+# ============================================================================
+
+"""Test: ListTile básico"""
+@test
+fn test_list_tile_basic() -> void {
+  tile = ListTile {
+    title: "Item Title"
+  }
+  
+  assert(tile.title == "Item Title", "Title debe ser 'Item Title'")
+  assert(!tile.dense, "Dense debe ser false por defecto")
+  assert(tile.enabled, "Enabled debe ser true por defecto")
+}
+
+"""Test: ListTile con leading y trailing"""
+@test
+fn test_list_tile_with_icons() -> void {
+  leading = Icon { name: "person" }
+  trailing = Icon { name: "chevron_right" }
+  
+  tile = ListTile {
+    leading: Some(leading),
+    title: "Profile",
+    trailing: Some(trailing)
+  }
+  
+  assert(tile.leading.isSome(), "Leading debe existir")
+  assert(tile.trailing.isSome(), "Trailing debe existir")
+}
+
+"""Test: ListTile onTap"""
+@test
+fn test_list_tile_on_tap() -> void {
+  tracker = CallbackTracker {}
+  
+  tile = ListTile {
+    title: "Clickable",
+    onTap: Some(() => tracker.track())
+  }
+  
+  tile.handleTap()
+  assert(tracker.called, "Callback debe haberse llamado")
+}
+
+"""Test: ListTile disabled"""
+@test
+fn test_list_tile_disabled() -> void {
+  tracker = CallbackTracker {}
+  
+  tile = ListTile {
+    title: "Disabled",
+    enabled: false,
+    onTap: Some(() => tracker.track())
+  }
+  
+  tile.handleTap()
+  assert(!tracker.called, "Callback no debe llamarse si disabled")
+}
+
+# ============================================================================
+# TESTS: DIVIDER WIDGET
+# ============================================================================
+
+"""Test: Divider horizontal"""
+@test
+fn test_divider() -> void {
+  divider = Divider {}
+  
+  assert(divider.height == 16, "Height default debe ser 16")
+  assert(divider.thickness == 1, "Thickness default debe ser 1")
+}
+
+"""Test: Divider con grosor custom"""
+@test
+fn test_divider_with_thickness() -> void {
+  divider = Divider {
+    thickness: 2,
+    color: Some(Color.black),
+    indent: 16
+  }
+  
+  assert(divider.thickness == 2, "Thickness debe ser 2")
+  assert(divider.indent == 16, "Indent debe ser 16")
+}
+
+"""Test: VerticalDivider"""
+@test
+fn test_vertical_divider() -> void {
+  divider = VerticalDivider {
+    width: 20,
+    thickness: 1
+  }
+  
+  assert(divider.width == 20, "Width debe ser 20")
+  assert(divider.thickness == 1, "Thickness debe ser 1")
+}
+
+# ============================================================================
+# TESTS: BADGE WIDGET
+# ============================================================================
+
+"""Test: Badge con contenido"""
+@test
+fn test_badge_with_content() -> void {
+  badge = Badge {
+    content: Some(Text { data: "5" }),
+    child: Some(Icon { name: "notifications" }),
+    backgroundColor: Color.red
+  }
+  
+  assert(badge.content.isSome(), "Content debe existir")
+  assert(badge.child.isSome(), "Child debe existir")
+  assert(badge.backgroundColor == Color.red, "BackgroundColor debe ser red")
+}
+
+"""Test: Badge sin contenido (dot)"""
+@test
+fn test_badge_empty() -> void {
+  badge = Badge {
+    showEmptyBadge: true,
+    child: Some(Icon { name: "notifications" })
+  }
+  
+  assert(badge.showEmptyBadge, "ShowEmptyBadge debe ser true")
+  assert(badge.content.isNone(), "Content debe ser None")
+}
+
+# ============================================================================
+# TESTS: CHIP WIDGET
+# ============================================================================
+
+"""Test: Chip básico"""
+@test
+fn test_chip_basic() -> void {
+  chip = Chip { label: "JavaScript" }
+  
+  assert(chip.label == "JavaScript", "Label debe ser 'JavaScript'")
+  assert(chip.elevation == 0, "Elevation default debe ser 0")
+}
+
+"""Test: Chip con delete"""
+@test
+fn test_chip_with_delete() -> void {
+  tracker = CallbackTracker {}
+  
+  chip = Chip {
+    label: "Tag",
+    onDeleted: Some(() => tracker.track())
+  }
+  
+  chip.handleDelete()
+  assert(tracker.called, "Callback debe haberse llamado")
+}
+
+"""Test: Chip con avatar"""
+@test
+fn test_chip_with_avatar() -> void {
+  avatar = CircleAvatar {
+    child: Some(Text { data: "J" }),
+    radius: 12
+  }
+  
+  chip = Chip {
+    avatar: Some(avatar),
+    label: "John"
+  }
+  
+  assert(chip.avatar.isSome(), "Avatar debe existir")
+}
+
+# ============================================================================
+# TESTS: CIRCLE AVATAR WIDGET
+# ============================================================================
+
+"""Test: CircleAvatar con child"""
+@test
+fn test_circle_avatar_with_child() -> void {
+  avatar = CircleAvatar {
+    child: Some(Text { data: "JD" }),
+    radius: 20,
+    backgroundColor: Some(Color.blue)
+  }
+  
+  assert(avatar.radius == 20, "Radius debe ser 20")
+  assert(avatar.child.isSome(), "Child debe existir")
+  assert(avatar.backgroundColor == Some(Color.blue), "BackgroundColor debe ser blue")
+}
+
+"""Test: CircleAvatar con imagen"""
+@test
+fn test_circle_avatar_with_image() -> void {
+  image = Image.network("https://example.com/avatar.jpg")
+  
+  avatar = CircleAvatar {
+    backgroundImage: Some(image),
+    radius: 24
+  }
+  
+  assert(avatar.backgroundImage.isSome(), "BackgroundImage debe existir")
+  assert(avatar.radius == 24, "Radius debe ser 24")
+}
+
+# ============================================================================
+# TESTS: LINEAR PROGRESS INDICATOR
+# ============================================================================
+
+"""Test: LinearProgressIndicator indeterminado"""
+@test
+fn test_linear_progress_indeterminate() -> void {
+  indicator = LinearProgressIndicator {}
+  
+  assert(indicator.value.isNone(), "Value debe ser None (indeterminado)")
+  assert(indicator.minHeight == 4, "MinHeight default debe ser 4")
+}
+
+"""Test: LinearProgressIndicator determinado"""
+@test
+fn test_linear_progress_determinate() -> void {
+  indicator = LinearProgressIndicator {
+    value: Some(0.7)  # 70%
+  }
+  
+  assert(indicator.value == Some(0.7), "Value debe ser 0.7")
+}
+
+# ============================================================================
+# TESTS: CIRCULAR PROGRESS INDICATOR
+# ============================================================================
+
+"""Test: CircularProgressIndicator indeterminado"""
+@test
+fn test_circular_progress_indeterminate() -> void {
+  indicator = CircularProgressIndicator {}
+  
+  assert(indicator.value.isNone(), "Value debe ser None")
+  assert(indicator.strokeWidth == 4, "StrokeWidth default debe ser 4")
+  assert(indicator.size == 36, "Size default debe ser 36")
+}
+
+"""Test: CircularProgressIndicator determinado"""
+@test
+fn test_circular_progress_determinate() -> void {
+  indicator = CircularProgressIndicator {
+    value: Some(0.5),
+    size: 48
+  }
+  
+  assert(indicator.value == Some(0.5), "Value debe ser 0.5")
+  assert(indicator.size == 48, "Size debe ser 48")
+}
+
+# ============================================================================
+# TESTS: SNACKBAR
+# ============================================================================
+
+"""Test: SnackBar básico"""
+@test
+fn test_snackbar_basic() -> void {
+  snackbar = SnackBar {
+    content: Text { data: "Message sent!" }
+  }
+  
+  assert(snackbar.duration == Duration.seconds(4), "Duration default debe ser 4 segundos")
+  assert(snackbar.elevation == 6, "Elevation default debe ser 6")
+}
+
+"""Test: SnackBar con acción"""
+@test
+fn test_snackbar_with_action() -> void {
+  tracker = CallbackTracker {}
+  
+  action = SnackBarAction {
+    label: "UNDO",
+    onPressed: () => tracker.track()
+  }
+  
+  snackbar = SnackBar {
+    content: Text { data: "Item deleted" },
+    action: Some(action)
+  }
+  
+  assert(snackbar.action.isSome(), "Action debe existir")
+  match snackbar.action {
+    Some(a) => {
+      assert(a.label == "UNDO", "Label debe ser 'UNDO'")
+      a.onPressed()
+      assert(tracker.called, "Callback debe haberse llamado")
+    }
+    None => assert(false, "Action no debe ser None")
+  }
+}
+
+# ============================================================================
+# TESTS: SKELETON
+# ============================================================================
+
+"""Test: Skeleton rectangular"""
+@test
+fn test_skeleton_rectangle() -> void {
+  skeleton = Skeleton {
+    width: Some(200),
+    height: 20,
+    shape: SkeletonShape.Rectangle
+  }
+  
+  assert(skeleton.width == Some(200), "Width debe ser 200")
+  assert(skeleton.height == 20, "Height debe ser 20")
+  assert(skeleton.shape == SkeletonShape.Rectangle, "Shape debe ser Rectangle")
+}
+
+"""Test: Skeleton circular"""
+@test
+fn test_skeleton_circle() -> void {
+  skeleton = Skeleton {
+    width: Some(100),
+    height: 100,
+    shape: SkeletonShape.Circle
+  }
+  
+  assert(skeleton.shape == SkeletonShape.Circle, "Shape debe ser Circle")
+}
+
+# ============================================================================
+# TESTS: DURATION
+# ============================================================================
+
+"""Test: Duration segundos"""
+@test
+fn test_duration_seconds() -> void {
+  duration = Duration.seconds(3)
+  
+  assert(duration.milliseconds == 3000, "3 segundos debe ser 3000 ms")
+}
+
+"""Test: Duration minutos"""
+@test
+fn test_duration_minutes() -> void {
+  duration = Duration.minutes(2)
+  
+  assert(duration.milliseconds == 120000, "2 minutos debe ser 120000 ms")
+}
+
+# ============================================================================
+# RESUMEN DE TESTS
+# ============================================================================
+
+"""
+RESUMEN:
+- ✅ 6 tests de Text (básico, estilo, overflow, RichText, TextStyle copyWith, FontWeight)
+- ✅ 4 tests de Image (network, asset, loading state, fit)
+- ✅ 2 tests de Icon (básico, tamaño y color)
+- ✅ 2 tests de Card (básico, elevación)
+- ✅ 4 tests de ListTile (básico, con iconos, onTap, disabled)
+- ✅ 3 tests de Divider (horizontal, grosor, vertical)
+- ✅ 2 tests de Badge (con contenido, sin contenido)
+- ✅ 3 tests de Chip (básico, con delete, con avatar)
+- ✅ 2 tests de CircleAvatar (con child, con imagen)
+- ✅ 2 tests de LinearProgressIndicator (indeterminado, determinado)
+- ✅ 2 tests de CircularProgressIndicator (indeterminado, determinado)
+- ✅ 2 tests de SnackBar (básico, con acción)
+- ✅ 2 tests de Skeleton (rectangular, circular)
+- ✅ 2 tests de Duration (segundos, minutos)
+
+TOTAL: 38 tests
+"""

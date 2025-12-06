@@ -1,0 +1,389 @@
+"""
+Image Widget - Visualización de imágenes con loading y error handling
+
+Inspirado en:
+- Flutter: Image, Image.network, Image.asset
+- HTML: <img>
+- React: <img> con lazy loading
+- SwiftUI: Image
+
+Sprint: 20
+Task: TASK-057
+"""
+
+import 'ui/widget' show { Widget, StatefulWidget, StatelessWidget, BuildContext }
+import 'ui/layout/container' show { Container, BoxDecoration, BorderRadius, Alignment }
+
+# ============================================================================
+# IMAGE - Widget de imagen
+# ============================================================================
+
+"""
+Image - Muestra una imagen desde diferentes fuentes
+
+Ejemplos:
+  Image.network { url: "https://example.com/image.png" }
+  Image.asset { path: "assets/logo.png" }
+  Image.memory { bytes: imageBytes }
+"""
+class Image extends StatefulWidget {
+  # Fuente de la imagen
+  source: ImageSource
+  
+  # Ancho de la imagen (None = ancho natural)
+  width: Option<Float> = None
+  
+  # Alto de la imagen (None = alto natural)
+  height: Option<Float> = None
+  
+  # Cómo ajustar la imagen en el espacio disponible
+  fit: BoxFit = BoxFit.Contain
+  
+  # Alineación de la imagen dentro del widget
+  alignment: Alignment = Alignment.center
+  
+  # Color para teñir la imagen
+  color: Option<Color> = None
+  
+  # Modo de mezcla del color
+  colorBlendMode: Option<BlendMode> = None
+  
+  # Widget a mostrar mientras carga
+  loadingBuilder: Option<(BuildContext, Float) -> Widget> = None
+  
+  # Widget a mostrar en caso de error
+  errorBuilder: Option<(BuildContext, Error) -> Widget> = None
+  
+  # Placeholder mientras carga
+  placeholder: Option<Widget> = None
+  
+  # Habilitar caché
+  cacheEnabled: Bool = true
+  
+  # Ancho de caché
+  cacheWidth: Option<Number> = None
+  
+  # Alto de caché
+  cacheHeight: Option<Number> = None
+  
+  # Estado de la imagen
+  state loadingState: ImageLoadingState = ImageLoadingState.Loading
+  state loadProgress: Float = 0.0
+  state error: Option<Error> = None
+  
+  # Factory methods para diferentes fuentes
+  static fn network(url: String) -> Image {
+    return Image {
+      source: ImageSource.Network { url: url }
+    }
+  }
+  
+  static fn asset(path: String) -> Image {
+    return Image {
+      source: ImageSource.Asset { path: path }
+    }
+  }
+  
+  static fn memory(bytes: List<Number>) -> Image {
+    return Image {
+      source: ImageSource.Memory { bytes: bytes }
+    }
+  }
+  
+  static fn file(path: String) -> Image {
+    return Image {
+      source: ImageSource.File { path: path }
+    }
+  }
+  
+  mount() {
+    this.loadImage()
+  }
+  
+  fn loadImage() -> void {
+    this.loadingState = ImageLoadingState.Loading
+    
+    # Simular carga asíncrona
+    # En implementación real, llamaría al engine de imágenes
+    match this.source {
+      ImageSource.Network { url } => this.loadNetworkImage(url)
+      ImageSource.Asset { path } => this.loadAssetImage(path)
+      ImageSource.Memory { bytes } => this.loadMemoryImage(bytes)
+      ImageSource.File { path } => this.loadFileImage(path)
+    }
+  }
+  
+  fn loadNetworkImage(url: String) -> void {
+    # Implementación del engine de imágenes
+    # Por ahora, simulamos carga exitosa
+    this.loadingState = ImageLoadingState.Loaded
+  }
+  
+  fn loadAssetImage(path: String) -> void {
+    this.loadingState = ImageLoadingState.Loaded
+  }
+  
+  fn loadMemoryImage(bytes: List<Number>) -> void {
+    this.loadingState = ImageLoadingState.Loaded
+  }
+  
+  fn loadFileImage(path: String) -> void {
+    this.loadingState = ImageLoadingState.Loaded
+  }
+  
+  fn handleLoadError(error: Error) -> void {
+    this.loadingState = ImageLoadingState.Error
+    this.error = Some(error)
+  }
+  
+  fn build(context: BuildContext) -> Widget {
+    # Mostrar según el estado de carga
+    return match this.loadingState {
+      ImageLoadingState.Loading => this.buildLoading(context)
+      ImageLoadingState.Loaded => this.buildImage(context)
+      ImageLoadingState.Error => this.buildError(context)
+    }
+  }
+  
+  fn buildLoading(context: BuildContext) -> Widget {
+    # Usar loadingBuilder si está disponible
+    match this.loadingBuilder {
+      Some(builder) => return builder(context, this.loadProgress)
+      None => {}
+    }
+    
+    # Usar placeholder si está disponible
+    match this.placeholder {
+      Some(widget) => return widget
+      None => {}
+    }
+    
+    # Loading por defecto
+    return Container {
+      width: this.width,
+      height: this.height,
+      alignment: Alignment.center,
+      decoration: BoxDecoration {
+        color: Color.grey.withOpacity(0.2)
+      },
+      child: Some(CircularProgressIndicator {})
+    }
+  }
+  
+  fn buildImage(context: BuildContext) -> Widget {
+    return ImagePrimitive {
+      source: this.source,
+      width: this.width,
+      height: this.height,
+      fit: this.fit,
+      alignment: this.alignment,
+      color: this.color,
+      colorBlendMode: this.colorBlendMode
+    }
+  }
+  
+  fn buildError(context: BuildContext) -> Widget {
+    # Usar errorBuilder si está disponible
+    match this.errorBuilder {
+      Some(builder) => {
+        match this.error {
+          Some(err) => return builder(context, err)
+          None => {}
+        }
+      }
+      None => {}
+    }
+    
+    # Error por defecto
+    return Container {
+      width: this.width,
+      height: this.height,
+      alignment: Alignment.center,
+      decoration: BoxDecoration {
+        color: Color.red.withOpacity(0.1)
+      },
+      child: Some(Icon {
+        name: "error",
+        size: 48,
+        color: Color.red
+      })
+    }
+  }
+}
+
+# ============================================================================
+# IMAGE SOURCE - Fuente de imagen
+# ============================================================================
+
+"""ImageSource - Diferentes fuentes de imagen"""
+enum ImageSource {
+  Network { url: String }           # Imagen desde URL
+  Asset { path: String }            # Imagen desde assets
+  Memory { bytes: List<Number> }    # Imagen desde bytes en memoria
+  File { path: String }             # Imagen desde archivo local
+}
+
+"""ImageLoadingState - Estados de carga de imagen"""
+enum ImageLoadingState {
+  Loading  # Cargando
+  Loaded   # Cargada exitosamente
+  Error    # Error al cargar
+}
+
+# ============================================================================
+# BOX FIT - Ajuste de imagen
+# ============================================================================
+
+"""
+BoxFit - Cómo ajustar la imagen en el espacio disponible
+
+Similar a CSS object-fit y background-size.
+"""
+enum BoxFit {
+  Fill       # Estirar para llenar (ignora aspect ratio)
+  Contain    # Contener completamente (mantiene aspect ratio, puede dejar espacio vacío)
+  Cover      # Cubrir completamente (mantiene aspect ratio, puede cortar)
+  FitWidth   # Ajustar al ancho (mantiene aspect ratio)
+  FitHeight  # Ajustar al alto (mantiene aspect ratio)
+  None       # Tamaño natural (sin escalar)
+  ScaleDown  # Como None o Contain, el que sea más pequeño
+}
+
+"""BlendMode - Modo de mezcla de color"""
+enum BlendMode {
+  Clear       # Transparente
+  Src         # Fuente
+  Dst         # Destino
+  SrcOver     # Fuente sobre destino (default)
+  DstOver     # Destino sobre fuente
+  SrcIn       # Fuente dentro de destino
+  DstIn       # Destino dentro de fuente
+  SrcOut      # Fuente fuera de destino
+  DstOut      # Destino fuera de fuente
+  SrcAtop     # Fuente sobre destino
+  DstAtop     # Destino sobre fuente
+  Xor         # XOR
+  Plus        # Suma
+  Modulate    # Modulación
+  Screen      # Screen
+  Overlay     # Overlay
+  Darken      # Oscurecer
+  Lighten     # Aclarar
+  ColorDodge  # Color dodge
+  ColorBurn   # Color burn
+  HardLight   # Hard light
+  SoftLight   # Soft light
+  Difference  # Diferencia
+  Exclusion   # Exclusión
+  Multiply    # Multiplicar
+  Hue         # Hue
+  Saturation  # Saturación
+  Color       # Color
+  Luminosity  # Luminosidad
+}
+
+# ============================================================================
+# IMAGE PRIMITIVE
+# ============================================================================
+
+"""
+ImagePrimitive - Primitivo de imagen nativo
+
+Implementado por el rendering engine.
+En web mapea a <img>, en mobile a UIImageView/ImageView.
+"""
+class ImagePrimitive extends Widget {
+  source: ImageSource
+  width: Option<Float>
+  height: Option<Float>
+  fit: BoxFit
+  alignment: Alignment
+  color: Option<Color>
+  colorBlendMode: Option<BlendMode>
+}
+
+# ============================================================================
+# CIRCULAR PROGRESS INDICATOR (simplificado)
+# ============================================================================
+
+"""CircularProgressIndicator - Indicador de progreso circular"""
+class CircularProgressIndicator extends StatelessWidget {
+  size: Float = 24
+  color: Color = Color.blue
+  strokeWidth: Float = 2
+  
+  fn build(context: BuildContext) -> Widget {
+    return Container {
+      width: Some(this.size),
+      height: Some(this.size),
+      child: Some(CircularProgressPrimitive {
+        color: this.color,
+        strokeWidth: this.strokeWidth
+      })
+    }
+  }
+}
+
+"""CircularProgressPrimitive - Primitivo de progress indicator"""
+class CircularProgressPrimitive extends Widget {
+  color: Color
+  strokeWidth: Float
+}
+
+# ============================================================================
+# ICON (simplificado para Image error)
+# ============================================================================
+
+"""Icon - Widget de ícono simplificado"""
+class Icon extends StatelessWidget {
+  name: String
+  size: Float = 24
+  color: Color = Color.black
+  
+  fn build(context: BuildContext) -> Widget {
+    return IconPrimitive {
+      name: this.name,
+      size: this.size,
+      color: this.color
+    }
+  }
+}
+
+"""IconPrimitive - Primitivo de ícono"""
+class IconPrimitive extends Widget {
+  name: String
+  size: Float
+  color: Color
+}
+
+# ============================================================================
+# COLOR & ALIGNMENT (compartidos)
+# ============================================================================
+
+"""Color - Definición de color"""
+struct Color {
+  red: Number    # 0-255
+  green: Number  # 0-255
+  blue: Number   # 0-255
+  alpha: Float   # 0.0-1.0
+  
+  static black: Color = Color { red: 0, green: 0, blue: 0, alpha: 1.0 }
+  static white: Color = Color { red: 255, green: 255, blue: 255, alpha: 1.0 }
+  static red: Color = Color { red: 255, green: 0, blue: 0, alpha: 1.0 }
+  static blue: Color = Color { red: 0, green: 0, blue: 255, alpha: 1.0 }
+  static grey: Color = Color { red: 128, green: 128, blue: 128, alpha: 1.0 }
+  
+  fn withOpacity(opacity: Float) -> Color {
+    return Color {
+      red: this.red,
+      green: this.green,
+      blue: this.blue,
+      alpha: opacity
+    }
+  }
+}
+
+"""Error - Tipo de error simplificado"""
+struct Error {
+  message: String
+}

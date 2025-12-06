@@ -1,0 +1,442 @@
+"""
+Text Widget - Visualización de texto con styling
+
+Inspirado en:
+- Flutter: Text, RichText, TextSpan
+- HTML: <p>, <span>, <h1>-<h6>
+- CSS: text styling properties
+- SwiftUI: Text
+
+Sprint: 20
+Task: TASK-057
+"""
+
+import 'ui/widget' show { Widget, StatelessWidget, BuildContext }
+
+# ============================================================================
+# TEXT - Widget básico de texto
+# ============================================================================
+
+"""
+Widget Text - Muestra texto con styling
+
+Ejemplos:
+  Text { data: "Hello World" }
+  Text { data: "Title", style: TextStyle { fontSize: 24, fontWeight: FontWeight.Bold } }
+  Text { data: "Long text...", maxLines: Some(2), overflow: TextOverflow.Ellipsis }
+"""
+class Text extends StatelessWidget {
+  # Contenido del texto
+  data: String
+  
+  # Estilo del texto
+  style: Option<TextStyle> = None
+  
+  # Alineación del texto
+  textAlign: TextAlign = TextAlign.Start
+  
+  # Dirección del texto (LTR/RTL)
+  textDirection: Option<TextDirection> = None
+  
+  # Soft wrap (ajuste de línea automático)
+  softWrap: Bool = true
+  
+  # Comportamiento de overflow
+  overflow: TextOverflow = TextOverflow.Clip
+  
+  # Máximo número de líneas
+  maxLines: Option<Number> = None
+  
+  # Factor de escala del texto
+  textScaleFactor: Float = 1.0
+  
+  # Altura de línea como múltiplo del tamaño de fuente
+  strutStyle: Option<StrutStyle> = None
+  
+  # Locale para formateo
+  locale: Option<Locale> = None
+  
+  fn build(context: BuildContext) -> Widget {
+    # Combinar estilo por defecto con estilo custom
+    effectiveStyle = this.style.unwrapOr(
+      context.theme.textTheme.body1
+    )
+    
+    return TextPrimitive {
+      data: this.data,
+      style: effectiveStyle,
+      textAlign: this.textAlign,
+      textDirection: this.textDirection,
+      softWrap: this.softWrap,
+      overflow: this.overflow,
+      maxLines: this.maxLines,
+      textScaleFactor: this.textScaleFactor
+    }
+  }
+}
+
+# ============================================================================
+# RICH TEXT - Texto con múltiples estilos
+# ============================================================================
+
+"""
+RichText - Texto con múltiples spans con diferentes estilos
+
+Ejemplo:
+  RichText {
+    text: TextSpan {
+      children: [
+        TextSpan { text: "Hello ", style: TextStyle { color: Color.blue } },
+        TextSpan { text: "World", style: TextStyle { fontWeight: FontWeight.Bold } }
+      ]
+    }
+  }
+"""
+class RichText extends StatelessWidget {
+  # Root text span
+  text: TextSpan
+  
+  # Alineación
+  textAlign: TextAlign = TextAlign.Start
+  
+  # Dirección
+  textDirection: Option<TextDirection> = None
+  
+  # Soft wrap
+  softWrap: Bool = true
+  
+  # Overflow
+  overflow: TextOverflow = TextOverflow.Clip
+  
+  # Escala
+  textScaleFactor: Float = 1.0
+  
+  # Máximo de líneas
+  maxLines: Option<Number> = None
+  
+  fn build(context: BuildContext) -> Widget {
+    return RichTextPrimitive {
+      text: this.text,
+      textAlign: this.textAlign,
+      textDirection: this.textDirection,
+      softWrap: this.softWrap,
+      overflow: this.overflow,
+      textScaleFactor: this.textScaleFactor,
+      maxLines: this.maxLines
+    }
+  }
+}
+
+# ============================================================================
+# TEXT SPAN - Fragmento de texto con estilo
+# ============================================================================
+
+"""
+TextSpan - Fragmento de texto inmutable con estilo opcional
+
+Se usa dentro de RichText para crear texto con múltiples estilos.
+"""
+struct TextSpan {
+  # Texto de este span
+  text: Option<String> = None
+  
+  # Estilo de este span
+  style: Option<TextStyle> = None
+  
+  # Spans hijos
+  children: List<TextSpan> = []
+  
+  # Callback de tap
+  onTap: Option<() -> void> = None
+  
+  # Construir el texto completo concatenando todos los spans
+  fn toPlainText() -> String {
+    result = this.text.unwrapOr("")
+    
+    this.children.forEach(child => {
+      result = result + child.toPlainText()
+    })
+    
+    return result
+  }
+}
+
+# ============================================================================
+# TEXT STYLE - Estilo de texto
+# ============================================================================
+
+"""
+TextStyle - Define el estilo visual del texto
+
+Inmutable - usar métodos copyWith() o merge() para crear variaciones.
+"""
+struct TextStyle {
+  # Color del texto
+  color: Option<Color> = None
+  
+  # Tamaño de fuente (en logical pixels)
+  fontSize: Option<Float> = None
+  
+  # Peso de la fuente
+  fontWeight: Option<FontWeight> = None
+  
+  # Estilo de la fuente (normal, italic)
+  fontStyle: Option<FontStyle> = None
+  
+  # Altura de línea (múltiplo del tamaño de fuente)
+  height: Option<Float> = None
+  
+  # Espaciado entre letras
+  letterSpacing: Option<Float> = None
+  
+  # Espaciado entre palabras
+  wordSpacing: Option<Float> = None
+  
+  # Familia de fuente
+  fontFamily: Option<String> = None
+  
+  # Decoración del texto (underline, strikethrough, etc.)
+  decoration: Option<TextDecoration> = None
+  
+  # Color de la decoración
+  decorationColor: Option<Color> = None
+  
+  # Estilo de la decoración (solid, dotted, dashed, etc.)
+  decorationStyle: Option<TextDecorationStyle> = None
+  
+  # Grosor de la decoración
+  decorationThickness: Option<Float> = None
+  
+  # Sombra del texto
+  shadows: List<Shadow> = []
+  
+  # Copiar con modificaciones
+  fn copyWith(
+    color: Option<Color> = None,
+    fontSize: Option<Float> = None,
+    fontWeight: Option<FontWeight> = None,
+    fontStyle: Option<FontStyle> = None
+  ) -> TextStyle {
+    return TextStyle {
+      color: color.or(this.color),
+      fontSize: fontSize.or(this.fontSize),
+      fontWeight: fontWeight.or(this.fontWeight),
+      fontStyle: fontStyle.or(this.fontStyle),
+      height: this.height,
+      letterSpacing: this.letterSpacing,
+      wordSpacing: this.wordSpacing,
+      fontFamily: this.fontFamily,
+      decoration: this.decoration,
+      decorationColor: this.decorationColor,
+      decorationStyle: this.decorationStyle,
+      decorationThickness: this.decorationThickness,
+      shadows: this.shadows
+    }
+  }
+  
+  # Merge con otro estilo (el otro tiene prioridad)
+  fn merge(other: TextStyle) -> TextStyle {
+    return TextStyle {
+      color: other.color.or(this.color),
+      fontSize: other.fontSize.or(this.fontSize),
+      fontWeight: other.fontWeight.or(this.fontWeight),
+      fontStyle: other.fontStyle.or(this.fontStyle),
+      height: other.height.or(this.height),
+      letterSpacing: other.letterSpacing.or(this.letterSpacing),
+      wordSpacing: other.wordSpacing.or(this.wordSpacing),
+      fontFamily: other.fontFamily.or(this.fontFamily),
+      decoration: other.decoration.or(this.decoration),
+      decorationColor: other.decorationColor.or(this.decorationColor),
+      decorationStyle: other.decorationStyle.or(this.decorationStyle),
+      decorationThickness: other.decorationThickness.or(this.decorationThickness),
+      shadows: other.shadows.isEmpty() ? this.shadows : other.shadows
+    }
+  }
+}
+
+# ============================================================================
+# ENUMS Y STRUCTS DE SOPORTE
+# ============================================================================
+
+"""TextAlign - Alineación horizontal del texto"""
+enum TextAlign {
+  Start      # Inicio (left en LTR, right en RTL)
+  End        # Fin (right en LTR, left en RTL)
+  Left       # Siempre izquierda
+  Right      # Siempre derecha
+  Center     # Centrado
+  Justify    # Justificado
+}
+
+"""TextDirection - Dirección del texto"""
+enum TextDirection {
+  LTR  # Left to Right (izquierda a derecha)
+  RTL  # Right to Left (derecha a izquierda)
+}
+
+"""TextOverflow - Comportamiento cuando el texto no cabe"""
+enum TextOverflow {
+  Clip      # Cortar (sin indicador)
+  Fade      # Desvanecimiento gradual
+  Ellipsis  # Puntos suspensivos "..."
+  Visible   # Dejar visible (overflow fuera del contenedor)
+}
+
+"""FontWeight - Peso de la fuente"""
+enum FontWeight {
+  Thin        # 100
+  ExtraLight  # 200
+  Light       # 300
+  Normal      # 400 (default)
+  Medium      # 500
+  SemiBold    # 600
+  Bold        # 700
+  ExtraBold   # 800
+  Black       # 900
+  
+  fn toNumber() -> Number {
+    return match this {
+      FontWeight.Thin => 100
+      FontWeight.ExtraLight => 200
+      FontWeight.Light => 300
+      FontWeight.Normal => 400
+      FontWeight.Medium => 500
+      FontWeight.SemiBold => 600
+      FontWeight.Bold => 700
+      FontWeight.ExtraBold => 800
+      FontWeight.Black => 900
+    }
+  }
+}
+
+"""FontStyle - Estilo de la fuente"""
+enum FontStyle {
+  Normal   # Texto normal
+  Italic   # Texto en cursiva
+  Oblique  # Texto oblicuo (menos común)
+}
+
+"""TextDecoration - Decoración del texto"""
+enum TextDecoration {
+  None           # Sin decoración
+  Underline      # Subrayado
+  Overline       # Línea superior
+  LineThrough    # Tachado
+  
+  # Combinar decoraciones
+  fn combine(decorations: List<TextDecoration>) -> TextDecoration {
+    # En implementación real, retornaría un bitmask
+    # Por simplicidad, retornamos la primera
+    return decorations.first().unwrapOr(TextDecoration.None)
+  }
+}
+
+"""TextDecorationStyle - Estilo de la decoración"""
+enum TextDecorationStyle {
+  Solid   # Línea sólida
+  Double  # Línea doble
+  Dotted  # Línea punteada
+  Dashed  # Línea discontinua
+  Wavy    # Línea ondulada
+}
+
+"""Shadow - Sombra de texto"""
+struct Shadow {
+  color: Color = Color.black
+  offset: Offset = Offset { dx: 0, dy: 0 }
+  blurRadius: Float = 0
+}
+
+"""Offset - Desplazamiento 2D"""
+struct Offset {
+  dx: Float
+  dy: Float
+}
+
+"""StrutStyle - Estilo de strut (altura de línea forzada)"""
+struct StrutStyle {
+  fontFamily: Option<String> = None
+  fontSize: Option<Float> = None
+  height: Option<Float> = None
+  fontWeight: Option<FontWeight> = None
+  fontStyle: Option<FontStyle> = None
+  forceStrutHeight: Bool = false
+}
+
+"""Locale - Configuración regional"""
+struct Locale {
+  languageCode: String
+  countryCode: Option<String> = None
+  
+  fn toString() -> String {
+    match this.countryCode {
+      Some(country) => "${this.languageCode}_${country}"
+      None => this.languageCode
+    }
+  }
+}
+
+# ============================================================================
+# WIDGETS PRIMITIVOS (implementados por el engine)
+# ============================================================================
+
+"""
+TextPrimitive - Primitivo de texto nativo
+
+Este widget es implementado directamente por el rendering engine.
+En web mapea a DOM text node, en mobile a UILabel/TextView.
+"""
+class TextPrimitive extends Widget {
+  data: String
+  style: TextStyle
+  textAlign: TextAlign
+  textDirection: Option<TextDirection>
+  softWrap: Bool
+  overflow: TextOverflow
+  maxLines: Option<Number>
+  textScaleFactor: Float
+}
+
+"""
+RichTextPrimitive - Primitivo de rich text nativo
+
+Renderiza múltiples spans con diferentes estilos.
+"""
+class RichTextPrimitive extends Widget {
+  text: TextSpan
+  textAlign: TextAlign
+  textDirection: Option<TextDirection>
+  softWrap: Bool
+  overflow: TextOverflow
+  textScaleFactor: Float
+  maxLines: Option<Number>
+}
+
+# ============================================================================
+# HELPERS
+# ============================================================================
+
+"""Color - Definición de color (compartido con container.vela)"""
+struct Color {
+  red: Number    # 0-255
+  green: Number  # 0-255
+  blue: Number   # 0-255
+  alpha: Float   # 0.0-1.0
+  
+  # Colores comunes
+  static black: Color = Color { red: 0, green: 0, blue: 0, alpha: 1.0 }
+  static white: Color = Color { red: 255, green: 255, blue: 255, alpha: 1.0 }
+  static red: Color = Color { red: 255, green: 0, blue: 0, alpha: 1.0 }
+  static green: Color = Color { red: 0, green: 255, blue: 0, alpha: 1.0 }
+  static blue: Color = Color { red: 0, green: 0, blue: 255, alpha: 1.0 }
+  static transparent: Color = Color { red: 0, green: 0, blue: 0, alpha: 0.0 }
+  
+  fn withOpacity(opacity: Float) -> Color {
+    return Color {
+      red: this.red,
+      green: this.green,
+      blue: this.blue,
+      alpha: opacity
+    }
+  }
+}

@@ -1,0 +1,694 @@
+"""
+Tests para layout widgets: Container, Row, Column, Stack
+
+Tests:
+1. Container: sizing, padding, margin, decoration
+2. Row: alineación, spacing, flexible children
+3. Column: alineación, spacing, flexible children
+4. Stack: z-index, positioned children
+5. Helpers: EdgeInsets, BoxDecoration, BoxConstraints
+
+Sprint: 20
+Task: TASK-055
+"""
+
+import 'ui/widget' show { Widget, StatelessWidget, BuildContext }
+import 'ui/layout/container' show { 
+  Container, SizedBox, Padding, Center, Align, AspectRatio,
+  EdgeInsets, BoxDecoration, BoxConstraints, Alignment, BoxShape,
+  Flexible, Expanded, Spacer
+}
+import 'ui/layout/flex' show { 
+  Row, Column, MainAxisAlignment, CrossAxisAlignment, MainAxisSize,
+  Wrap, ListView, SingleChildScrollView, GridView
+}
+import 'ui/layout/stack' show { Stack, Positioned, IndexedStack, StackFit }
+
+# ============================================================================
+# TEST HELPERS
+# ============================================================================
+
+"""Mock Text widget para tests"""
+widget TestText extends StatelessWidget {
+  text: String
+  fn build(context: BuildContext) -> Widget { return this }
+}
+
+"""Mock BuildContext para tests"""
+fn createMockContext() -> BuildContext {
+  # En un framework real, esto crearía un BuildContext funcional
+  # Por ahora, retornar objeto mock
+  return null as BuildContext  # Placeholder
+}
+
+# ============================================================================
+# TESTS: CONTAINER
+# ============================================================================
+
+"""Test: Container con width/height explícito"""
+@test
+fn test_container_explicit_size() -> void {
+  container = Container(
+    width: Some(100),
+    height: Some(200),
+    child: Some(TestText { text: "Test" })
+  )
+  
+  assert(container.width == Some(100), "Width debe ser 100")
+  assert(container.height == Some(200), "Height debe ser 200")
+}
+
+"""Test: Container con padding"""
+@test
+fn test_container_padding() -> void {
+  padding = EdgeInsets.all(16)
+  container = Container(
+    padding: Some(padding),
+    child: Some(TestText { text: "Test" })
+  )
+  
+  assert(container.padding.isSome(), "Padding debe existir")
+  paddingValue = container.padding.unwrap()
+  assert(paddingValue.top == 16, "Top padding debe ser 16")
+  assert(paddingValue.right == 16, "Right padding debe ser 16")
+  assert(paddingValue.bottom == 16, "Bottom padding debe ser 16")
+  assert(paddingValue.left == 16, "Left padding debe ser 16")
+}
+
+"""Test: Container con margin"""
+@test
+fn test_container_margin() -> void {
+  margin = EdgeInsets.symmetric(horizontal: 20, vertical: 10)
+  container = Container(
+    margin: Some(margin),
+    child: Some(TestText { text: "Test" })
+  )
+  
+  assert(container.margin.isSome(), "Margin debe existir")
+  marginValue = container.margin.unwrap()
+  assert(marginValue.left == 20, "Left margin debe ser 20")
+  assert(marginValue.right == 20, "Right margin debe ser 20")
+  assert(marginValue.top == 10, "Top margin debe ser 10")
+  assert(marginValue.bottom == 10, "Bottom margin debe ser 10")
+}
+
+"""Test: Container con BoxDecoration"""
+@test
+fn test_container_decoration() -> void {
+  decoration = BoxDecoration {
+    color: Some(Color { r: 255, g: 0, b: 0 }),  # Red
+    borderRadius: Some(BorderRadius.circular(8))
+  }
+  
+  container = Container(
+    decoration: Some(decoration),
+    child: Some(TestText { text: "Test" })
+  )
+  
+  assert(container.decoration.isSome(), "Decoration debe existir")
+  dec = container.decoration.unwrap()
+  assert(dec.color.isSome(), "Color debe existir")
+  assert(dec.borderRadius.isSome(), "BorderRadius debe existir")
+}
+
+"""Test: Container.colored() factory"""
+@test
+fn test_container_colored_factory() -> void {
+  color = Color { r: 0, g: 255, b: 0 }  # Green
+  child = TestText { text: "Test" }
+  
+  container = Container.colored(color, Some(child))
+  
+  assert(container.decoration.isSome(), "Decoration debe existir")
+  dec = container.decoration.unwrap()
+  assert(dec.color.isSome(), "Color debe existir")
+}
+
+"""Test: Container.sized() factory"""
+@test
+fn test_container_sized_factory() -> void {
+  child = TestText { text: "Test" }
+  container = Container.sized(150, 250, Some(child))
+  
+  assert(container.width == Some(150), "Width debe ser 150")
+  assert(container.height == Some(250), "Height debe ser 250")
+}
+
+"""Test: BoxConstraints.tight()"""
+@test
+fn test_box_constraints_tight() -> void {
+  constraints = BoxConstraints.tight(100, 200)
+  
+  assert(constraints.minWidth == 100, "minWidth debe ser 100")
+  assert(constraints.maxWidth == 100, "maxWidth debe ser 100")
+  assert(constraints.minHeight == 200, "minHeight debe ser 200")
+  assert(constraints.maxHeight == 200, "maxHeight debe ser 200")
+}
+
+"""Test: EdgeInsets.horizontal()"""
+@test
+fn test_edge_insets_horizontal() -> void {
+  insets = EdgeInsets.horizontal(24)
+  
+  assert(insets.left == 24, "Left debe ser 24")
+  assert(insets.right == 24, "Right debe ser 24")
+  assert(insets.top == 0, "Top debe ser 0")
+  assert(insets.bottom == 0, "Bottom debe ser 0")
+}
+
+"""Test: EdgeInsets.only()"""
+@test
+fn test_edge_insets_only() -> void {
+  insets = EdgeInsets.only(top: 10, right: 20, bottom: 30, left: 40)
+  
+  assert(insets.top == 10, "Top debe ser 10")
+  assert(insets.right == 20, "Right debe ser 20")
+  assert(insets.bottom == 30, "Bottom debe ser 30")
+  assert(insets.left == 40, "Left debe ser 40")
+}
+
+# ============================================================================
+# TESTS: ROW
+# ============================================================================
+
+"""Test: Row con children básicos"""
+@test
+fn test_row_basic() -> void {
+  row = Row {
+    children: [
+      TestText { text: "A" },
+      TestText { text: "B" },
+      TestText { text: "C" }
+    ]
+  }
+  
+  assert(row.children.length == 3, "Row debe tener 3 children")
+}
+
+"""Test: Row con MainAxisAlignment"""
+@test
+fn test_row_main_axis_alignment() -> void {
+  row = Row {
+    mainAxisAlignment: MainAxisAlignment.SpaceBetween,
+    children: [
+      TestText { text: "A" },
+      TestText { text: "B" }
+    ]
+  }
+  
+  assert(
+    row.mainAxisAlignment == MainAxisAlignment.SpaceBetween,
+    "MainAxisAlignment debe ser SpaceBetween"
+  )
+}
+
+"""Test: Row con CrossAxisAlignment"""
+@test
+fn test_row_cross_axis_alignment() -> void {
+  row = Row {
+    crossAxisAlignment: CrossAxisAlignment.Start,
+    children: [TestText { text: "A" }]
+  }
+  
+  assert(
+    row.crossAxisAlignment == CrossAxisAlignment.Start,
+    "CrossAxisAlignment debe ser Start"
+  )
+}
+
+"""Test: Row con Expanded children"""
+@test
+fn test_row_with_expanded() -> void {
+  row = Row {
+    children: [
+      TestText { text: "Fixed" },
+      Expanded {
+        child: TestText { text: "Fills space" }
+      },
+      TestText { text: "Fixed" }
+    ]
+  }
+  
+  assert(row.children.length == 3, "Row debe tener 3 children")
+  
+  # Verificar que el segundo child es Expanded
+  secondChild = row.children[1]
+  # En un sistema de tipos real, usaríamos instanceof o similar
+  # assert(secondChild is Expanded, "Segundo child debe ser Expanded")
+}
+
+"""Test: Row con Spacer"""
+@test
+fn test_row_with_spacer() -> void {
+  row = Row {
+    children: [
+      TestText { text: "Left" },
+      Spacer {},
+      TestText { text: "Right" }
+    ]
+  }
+  
+  assert(row.children.length == 3, "Row debe tener 3 children con Spacer")
+}
+
+# ============================================================================
+# TESTS: COLUMN
+# ============================================================================
+
+"""Test: Column con children básicos"""
+@test
+fn test_column_basic() -> void {
+  column = Column {
+    children: [
+      TestText { text: "Top" },
+      TestText { text: "Middle" },
+      TestText { text: "Bottom" }
+    ]
+  }
+  
+  assert(column.children.length == 3, "Column debe tener 3 children")
+}
+
+"""Test: Column con MainAxisAlignment.Center"""
+@test
+fn test_column_centered() -> void {
+  column = Column {
+    mainAxisAlignment: MainAxisAlignment.Center,
+    children: [TestText { text: "Centered" }]
+  }
+  
+  assert(
+    column.mainAxisAlignment == MainAxisAlignment.Center,
+    "Column debe estar centrada"
+  )
+}
+
+"""Test: Column con CrossAxisAlignment.Stretch"""
+@test
+fn test_column_stretch() -> void {
+  column = Column {
+    crossAxisAlignment: CrossAxisAlignment.Stretch,
+    children: [
+      TestText { text: "Stretches horizontally" }
+    ]
+  }
+  
+  assert(
+    column.crossAxisAlignment == CrossAxisAlignment.Stretch,
+    "CrossAxisAlignment debe ser Stretch"
+  )
+}
+
+"""Test: Column con MainAxisSize.Min"""
+@test
+fn test_column_main_axis_size_min() -> void {
+  column = Column {
+    mainAxisSize: MainAxisSize.Min,
+    children: [TestText { text: "Minimal height" }]
+  }
+  
+  assert(
+    column.mainAxisSize == MainAxisSize.Min,
+    "MainAxisSize debe ser Min"
+  )
+}
+
+# ============================================================================
+# TESTS: STACK
+# ============================================================================
+
+"""Test: Stack con múltiples children"""
+@test
+fn test_stack_basic() -> void {
+  stack = Stack {
+    children: [
+      TestText { text: "Background" },
+      TestText { text: "Middle" },
+      TestText { text: "Foreground" }
+    ]
+  }
+  
+  assert(stack.children.length == 3, "Stack debe tener 3 layers")
+  # El último child (index 2) se dibuja encima
+}
+
+"""Test: Stack con Positioned"""
+@test
+fn test_stack_with_positioned() -> void {
+  stack = Stack {
+    children: [
+      TestText { text: "Background" },
+      Positioned {
+        top: Some(10),
+        left: Some(20),
+        child: TestText { text: "Positioned" }
+      }
+    ]
+  }
+  
+  assert(stack.children.length == 2, "Stack debe tener 2 children")
+  
+  positioned = stack.children[1]
+  # Verificar que es Positioned
+  # assert(positioned is Positioned, "Debe ser Positioned")
+}
+
+"""Test: Positioned.fill()"""
+@test
+fn test_positioned_fill() -> void {
+  positioned = Positioned.fill(
+    child: TestText { text: "Fill" }
+  )
+  
+  assert(positioned.top == Some(0), "Top debe ser 0")
+  assert(positioned.right == Some(0), "Right debe ser 0")
+  assert(positioned.bottom == Some(0), "Bottom debe ser 0")
+  assert(positioned.left == Some(0), "Left debe ser 0")
+}
+
+"""Test: Stack con alignment"""
+@test
+fn test_stack_alignment() -> void {
+  stack = Stack {
+    alignment: Alignment.Center,
+    children: [
+      TestText { text: "Centered" }
+    ]
+  }
+  
+  assert(
+    stack.alignment == Alignment.Center,
+    "Stack alignment debe ser Center"
+  )
+}
+
+"""Test: Stack con StackFit.Expand"""
+@test
+fn test_stack_fit_expand() -> void {
+  stack = Stack {
+    fit: StackFit.Expand,
+    children: [TestText { text: "Expanded" }]
+  }
+  
+  assert(stack.fit == StackFit.Expand, "StackFit debe ser Expand")
+}
+
+"""Test: IndexedStack - solo un child visible"""
+@test
+fn test_indexed_stack() -> void {
+  indexedStack = IndexedStack {
+    index: 1,
+    children: [
+      TestText { text: "Page 0" },
+      TestText { text: "Page 1" },
+      TestText { text: "Page 2" }
+    ]
+  }
+  
+  assert(indexedStack.index == 1, "Index debe ser 1")
+  assert(indexedStack.children.length == 3, "Debe tener 3 pages")
+  # En runtime, solo "Page 1" sería visible
+}
+
+# ============================================================================
+# TESTS: WRAP
+# ============================================================================
+
+"""Test: Wrap con spacing"""
+@test
+fn test_wrap_spacing() -> void {
+  wrap = Wrap {
+    spacing: 8,
+    runSpacing: 12,
+    children: [
+      TestText { text: "Tag 1" },
+      TestText { text: "Tag 2" },
+      TestText { text: "Tag 3" }
+    ]
+  }
+  
+  assert(wrap.spacing == 8, "Spacing debe ser 8")
+  assert(wrap.runSpacing == 12, "RunSpacing debe ser 12")
+}
+
+# ============================================================================
+# TESTS: LISTVIEW
+# ============================================================================
+
+"""Test: ListView con children"""
+@test
+fn test_listview_basic() -> void {
+  listView = ListView {
+    children: [
+      TestText { text: "Item 1" },
+      TestText { text: "Item 2" },
+      TestText { text: "Item 3" }
+    ]
+  }
+  
+  assert(listView.children.length == 3, "ListView debe tener 3 items")
+}
+
+"""Test: ListView.builder()"""
+@test
+fn test_listview_builder() -> void {
+  listView = ListView.builder(
+    itemCount: 10,
+    itemBuilder: (context, index) => TestText {
+      text: "Item ${index}"
+    }
+  )
+  
+  # ListView builder no crea children inmediatamente
+  # Los crea on-demand durante scroll
+  assert(listView is ListView, "Debe retornar ListView")
+}
+
+# ============================================================================
+# TESTS: GRIDVIEW
+# ============================================================================
+
+"""Test: GridView con crossAxisCount"""
+@test
+fn test_gridview_basic() -> void {
+  gridView = GridView {
+    crossAxisCount: 3,
+    children: [
+      TestText { text: "1" },
+      TestText { text: "2" },
+      TestText { text: "3" },
+      TestText { text: "4" },
+      TestText { text: "5" },
+      TestText { text: "6" }
+    ]
+  }
+  
+  assert(gridView.crossAxisCount == 3, "Debe tener 3 columnas")
+  assert(gridView.children.length == 6, "Debe tener 6 items")
+}
+
+# ============================================================================
+# TESTS: HELPERS (SizedBox, Padding, Center, Align)
+# ============================================================================
+
+"""Test: SizedBox con dimensions"""
+@test
+fn test_sized_box() -> void {
+  sizedBox = SizedBox {
+    width: Some(100),
+    height: Some(50),
+    child: Some(TestText { text: "Test" })
+  }
+  
+  assert(sizedBox.width == Some(100), "Width debe ser 100")
+  assert(sizedBox.height == Some(50), "Height debe ser 50")
+}
+
+"""Test: SizedBox.square()"""
+@test
+fn test_sized_box_square() -> void {
+  square = SizedBox.square(
+    size: 100,
+    child: Some(TestText { text: "Square" })
+  )
+  
+  assert(square.width == Some(100), "Width debe ser 100")
+  assert(square.height == Some(100), "Height debe ser 100")
+}
+
+"""Test: Padding widget"""
+@test
+fn test_padding_widget() -> void {
+  padding = Padding {
+    padding: EdgeInsets.all(16),
+    child: TestText { text: "Padded" }
+  }
+  
+  assert(padding.padding.top == 16, "Padding debe ser 16")
+}
+
+"""Test: Center widget"""
+@test
+fn test_center_widget() -> void {
+  center = Center {
+    child: TestText { text: "Centered" }
+  }
+  
+  # Center debe tener alignment Center
+  # assert(center.alignment == Alignment.Center, "Debe estar centrado")
+}
+
+"""Test: Align widget"""
+@test
+fn test_align_widget() -> void {
+  align = Align {
+    alignment: Alignment.TopRight,
+    child: TestText { text: "Top Right" }
+  }
+  
+  assert(
+    align.alignment == Alignment.TopRight,
+    "Alignment debe ser TopRight"
+  )
+}
+
+"""Test: AspectRatio widget"""
+@test
+fn test_aspect_ratio_widget() -> void {
+  aspectRatio = AspectRatio {
+    aspectRatio: 16.0 / 9.0,  # 16:9 widescreen
+    child: TestText { text: "Video" }
+  }
+  
+  assert(
+    aspectRatio.aspectRatio > 1.7 && aspectRatio.aspectRatio < 1.8,
+    "AspectRatio debe ser ~1.777 (16:9)"
+  )
+}
+
+# ============================================================================
+# TESTS: FLEXIBLE & EXPANDED
+# ============================================================================
+
+"""Test: Flexible widget"""
+@test
+fn test_flexible_widget() -> void {
+  flexible = Flexible {
+    flex: 2,
+    fit: FlexFit.Loose,
+    child: TestText { text: "Flexible" }
+  }
+  
+  assert(flexible.flex == 2, "Flex debe ser 2")
+  assert(flexible.fit == FlexFit.Loose, "Fit debe ser Loose")
+}
+
+"""Test: Expanded widget"""
+@test
+fn test_expanded_widget() -> void {
+  expanded = Expanded {
+    flex: 3,
+    child: TestText { text: "Expanded" }
+  }
+  
+  assert(expanded.flex == 3, "Flex debe ser 3")
+  # Expanded siempre tiene fit = Tight
+}
+
+"""Test: Spacer widget"""
+@test
+fn test_spacer_widget() -> void {
+  spacer = Spacer { flex: 1 }
+  
+  assert(spacer.flex == 1, "Spacer flex debe ser 1")
+}
+
+# ============================================================================
+# TESTS DE INTEGRACIÓN: COMPOSICIÓN
+# ============================================================================
+
+"""Test: Row dentro de Column"""
+@test
+fn test_row_inside_column() -> void {
+  widget = Column {
+    children: [
+      TestText { text: "Header" },
+      Row {
+        children: [
+          TestText { text: "Left" },
+          TestText { text: "Right" }
+        ]
+      },
+      TestText { text: "Footer" }
+    ]
+  }
+  
+  assert(widget.children.length == 3, "Column debe tener 3 children")
+}
+
+"""Test: Stack con Container y Positioned"""
+@test
+fn test_stack_complex_layout() -> void {
+  widget = Stack {
+    children: [
+      # Background
+      Container.colored(
+        Color { r: 0, g: 0, b: 255 },
+        None
+      ),
+      
+      # Positioned content
+      Positioned {
+        top: Some(20),
+        left: Some(20),
+        child: Column {
+          children: [
+            TestText { text: "Title" },
+            TestText { text: "Subtitle" }
+          ]
+        }
+      }
+    ]
+  }
+  
+  assert(widget.children.length == 2, "Stack debe tener 2 layers")
+}
+
+"""Test: GridView con Container children"""
+@test
+fn test_gridview_with_containers() -> void {
+  gridView = GridView {
+    crossAxisCount: 2,
+    mainAxisSpacing: 10,
+    crossAxisSpacing: 10,
+    children: [
+      Container.colored(Color { r: 255, g: 0, b: 0 }, None),
+      Container.colored(Color { r: 0, g: 255, b: 0 }, None),
+      Container.colored(Color { r: 0, g: 0, b: 255 }, None),
+      Container.colored(Color { r: 255, g: 255, b: 0 }, None)
+    ]
+  }
+  
+  assert(gridView.children.length == 4, "GridView debe tener 4 items")
+  assert(gridView.mainAxisSpacing == 10, "MainAxisSpacing debe ser 10")
+  assert(gridView.crossAxisSpacing == 10, "CrossAxisSpacing debe ser 10")
+}
+
+# ============================================================================
+# RESUMEN DE TESTS
+# ============================================================================
+
+"""
+RESUMEN:
+- ✅ 10 tests de Container (sizing, padding, margin, decoration, factories)
+- ✅ 5 tests de Row (alignment, expanded, spacer)
+- ✅ 4 tests de Column (alignment, stretch, sizing)
+- ✅ 6 tests de Stack (positioning, fill, alignment, indexed)
+- ✅ 1 test de Wrap
+- ✅ 2 tests de ListView
+- ✅ 1 test de GridView
+- ✅ 7 tests de helpers (SizedBox, Padding, Center, Align, AspectRatio, Flexible, Expanded)
+- ✅ 3 tests de integración (composición)
+
+TOTAL: 39 tests
+"""

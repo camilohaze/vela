@@ -1,0 +1,552 @@
+"""
+Row & Column Widgets - Layout flexbox (inspirado en CSS Flexbox y Flutter)
+
+Row: Dispone children horizontalmente (en fila)
+Column: Dispone children verticalmente (en columna)
+
+Características:
+- MainAxis alignment (eje principal)
+- CrossAxis alignment (eje cruzado)
+- Spacing entre children
+- Flexible/Expanded children
+- Overflow behavior
+
+Sprint: 20
+Task: TASK-055
+"""
+
+import 'ui/widget' show { Widget, StatelessWidget, BuildContext }
+import 'ui/layout/container' show { EdgeInsets, Flexible, Expanded }
+
+# ============================================================================
+# ENUMS DE ALINEACIÓN
+# ============================================================================
+
+"""
+MainAxisAlignment: Alineación en el eje principal.
+- Row: eje principal = horizontal
+- Column: eje principal = vertical
+"""
+enum MainAxisAlignment {
+  Start,           # Alinear al inicio (left en Row, top en Column)
+  End,             # Alinear al final (right en Row, bottom en Column)
+  Center,          # Centrar
+  SpaceBetween,    # Espacio entre children (sin espacio en bordes)
+  SpaceAround,     # Espacio alrededor de cada child (mitad en bordes)
+  SpaceEvenly      # Espacio uniforme (igual en todos lados)
+}
+
+"""
+CrossAxisAlignment: Alineación en el eje cruzado.
+- Row: eje cruzado = vertical
+- Column: eje cruzado = horizontal
+"""
+enum CrossAxisAlignment {
+  Start,    # Alinear al inicio (top en Row, left en Column)
+  End,      # Alinear al final (bottom en Row, right en Column)
+  Center,   # Centrar
+  Stretch,  # Estirar para llenar (default en CSS flexbox)
+  Baseline  # Alinear por baseline de texto (solo Row)
+}
+
+"""
+MainAxisSize: Tamaño en el eje principal.
+"""
+enum MainAxisSize {
+  Min,  # Tamaño mínimo necesario para children
+  Max   # Expandir para llenar espacio disponible
+}
+
+"""
+Overflow behavior cuando children no caben.
+"""
+enum Overflow {
+  Visible,  # Mostrar overflow (default)
+  Clip,     # Clip overflow
+  Scroll    # Scroll si es necesario
+}
+
+# ============================================================================
+# ROW WIDGET - Layout horizontal (flexbox row)
+# ============================================================================
+
+"""
+Row: Dispone children horizontalmente (en fila).
+
+Inspirado en:
+- CSS Flexbox (flex-direction: row)
+- Flutter Row widget
+
+Ejemplo básico:
+```vela
+Row(
+  children: [
+    Text("Item 1"),
+    Text("Item 2"),
+    Text("Item 3")
+  ]
+)
+```
+
+Ejemplo con alineación:
+```vela
+Row(
+  mainAxisAlignment: MainAxisAlignment.SpaceBetween,
+  crossAxisAlignment: CrossAxisAlignment.Center,
+  children: [
+    Icon(name: "home"),
+    Text("Home"),
+    Spacer(),
+    Icon(name: "settings")
+  ]
+)
+```
+
+Ejemplo con Expanded:
+```vela
+Row(
+  children: [
+    Text("Fixed width"),
+    Expanded(
+      child: TextField(placeholder: "Fills remaining space")
+    ),
+    Button(text: "Submit")
+  ]
+)
+```
+"""
+widget Row extends StatelessWidget {
+  """Children dispuestos horizontalmente"""
+  children: List<Widget> = []
+  
+  """Alineación en eje principal (horizontal)"""
+  mainAxisAlignment: MainAxisAlignment = MainAxisAlignment.Start
+  
+  """Tamaño en eje principal"""
+  mainAxisSize: MainAxisSize = MainAxisSize.Max
+  
+  """Alineación en eje cruzado (vertical)"""
+  crossAxisAlignment: CrossAxisAlignment = CrossAxisAlignment.Center
+  
+  """Dirección de texto (LTR o RTL)"""
+  textDirection: TextDirection = TextDirection.LTR
+  
+  """Dirección vertical (usado para baseline alignment)"""
+  verticalDirection: VerticalDirection = VerticalDirection.Down
+  
+  """Baseline para alinear texto (si crossAxisAlignment = Baseline)"""
+  textBaseline: Option<TextBaseline> = None
+  
+  fn build(context: BuildContext) -> Widget {
+    # Row es un widget de layout que se renderiza directamente
+    # El layout engine calcula posiciones de children
+    return this
+  }
+}
+
+# ============================================================================
+# COLUMN WIDGET - Layout vertical (flexbox column)
+# ============================================================================
+
+"""
+Column: Dispone children verticalmente (en columna).
+
+Inspirado en:
+- CSS Flexbox (flex-direction: column)
+- Flutter Column widget
+
+Ejemplo básico:
+```vela
+Column(
+  children: [
+    Text("Title"),
+    Text("Subtitle"),
+    Button(text: "Action")
+  ]
+)
+```
+
+Ejemplo con alineación:
+```vela
+Column(
+  mainAxisAlignment: MainAxisAlignment.Center,
+  crossAxisAlignment: CrossAxisAlignment.Start,
+  children: [
+    Text("Name: Alice"),
+    Text("Age: 30"),
+    Text("City: NYC")
+  ]
+)
+```
+
+Ejemplo con Expanded:
+```vela
+Column(
+  children: [
+    Header(text: "Fixed height"),
+    Expanded(
+      child: ListView(items: items)  # Llena espacio restante
+    ),
+    Footer(text: "Fixed height")
+  ]
+)
+```
+"""
+widget Column extends StatelessWidget {
+  """Children dispuestos verticalmente"""
+  children: List<Widget> = []
+  
+  """Alineación en eje principal (vertical)"""
+  mainAxisAlignment: MainAxisAlignment = MainAxisAlignment.Start
+  
+  """Tamaño en eje principal"""
+  mainAxisSize: MainAxisSize = MainAxisSize.Max
+  
+  """Alineación en eje cruzado (horizontal)"""
+  crossAxisAlignment: CrossAxisAlignment = CrossAxisAlignment.Center
+  
+  """Dirección de texto (LTR o RTL)"""
+  textDirection: TextDirection = TextDirection.LTR
+  
+  """Dirección vertical"""
+  verticalDirection: VerticalDirection = VerticalDirection.Down
+  
+  """Baseline para alinear texto (si crossAxisAlignment = Baseline)"""
+  textBaseline: Option<TextBaseline> = None
+  
+  fn build(context: BuildContext) -> Widget {
+    # Column es un widget de layout que se renderiza directamente
+    return this
+  }
+}
+
+# ============================================================================
+# WRAP WIDGET - Flexbox con wrap
+# ============================================================================
+
+"""
+Wrap: Como Row/Column pero con wrap automático.
+Cuando children no caben en una línea, wrappea a la siguiente.
+
+Ejemplo:
+```vela
+Wrap(
+  spacing: 8,      # Espacio horizontal entre items
+  runSpacing: 8,   # Espacio vertical entre líneas
+  children: [
+    Chip(label: "Tag 1"),
+    Chip(label: "Tag 2"),
+    Chip(label: "Tag 3"),
+    Chip(label: "Tag 4"),
+    Chip(label: "Tag 5")
+  ]
+)
+```
+"""
+widget Wrap extends StatelessWidget {
+  children: List<Widget> = []
+  direction: Axis = Axis.Horizontal
+  alignment: WrapAlignment = WrapAlignment.Start
+  spacing: Number = 0
+  runAlignment: WrapAlignment = WrapAlignment.Start
+  runSpacing: Number = 0
+  crossAxisAlignment: WrapCrossAlignment = WrapCrossAlignment.Start
+  textDirection: TextDirection = TextDirection.LTR
+  verticalDirection: VerticalDirection = VerticalDirection.Down
+  
+  fn build(context: BuildContext) -> Widget {
+    return this
+  }
+}
+
+"""Alineación en Wrap"""
+enum WrapAlignment {
+  Start,
+  End,
+  Center,
+  SpaceBetween,
+  SpaceAround,
+  SpaceEvenly
+}
+
+"""CrossAxis alignment en Wrap"""
+enum WrapCrossAlignment {
+  Start,
+  End,
+  Center
+}
+
+# ============================================================================
+# LIST VIEW - Lista scrollable
+# ============================================================================
+
+"""
+ListView: Lista scrollable de children.
+Similar a RecyclerView (Android) o UITableView (iOS).
+
+Ejemplo:
+```vela
+ListView(
+  children: [
+    ListTile(title: "Item 1"),
+    ListTile(title: "Item 2"),
+    ListTile(title: "Item 3")
+  ]
+)
+```
+
+Ejemplo builder (lazy loading):
+```vela
+ListView.builder(
+  itemCount: 1000,
+  itemBuilder: (context, index) => ListTile(
+    title: "Item ${index}"
+  )
+)
+```
+"""
+widget ListView extends StatelessWidget {
+  children: List<Widget> = []
+  scrollDirection: Axis = Axis.Vertical
+  reverse: Bool = false
+  padding: Option<EdgeInsets> = None
+  primary: Bool = true
+  physics: Option<ScrollPhysics> = None
+  shrinkWrap: Bool = false
+  
+  fn build(context: BuildContext) -> Widget {
+    return this
+  }
+  
+  """
+  ListView builder (lazy loading).
+  Crea children on-demand según scroll position.
+  """
+  static fn builder(
+    itemCount: Number,
+    itemBuilder: (BuildContext, Number) -> Widget,
+    scrollDirection: Axis = Axis.Vertical
+  ) -> ListView {
+    # En un framework real, esto usaría un builder pattern
+    # Por ahora, retornamos ListView vacío
+    return ListView { scrollDirection: scrollDirection }
+  }
+  
+  """
+  ListView separado (con dividers entre items).
+  """
+  static fn separated(
+    itemCount: Number,
+    itemBuilder: (BuildContext, Number) -> Widget,
+    separatorBuilder: (BuildContext, Number) -> Widget
+  ) -> ListView {
+    return ListView { }
+  }
+}
+
+# ============================================================================
+# HELPER ENUMS & TYPES
+# ============================================================================
+
+"""Dirección de texto (para RTL support)"""
+enum TextDirection {
+  LTR,  # Left-to-right (inglés, español, etc.)
+  RTL   # Right-to-left (árabe, hebreo, etc.)
+}
+
+"""Dirección vertical"""
+enum VerticalDirection {
+  Up,    # De abajo hacia arriba
+  Down   # De arriba hacia abajo (default)
+}
+
+"""Baseline de texto para alineación"""
+enum TextBaseline {
+  Alphabetic,  # Baseline alfabético (default)
+  Ideographic  # Baseline ideográfico (chino, japonés)
+}
+
+"""Eje de layout"""
+enum Axis {
+  Horizontal,  # Eje horizontal
+  Vertical     # Eje vertical
+}
+
+"""Física de scroll"""
+enum ScrollPhysics {
+  Bouncing,      # iOS-style bouncing (over-scroll y bounce back)
+  Clamping,      # Android-style clamping (no over-scroll)
+  NeverScrollable,  # No scrollable
+  AlwaysScrollable  # Siempre scrollable
+}
+
+# ============================================================================
+# SINGLE CHILD SCROLL VIEW
+# ============================================================================
+
+"""
+SingleChildScrollView: Scroll view con un solo child.
+Útil cuando el contenido puede exceder la pantalla.
+
+Ejemplo:
+```vela
+SingleChildScrollView(
+  child: Column(
+    children: [
+      // Muchos widgets...
+    ]
+  )
+)
+```
+"""
+widget SingleChildScrollView extends StatelessWidget {
+  child: Widget
+  scrollDirection: Axis = Axis.Vertical
+  reverse: Bool = false
+  padding: Option<EdgeInsets> = None
+  primary: Bool = true
+  physics: Option<ScrollPhysics> = None
+  
+  fn build(context: BuildContext) -> Widget {
+    return this
+  }
+}
+
+# ============================================================================
+# GRID VIEW - Grid layout
+# ============================================================================
+
+"""
+GridView: Grid de children.
+Similar a CSS Grid o Flutter GridView.
+
+Ejemplo:
+```vela
+GridView(
+  crossAxisCount: 3,  # 3 columnas
+  children: [
+    Card(child: Text("1")),
+    Card(child: Text("2")),
+    Card(child: Text("3")),
+    Card(child: Text("4"))
+  ]
+)
+```
+"""
+widget GridView extends StatelessWidget {
+  children: List<Widget> = []
+  crossAxisCount: Number = 2
+  mainAxisSpacing: Number = 0
+  crossAxisSpacing: Number = 0
+  childAspectRatio: Number = 1.0
+  padding: Option<EdgeInsets> = None
+  
+  fn build(context: BuildContext) -> Widget {
+    return this
+  }
+  
+  """
+  GridView builder (lazy loading).
+  """
+  static fn builder(
+    itemCount: Number,
+    itemBuilder: (BuildContext, Number) -> Widget,
+    crossAxisCount: Number = 2
+  ) -> GridView {
+    return GridView { crossAxisCount: crossAxisCount }
+  }
+}
+
+# ============================================================================
+# EJEMPLOS DE USO
+# ============================================================================
+
+"""
+EJEMPLO 1: Navbar horizontal con Row
+```vela
+widget Navbar extends StatelessWidget {
+  fn build(context: BuildContext) -> Widget {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.SpaceBetween,
+      children: [
+        # Logo
+        Image(url: "logo.png", width: 120),
+        
+        # Navigation links
+        Row(
+          children: [
+            TextButton(text: "Home"),
+            TextButton(text: "Products"),
+            TextButton(text: "About"),
+            TextButton(text: "Contact")
+          ]
+        ),
+        
+        # Actions
+        Row(
+          children: [
+            IconButton(icon: "search"),
+            IconButton(icon: "cart"),
+            Button(text: "Login")
+          ]
+        )
+      ]
+    )
+  }
+}
+```
+
+EJEMPLO 2: Sidebar con Column
+```vela
+widget Sidebar extends StatelessWidget {
+  fn build(context: BuildContext) -> Widget {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.Start,
+      children: [
+        # Header
+        Container(
+          padding: EdgeInsets.all(16),
+          child: Text("Menu", style: TextStyle(fontSize: 24))
+        ),
+        
+        # Menu items
+        Expanded(
+          child: ListView(
+            children: [
+              ListTile(icon: "home", title: "Home"),
+              ListTile(icon: "user", title: "Profile"),
+              ListTile(icon: "settings", title: "Settings"),
+              ListTile(icon: "help", title: "Help")
+            ]
+          )
+        ),
+        
+        # Footer
+        Container(
+          padding: EdgeInsets.all(16),
+          child: Text("Version 1.0")
+        )
+      ]
+    )
+  }
+}
+```
+
+EJEMPLO 3: Responsive layout con Wrap
+```vela
+widget TagCloud extends StatelessWidget {
+  tags: List<String>
+  
+  fn build(context: BuildContext) -> Widget {
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: this.tags.map(tag => Chip(
+        label: tag,
+        onDelete: () => removeTag(tag)
+      ))
+    )
+  }
+}
+```
+"""

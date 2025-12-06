@@ -1,0 +1,685 @@
+"""
+Date & Time Pickers - Selectores de fecha y hora
+
+Inspirado en:
+- Flutter: showDatePicker, showTimePicker
+- HTML: <input type="date">, <input type="time">
+- Material Design: Pickers
+- iOS: UIDatePicker
+
+Sprint: 20
+Task: TASK-056
+"""
+
+import 'ui/widget' show { Widget, StatefulWidget, StatelessWidget, BuildContext }
+import 'ui/layout/container' show { Container, EdgeInsets, BoxDecoration, BorderRadius, Alignment }
+import 'ui/input/button' show { TextButton, IconButton }
+
+# ============================================================================
+# DATE TIME - Estructura para fecha y hora
+# ============================================================================
+
+"""
+DateTime: Representa una fecha y hora.
+"""
+struct DateTime {
+  year: Number
+  month: Number   # 1-12
+  day: Number     # 1-31
+  hour: Number    # 0-23
+  minute: Number  # 0-59
+  second: Number  # 0-59
+  
+  """Crear DateTime ahora"""
+  static fn now() -> DateTime {
+    # En un framework real, esto obtendría fecha/hora actual del sistema
+    return DateTime {
+      year: 2025,
+      month: 12,
+      day: 6,
+      hour: 14,
+      minute: 30,
+      second: 0
+    }
+  }
+  
+  """Crear DateTime desde fecha"""
+  static fn date(year: Number, month: Number, day: Number) -> DateTime {
+    return DateTime {
+      year: year,
+      month: month,
+      day: day,
+      hour: 0,
+      minute: 0,
+      second: 0
+    }
+  }
+  
+  """Formatear como string"""
+  fn format(pattern: String) -> String {
+    # Patterns: "yyyy-MM-dd", "HH:mm", "MMM dd, yyyy", etc.
+    # En un framework real, esto formateará según pattern
+    return "${this.year}-${this.month.padLeft(2, '0')}-${this.day.padLeft(2, '0')}"
+  }
+  
+  """Solo la parte de fecha"""
+  fn dateOnly() -> DateTime {
+    return DateTime.date(this.year, this.month, this.day)
+  }
+  
+  """Comparar fechas"""
+  fn isBefore(other: DateTime) -> Bool {
+    # Comparar año, mes, día
+    return this.year < other.year ||
+           (this.year == other.year && this.month < other.month) ||
+           (this.year == other.year && this.month == other.month && this.day < other.day)
+  }
+  
+  fn isAfter(other: DateTime) -> Bool {
+    return !this.isBefore(other) && !this.isSameDay(other)
+  }
+  
+  fn isSameDay(other: DateTime) -> Bool {
+    return this.year == other.year &&
+           this.month == other.month &&
+           this.day == other.day
+  }
+}
+
+# ============================================================================
+# DATE PICKER - Selector de fecha
+# ============================================================================
+
+"""
+DatePicker: Selector de fecha con calendario.
+
+Uso típico con showDatePicker:
+```vela
+ElevatedButton(
+  text: "Select date",
+  onPressed: async () => {
+    selected = await showDatePicker(
+      context: context,
+      initialDate: DateTime.now(),
+      firstDate: DateTime.date(2020, 1, 1),
+      lastDate: DateTime.date(2030, 12, 31)
+    )
+    
+    if let Some(date) = selected {
+      this.selectedDate = date
+    }
+  }
+)
+```
+
+Uso inline (embebido en UI):
+```vela
+DatePicker(
+  initialDate: this.birthDate,
+  onDateSelected: (date) => { this.birthDate = date }
+)
+```
+"""
+widget DatePicker extends StatefulWidget {
+  """Fecha inicial"""
+  initialDate: DateTime = DateTime.now()
+  
+  """Primera fecha seleccionable"""
+  firstDate: DateTime = DateTime.date(1900, 1, 1)
+  
+  """Última fecha seleccionable"""
+  lastDate: DateTime = DateTime.date(2100, 12, 31)
+  
+  """Callback cuando se selecciona fecha"""
+  onDateSelected: Option<(DateTime) -> void> = None
+  
+  """Estado: fecha actualmente seleccionada"""
+  state selectedDate: DateTime = this.initialDate
+  
+  """Estado: mes/año que se está viendo"""
+  state viewingMonth: Number = this.initialDate.month
+  state viewingYear: Number = this.initialDate.year
+  
+  fn handleDateTap(day: Number) -> void {
+    newDate = DateTime.date(this.viewingYear, this.viewingMonth, day)
+    
+    # Verificar que esté en rango
+    if newDate.isBefore(this.firstDate) || newDate.isAfter(this.lastDate) {
+      return
+    }
+    
+    this.selectedDate = newDate
+    
+    if let Some(callback) = this.onDateSelected {
+      callback(newDate)
+    }
+  }
+  
+  fn previousMonth() -> void {
+    if this.viewingMonth == 1 {
+      this.viewingMonth = 12
+      this.viewingYear = this.viewingYear - 1
+    } else {
+      this.viewingMonth = this.viewingMonth - 1
+    }
+  }
+  
+  fn nextMonth() -> void {
+    if this.viewingMonth == 12 {
+      this.viewingMonth = 1
+      this.viewingYear = this.viewingYear + 1
+    } else {
+      this.viewingMonth = this.viewingMonth + 1
+    }
+  }
+  
+  fn build(context: BuildContext) -> Widget {
+    monthName = getMonthName(this.viewingMonth)
+    daysInMonth = getDaysInMonth(this.viewingYear, this.viewingMonth)
+    firstDayOfWeek = getFirstDayOfWeek(this.viewingYear, this.viewingMonth)
+    
+    return Container(
+      width: Some(320),
+      padding: Some(EdgeInsets.all(16)),
+      decoration: Some(BoxDecoration {
+        color: Some(Color.white),
+        borderRadius: Some(BorderRadius.circular(8)),
+        boxShadow: Some([
+          BoxShadow {
+            color: Color.black.withOpacity(0.1),
+            blurRadius: 10,
+            offset: Offset { x: 0, y: 4 }
+          }
+        ])
+      }),
+      child: Some(
+        Column(
+          children: [
+            # Header: Mes y año con navegación
+            Row(
+              mainAxisAlignment: MainAxisAlignment.SpaceBetween,
+              children: [
+                IconButton(
+                  icon: Icon(name: "chevron_left"),
+                  onPressed: () => this.previousMonth()
+                ),
+                Text(
+                  "${monthName} ${this.viewingYear}",
+                  style: TextStyle {
+                    fontSize: 16,
+                    fontWeight: FontWeight.Bold
+                  }
+                ),
+                IconButton(
+                  icon: Icon(name: "chevron_right"),
+                  onPressed: () => this.nextMonth()
+                )
+              ]
+            ),
+            
+            SizedBox { height: Some(16) },
+            
+            # Días de la semana (header)
+            Row(
+              mainAxisAlignment: MainAxisAlignment.SpaceAround,
+              children: ["S", "M", "T", "W", "T", "F", "S"].map(day =>
+                Text(
+                  day,
+                  style: TextStyle {
+                    fontSize: 12,
+                    fontWeight: FontWeight.Bold,
+                    color: Color.gray
+                  }
+                )
+              )
+            ),
+            
+            SizedBox { height: Some(8) },
+            
+            # Grid de días del mes
+            ...buildCalendarGrid(
+              daysInMonth: daysInMonth,
+              firstDayOfWeek: firstDayOfWeek,
+              selectedDate: this.selectedDate,
+              viewingMonth: this.viewingMonth,
+              viewingYear: this.viewingYear,
+              onDayTap: (day) => this.handleDateTap(day)
+            )
+          ]
+        )
+      )
+    )
+  }
+}
+
+"""
+showDatePicker: Muestra date picker en dialog modal.
+Retorna Future<Option<DateTime>>.
+"""
+async fn showDatePicker(
+  context: BuildContext,
+  initialDate: DateTime = DateTime.now(),
+  firstDate: DateTime = DateTime.date(1900, 1, 1),
+  lastDate: DateTime = DateTime.date(2100, 12, 31)
+) -> Option<DateTime> {
+  # En un framework real, esto mostraría un dialog modal
+  # Por ahora, retornar None
+  return None
+}
+
+# ============================================================================
+# TIME PICKER - Selector de hora
+# ============================================================================
+
+"""
+TimePicker: Selector de hora (horas y minutos).
+
+Uso con showTimePicker:
+```vela
+ElevatedButton(
+  text: "Select time",
+  onPressed: async () => {
+    selected = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay(hour: 14, minute: 30)
+    )
+    
+    if let Some(time) = selected {
+      this.selectedTime = time
+    }
+  }
+)
+```
+"""
+widget TimePicker extends StatefulWidget {
+  """Hora inicial"""
+  initialTime: TimeOfDay = TimeOfDay.now()
+  
+  """Si usar formato 24 horas (true) o AM/PM (false)"""
+  use24HourFormat: Bool = true
+  
+  """Callback cuando se selecciona hora"""
+  onTimeSelected: Option<(TimeOfDay) -> void> = None
+  
+  """Estado: hora seleccionada"""
+  state selectedTime: TimeOfDay = this.initialTime
+  
+  """Estado: si está editando hora (true) o minutos (false)"""
+  state editingHour: Bool = true
+  
+  fn handleHourSelected(hour: Number) -> void {
+    this.selectedTime = TimeOfDay {
+      hour: hour,
+      minute: this.selectedTime.minute
+    }
+    this.editingHour = false  # Cambiar a editar minutos
+  }
+  
+  fn handleMinuteSelected(minute: Number) -> void {
+    this.selectedTime = TimeOfDay {
+      hour: this.selectedTime.hour,
+      minute: minute
+    }
+    
+    if let Some(callback) = this.onTimeSelected {
+      callback(this.selectedTime)
+    }
+  }
+  
+  fn build(context: BuildContext) -> Widget {
+    return Container(
+      width: Some(280),
+      padding: Some(EdgeInsets.all(16)),
+      decoration: Some(BoxDecoration {
+        color: Some(Color.white),
+        borderRadius: Some(BorderRadius.circular(8)),
+        boxShadow: Some([
+          BoxShadow {
+            color: Color.black.withOpacity(0.1),
+            blurRadius: 10,
+            offset: Offset { x: 0, y: 4 }
+          }
+        ])
+      }),
+      child: Some(
+        Column(
+          children: [
+            # Display actual: hora y minutos
+            Row(
+              mainAxisAlignment: MainAxisAlignment.Center,
+              children: [
+                # Hora
+                GestureDetector(
+                  onTap: () => { this.editingHour = true },
+                  child: Container(
+                    padding: Some(EdgeInsets.all(12)),
+                    decoration: Some(BoxDecoration {
+                      color: Some(if this.editingHour {
+                        Color.primary.withOpacity(0.2)
+                      } else {
+                        Color.transparent
+                      }),
+                      borderRadius: Some(BorderRadius.circular(4))
+                    }),
+                    child: Some(
+                      Text(
+                        this.selectedTime.hourString(this.use24HourFormat),
+                        style: TextStyle {
+                          fontSize: 32,
+                          fontWeight: FontWeight.Bold
+                        }
+                      )
+                    )
+                  )
+                ),
+                
+                Text(":", style: TextStyle { fontSize: 32 }),
+                
+                # Minutos
+                GestureDetector(
+                  onTap: () => { this.editingHour = false },
+                  child: Container(
+                    padding: Some(EdgeInsets.all(12)),
+                    decoration: Some(BoxDecoration {
+                      color: Some(if !this.editingHour {
+                        Color.primary.withOpacity(0.2)
+                      } else {
+                        Color.transparent
+                      }),
+                      borderRadius: Some(BorderRadius.circular(4))
+                    }),
+                    child: Some(
+                      Text(
+                        this.selectedTime.minuteString(),
+                        style: TextStyle {
+                          fontSize: 32,
+                          fontWeight: FontWeight.Bold
+                        }
+                      )
+                    )
+                  )
+                ),
+                
+                # AM/PM (si no es 24h)
+                if !this.use24HourFormat {
+                  SizedBox { width: Some(8) },
+                  Text(
+                    if this.selectedTime.hour < 12 { "AM" } else { "PM" },
+                    style: TextStyle { fontSize: 16 }
+                  )
+                }
+              ]
+            ),
+            
+            SizedBox { height: Some(24) },
+            
+            # Selector circular o lista
+            if this.editingHour {
+              buildHourSelector(
+                selectedHour: this.selectedTime.hour,
+                use24HourFormat: this.use24HourFormat,
+                onHourSelected: (hour) => this.handleHourSelected(hour)
+              )
+            } else {
+              buildMinuteSelector(
+                selectedMinute: this.selectedTime.minute,
+                onMinuteSelected: (minute) => this.handleMinuteSelected(minute)
+              )
+            }
+          ]
+        )
+      )
+    )
+  }
+}
+
+"""
+showTimePicker: Muestra time picker en dialog modal.
+"""
+async fn showTimePicker(
+  context: BuildContext,
+  initialTime: TimeOfDay = TimeOfDay.now()
+) -> Option<TimeOfDay> {
+  # En un framework real, esto mostraría dialog modal
+  return None
+}
+
+# ============================================================================
+# TIME OF DAY - Estructura para hora del día
+# ============================================================================
+
+"""
+TimeOfDay: Representa hora del día (sin fecha).
+"""
+struct TimeOfDay {
+  hour: Number    # 0-23
+  minute: Number  # 0-59
+  
+  """Crear TimeOfDay ahora"""
+  static fn now() -> TimeOfDay {
+    now = DateTime.now()
+    return TimeOfDay {
+      hour: now.hour,
+      minute: now.minute
+    }
+  }
+  
+  """Formatear hora (24h)"""
+  fn format24h() -> String {
+    return "${this.hour.padLeft(2, '0')}:${this.minute.padLeft(2, '0')}"
+  }
+  
+  """Formatear hora (12h con AM/PM)"""
+  fn format12h() -> String {
+    period = if this.hour < 12 { "AM" } else { "PM" }
+    displayHour = if this.hour == 0 {
+      12
+    } else if this.hour > 12 {
+      this.hour - 12
+    } else {
+      this.hour
+    }
+    return "${displayHour}:${this.minute.padLeft(2, '0')} ${period}"
+  }
+  
+  """String de hora para display"""
+  fn hourString(use24Hour: Bool) -> String {
+    if use24Hour {
+      return this.hour.padLeft(2, '0')
+    }
+    
+    displayHour = if this.hour == 0 {
+      12
+    } else if this.hour > 12 {
+      this.hour - 12
+    } else {
+      this.hour
+    }
+    return displayHour.toString()
+  }
+  
+  """String de minutos para display"""
+  fn minuteString() -> String {
+    return this.minute.padLeft(2, '0')
+  }
+}
+
+# ============================================================================
+# DATE TIME PICKER - Selector combinado fecha y hora
+# ============================================================================
+
+"""
+DateTimePicker: Selector de fecha Y hora combinado.
+
+Ejemplo:
+```vela
+DateTimePicker(
+  initialDateTime: this.appointmentTime,
+  onDateTimeSelected: (dateTime) => { this.appointmentTime = dateTime }
+)
+```
+"""
+widget DateTimePicker extends StatefulWidget {
+  initialDateTime: DateTime = DateTime.now()
+  onDateTimeSelected: Option<(DateTime) -> void> = None
+  
+  state selectedDateTime: DateTime = this.initialDateTime
+  
+  fn handleDateSelected(date: DateTime) -> void {
+    # Mantener hora, cambiar fecha
+    this.selectedDateTime = DateTime {
+      year: date.year,
+      month: date.month,
+      day: date.day,
+      hour: this.selectedDateTime.hour,
+      minute: this.selectedDateTime.minute,
+      second: this.selectedDateTime.second
+    }
+  }
+  
+  fn handleTimeSelected(time: TimeOfDay) -> void {
+    # Mantener fecha, cambiar hora
+    this.selectedDateTime = DateTime {
+      year: this.selectedDateTime.year,
+      month: this.selectedDateTime.month,
+      day: this.selectedDateTime.day,
+      hour: time.hour,
+      minute: time.minute,
+      second: 0
+    }
+    
+    if let Some(callback) = this.onDateTimeSelected {
+      callback(this.selectedDateTime)
+    }
+  }
+  
+  fn build(context: BuildContext) -> Widget {
+    return Column(
+      children: [
+        # Date picker
+        DatePicker {
+          initialDate: this.selectedDateTime,
+          onDateSelected: (date) => this.handleDateSelected(date)
+        },
+        
+        SizedBox { height: Some(16) },
+        
+        # Time picker
+        TimePicker {
+          initialTime: TimeOfDay {
+            hour: this.selectedDateTime.hour,
+            minute: this.selectedDateTime.minute
+          },
+          onTimeSelected: (time) => this.handleTimeSelected(time)
+        }
+      ]
+    )
+  }
+}
+
+# ============================================================================
+# HELPER FUNCTIONS
+# ============================================================================
+
+"""Nombre del mes"""
+fn getMonthName(month: Number) -> String {
+  match month {
+    1 => "January"
+    2 => "February"
+    3 => "March"
+    4 => "April"
+    5 => "May"
+    6 => "June"
+    7 => "July"
+    8 => "August"
+    9 => "September"
+    10 => "October"
+    11 => "November"
+    12 => "December"
+    _ => "Unknown"
+  }
+}
+
+"""Días en el mes"""
+fn getDaysInMonth(year: Number, month: Number) -> Number {
+  match month {
+    1 => 31
+    2 => if isLeapYear(year) { 29 } else { 28 }
+    3 => 31
+    4 => 30
+    5 => 31
+    6 => 30
+    7 => 31
+    8 => 31
+    9 => 30
+    10 => 31
+    11 => 30
+    12 => 31
+    _ => 30
+  }
+}
+
+"""Año bisiesto"""
+fn isLeapYear(year: Number) -> Bool {
+  return (year % 4 == 0 && year % 100 != 0) || (year % 400 == 0)
+}
+
+"""Primer día de la semana del mes (0 = domingo, 6 = sábado)"""
+fn getFirstDayOfWeek(year: Number, month: Number) -> Number {
+  # Implementación simplificada - en un framework real usaría algoritmo correcto
+  return 0  # Placeholder
+}
+
+"""Construir grid de calendario"""
+fn buildCalendarGrid(
+  daysInMonth: Number,
+  firstDayOfWeek: Number,
+  selectedDate: DateTime,
+  viewingMonth: Number,
+  viewingYear: Number,
+  onDayTap: (Number) -> void
+) -> List<Widget> {
+  # En un framework real, esto construiría el grid completo
+  # Por ahora, retornar lista vacía
+  return []
+}
+
+"""Construir selector de horas"""
+fn buildHourSelector(
+  selectedHour: Number,
+  use24HourFormat: Bool,
+  onHourSelected: (Number) -> void
+) -> Widget {
+  # En un framework real, esto construiría selector circular o lista
+  return Container {}
+}
+
+"""Construir selector de minutos"""
+fn buildMinuteSelector(
+  selectedMinute: Number,
+  onMinuteSelected: (Number) -> void
+) -> Widget {
+  # En un framework real, esto construiría selector circular o lista
+  return Container {}
+}
+
+# ============================================================================
+# NUMBER EXTENSIONS (padding)
+# ============================================================================
+
+extension NumberPadding on Number {
+  """Pad left con ceros"""
+  fn padLeft(width: Number, char: String) -> String {
+    str = this.toString()
+    while str.length < width {
+      str = "${char}${str}"
+    }
+    return str
+  }
+  
+  """Convertir a string"""
+  fn toString() -> String {
+    # En un framework real, esto convertiría número a string
+    return ""  # Placeholder
+  }
+}

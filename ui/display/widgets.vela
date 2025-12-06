@@ -1,0 +1,891 @@
+"""
+Display Widgets - Icon, Card, ListTile, Divider, Badge, Chip, Avatar
+
+Inspirado en:
+- Flutter: Icon, Card, ListTile, Divider, Badge, Chip, CircleAvatar
+- Material Design: Cards, Lists, Chips
+- HTML: Componentes de lista y tarjeta
+
+Sprint: 20
+Task: TASK-057
+"""
+
+import 'ui/widget' show { Widget, StatelessWidget, StatefulWidget, BuildContext }
+import 'ui/layout/container' show { Container, BoxDecoration, BorderRadius, EdgeInsets, Alignment }
+import 'ui/layout/flex' show { Row, Column, MainAxisAlignment, CrossAxisAlignment }
+import 'ui/display/text' show { Text, TextStyle, FontWeight }
+
+# ============================================================================
+# ICON - Widget de ícono
+# ============================================================================
+
+"""
+Icon - Muestra un ícono de un icon pack
+
+Ejemplos:
+  Icon { name: "home" }
+  Icon { name: "star", size: 32, color: Color.yellow }
+  Icon { name: "settings", semanticLabel: "Settings" }
+"""
+class Icon extends StatelessWidget {
+  # Nombre del ícono (depende del icon pack)
+  name: String
+  
+  # Tamaño del ícono
+  size: Float = 24
+  
+  # Color del ícono
+  color: Option<Color> = None
+  
+  # Label semántico para accesibilidad
+  semanticLabel: Option<String> = None
+  
+  # Dirección del ícono (para íconos direccionales)
+  textDirection: Option<TextDirection> = None
+  
+  fn build(context: BuildContext) -> Widget {
+    effectiveColor = this.color.unwrapOr(
+      context.theme.iconTheme.color
+    )
+    
+    return IconPrimitive {
+      name: this.name,
+      size: this.size,
+      color: effectiveColor,
+      semanticLabel: this.semanticLabel
+    }
+  }
+}
+
+"""IconPrimitive - Primitivo de ícono nativo"""
+class IconPrimitive extends Widget {
+  name: String
+  size: Float
+  color: Color
+  semanticLabel: Option<String>
+}
+
+# ============================================================================
+# CARD - Widget de tarjeta
+# ============================================================================
+
+"""
+Card - Tarjeta de Material Design con elevación
+
+Ejemplos:
+  Card {
+    child: Padding {
+      padding: EdgeInsets.all(16),
+      child: Text { data: "Card content" }
+    }
+  }
+"""
+class Card extends StatelessWidget {
+  # Contenido de la card
+  child: Option<Widget> = None
+  
+  # Color de fondo
+  color: Option<Color> = None
+  
+  # Color de sombra
+  shadowColor: Option<Color> = None
+  
+  # Elevación (altura de la sombra)
+  elevation: Float = 1
+  
+  # Forma de la card
+  shape: Option<ShapeBorder> = None
+  
+  # Recortar contenido a la forma
+  clipBehavior: Clip = Clip.None
+  
+  # Margin alrededor de la card
+  margin: EdgeInsets = EdgeInsets.all(4)
+  
+  # Semantic container
+  semanticContainer: Bool = true
+  
+  fn build(context: BuildContext) -> Widget {
+    effectiveColor = this.color.unwrapOr(
+      context.theme.cardTheme.color
+    )
+    
+    effectiveShape = this.shape.unwrapOr(
+      RoundedRectangleBorder {
+        borderRadius: BorderRadius.circular(4)
+      }
+    )
+    
+    return Container {
+      margin: Some(this.margin),
+      decoration: BoxDecoration {
+        color: effectiveColor,
+        borderRadius: effectiveShape.borderRadius,
+        boxShadow: [
+          BoxShadow {
+            color: this.shadowColor.unwrapOr(Color.black.withOpacity(0.2)),
+            offset: Offset { dx: 0, dy: this.elevation },
+            blurRadius: this.elevation * 2,
+            spreadRadius: 0
+          }
+        ]
+      },
+      child: this.child
+    }
+  }
+}
+
+# ============================================================================
+# LIST TILE - Widget de elemento de lista
+# ============================================================================
+
+"""
+ListTile - Elemento de lista con leading, title, subtitle y trailing
+
+Ejemplos:
+  ListTile {
+    leading: Some(Icon { name: "person" }),
+    title: "John Doe",
+    subtitle: Some("Software Engineer"),
+    trailing: Some(Icon { name: "chevron_right" }),
+    onTap: Some(() => navigateToProfile())
+  }
+"""
+class ListTile extends StatefulWidget {
+  # Widget al inicio (típicamente un Icon o Avatar)
+  leading: Option<Widget> = None
+  
+  # Título principal
+  title: String
+  
+  # Subtítulo opcional
+  subtitle: Option<String> = None
+  
+  # Widget al final (típicamente un Icon o Switch)
+  trailing: Option<Widget> = None
+  
+  # Tres líneas de altura
+  isThreeLine: Bool = false
+  
+  # Denso (menos padding)
+  dense: Bool = false
+  
+  # Shape del tile
+  shape: Option<ShapeBorder> = None
+  
+  # Color seleccionado
+  selectedColor: Option<Color> = None
+  
+  # Color del ícono
+  iconColor: Option<Color> = None
+  
+  # Color del texto
+  textColor: Option<Color> = None
+  
+  # Está seleccionado
+  selected: Bool = false
+  
+  # Habilitado
+  enabled: Bool = true
+  
+  # Callbacks
+  onTap: Option<() -> void> = None
+  onLongPress: Option<() -> void> = None
+  
+  # Estado de hover
+  state isHovered: Bool = false
+  
+  fn handleTap() -> void {
+    if this.enabled {
+      match this.onTap {
+        Some(callback) => callback()
+        None => {}
+      }
+    }
+  }
+  
+  fn handleLongPress() -> void {
+    if this.enabled {
+      match this.onLongPress {
+        Some(callback) => callback()
+        None => {}
+      }
+    }
+  }
+  
+  fn build(context: BuildContext) -> Widget {
+    # Calcular padding según dense
+    verticalPadding = this.dense ? 8 : 16
+    horizontalPadding = 16
+    
+    # Color de fondo
+    backgroundColor = if this.selected {
+      this.selectedColor.unwrapOr(
+        context.theme.colorScheme.primary.withOpacity(0.12)
+      )
+    } else if this.isHovered {
+      Color.grey.withOpacity(0.04)
+    } else {
+      Color.transparent
+    }
+    
+    return Container {
+      decoration: BoxDecoration {
+        color: backgroundColor
+      },
+      child: Some(
+        InkWell {
+          onTap: this.enabled ? this.onTap : None,
+          onLongPress: this.enabled ? this.onLongPress : None,
+          child: Padding {
+            padding: EdgeInsets.symmetric(
+              vertical: verticalPadding,
+              horizontal: horizontalPadding
+            ),
+            child: Row {
+              mainAxisAlignment: MainAxisAlignment.Start,
+              crossAxisAlignment: CrossAxisAlignment.Center,
+              children: this.buildChildren()
+            }
+          }
+        }
+      )
+    }
+  }
+  
+  fn buildChildren() -> List<Widget> {
+    children: List<Widget> = []
+    
+    # Leading
+    match this.leading {
+      Some(widget) => {
+        children.push(Container {
+          margin: Some(EdgeInsets.only(right: 16)),
+          child: Some(widget)
+        })
+      }
+      None => {}
+    }
+    
+    # Title y Subtitle
+    titleSubtitleColumn = Column {
+      mainAxisAlignment: MainAxisAlignment.Center,
+      crossAxisAlignment: CrossAxisAlignment.Start,
+      children: []
+    }
+    
+    titleSubtitleColumn.children.push(
+      Text {
+        data: this.title,
+        style: Some(TextStyle {
+          fontSize: Some(16),
+          fontWeight: Some(FontWeight.Medium),
+          color: this.textColor
+        })
+      }
+    )
+    
+    match this.subtitle {
+      Some(sub) => {
+        titleSubtitleColumn.children.push(
+          Text {
+            data: sub,
+            style: Some(TextStyle {
+              fontSize: Some(14),
+              color: this.textColor.map(c => c.withOpacity(0.7))
+            })
+          }
+        )
+      }
+      None => {}
+    }
+    
+    children.push(Expanded { child: titleSubtitleColumn })
+    
+    # Trailing
+    match this.trailing {
+      Some(widget) => {
+        children.push(Container {
+          margin: Some(EdgeInsets.only(left: 16)),
+          child: Some(widget)
+        })
+      }
+      None => {}
+    }
+    
+    return children
+  }
+}
+
+# ============================================================================
+# DIVIDER - Línea divisoria
+# ============================================================================
+
+"""
+Divider - Línea horizontal divisoria
+
+Ejemplos:
+  Divider {}
+  Divider { thickness: 2, color: Color.grey, indent: 16 }
+"""
+class Divider extends StatelessWidget {
+  # Altura total del divider (incluye padding)
+  height: Float = 16
+  
+  # Grosor de la línea
+  thickness: Float = 1
+  
+  # Indentación desde el inicio
+  indent: Float = 0
+  
+  # Indentación desde el final
+  endIndent: Float = 0
+  
+  # Color de la línea
+  color: Option<Color> = None
+  
+  fn build(context: BuildContext) -> Widget {
+    effectiveColor = this.color.unwrapOr(
+      context.theme.dividerColor
+    )
+    
+    return Container {
+      height: Some(this.height),
+      margin: Some(EdgeInsets.only(
+        left: this.indent,
+        right: this.endIndent
+      )),
+      decoration: BoxDecoration {
+        border: Border {
+          bottom: BorderSide {
+            color: effectiveColor,
+            width: this.thickness
+          }
+        }
+      }
+    }
+  }
+}
+
+"""VerticalDivider - Línea vertical divisoria"""
+class VerticalDivider extends StatelessWidget {
+  width: Float = 16
+  thickness: Float = 1
+  indent: Float = 0
+  endIndent: Float = 0
+  color: Option<Color> = None
+  
+  fn build(context: BuildContext) -> Widget {
+    effectiveColor = this.color.unwrapOr(
+      context.theme.dividerColor
+    )
+    
+    return Container {
+      width: Some(this.width),
+      margin: Some(EdgeInsets.only(
+        top: this.indent,
+        bottom: this.endIndent
+      )),
+      decoration: BoxDecoration {
+        border: Border {
+          right: BorderSide {
+            color: effectiveColor,
+            width: this.thickness
+          }
+        }
+      }
+    }
+  }
+}
+
+# ============================================================================
+# BADGE - Insignia de notificación
+# ============================================================================
+
+"""
+Badge - Pequeña insignia para notificaciones
+
+Ejemplos:
+  Badge {
+    content: Some(Text { data: "3" }),
+    child: Icon { name: "notifications" }
+  }
+"""
+class Badge extends StatelessWidget {
+  # Contenido del badge (típicamente número o texto)
+  content: Option<Widget> = None
+  
+  # Widget al que se le agrega el badge
+  child: Option<Widget> = None
+  
+  # Color de fondo del badge
+  backgroundColor: Color = Color.red
+  
+  # Color del texto
+  textColor: Color = Color.white
+  
+  # Tamaño del badge
+  size: Float = 20
+  
+  # Mostrar badge vacío (dot)
+  showEmptyBadge: Bool = false
+  
+  # Alineación del badge
+  alignment: Alignment = Alignment.topRight
+  
+  fn build(context: BuildContext) -> Widget {
+    # Si no hay contenido y no showEmptyBadge, solo mostrar child
+    if this.content.isNone() && !this.showEmptyBadge {
+      return this.child.unwrapOr(Container {})
+    }
+    
+    badgeWidget = Container {
+      width: Some(this.size),
+      height: Some(this.size),
+      alignment: Alignment.center,
+      decoration: BoxDecoration {
+        color: this.backgroundColor,
+        borderRadius: BorderRadius.circular(this.size / 2)
+      },
+      child: this.content
+    }
+    
+    # Si no hay child, solo mostrar badge
+    match this.child {
+      None => return badgeWidget
+      Some(childWidget) => {
+        return Stack {
+          children: [
+            childWidget,
+            Positioned {
+              top: Some(0),
+              right: Some(0),
+              child: badgeWidget
+            }
+          ]
+        }
+      }
+    }
+  }
+}
+
+# ============================================================================
+# CHIP - Chip de Material Design
+# ============================================================================
+
+"""
+Chip - Elemento compacto de información o acción
+
+Ejemplos:
+  Chip { label: "JavaScript" }
+  Chip {
+    avatar: Some(CircleAvatar { child: Text { data: "J" } }),
+    label: "John Doe",
+    onDeleted: Some(() => removeChip())
+  }
+"""
+class Chip extends StatefulWidget {
+  # Avatar al inicio
+  avatar: Option<Widget> = None
+  
+  # Label del chip
+  label: String
+  
+  # Widget al final (típicamente delete icon)
+  deleteIcon: Option<Widget> = None
+  
+  # Callback al presionar delete
+  onDeleted: Option<() -> void> = None
+  
+  # Callback al presionar chip
+  onPressed: Option<() -> void> = None
+  
+  # Color de fondo
+  backgroundColor: Option<Color> = None
+  
+  # Color del label
+  labelStyle: Option<TextStyle> = None
+  
+  # Padding
+  padding: EdgeInsets = EdgeInsets.symmetric(horizontal: 12, vertical: 6)
+  
+  # Elevación
+  elevation: Float = 0
+  
+  # Shape
+  shape: Option<ShapeBorder> = None
+  
+  # Estado
+  state isHovered: Bool = false
+  
+  fn handleDelete() -> void {
+    match this.onDeleted {
+      Some(callback) => callback()
+      None => {}
+    }
+  }
+  
+  fn handlePressed() -> void {
+    match this.onPressed {
+      Some(callback) => callback()
+      None => {}
+    }
+  }
+  
+  fn build(context: BuildContext) -> Widget {
+    effectiveBackgroundColor = this.backgroundColor.unwrapOr(
+      Color.grey.withOpacity(0.12)
+    )
+    
+    children: List<Widget> = []
+    
+    # Avatar
+    match this.avatar {
+      Some(avatarWidget) => {
+        children.push(Container {
+          margin: Some(EdgeInsets.only(right: 8)),
+          child: Some(avatarWidget)
+        })
+      }
+      None => {}
+    }
+    
+    # Label
+    children.push(
+      Text {
+        data: this.label,
+        style: this.labelStyle
+      }
+    )
+    
+    # Delete icon
+    if this.onDeleted.isSome() {
+      deleteIconWidget = this.deleteIcon.unwrapOr(
+        Icon { name: "close", size: 18 }
+      )
+      
+      children.push(
+        InkWell {
+          onTap: Some(() => this.handleDelete()),
+          child: Container {
+            margin: Some(EdgeInsets.only(left: 8)),
+            child: Some(deleteIconWidget)
+          }
+        }
+      )
+    }
+    
+    return Container {
+      padding: Some(this.padding),
+      decoration: BoxDecoration {
+        color: effectiveBackgroundColor,
+        borderRadius: BorderRadius.circular(16)
+      },
+      child: Some(
+        InkWell {
+          onTap: this.onPressed,
+          child: Row {
+            mainAxisSize: MainAxisSize.Min,
+            children: children
+          }
+        }
+      )
+    }
+  }
+}
+
+# ============================================================================
+# AVATAR - Avatar circular
+# ============================================================================
+
+"""
+CircleAvatar - Avatar circular para imágenes o iniciales
+
+Ejemplos:
+  CircleAvatar {
+    backgroundImage: Some(Image.network { url: "..." }),
+    radius: 20
+  }
+  
+  CircleAvatar {
+    backgroundColor: Color.blue,
+    child: Some(Text { data: "JD", style: TextStyle { color: Color.white } })
+  }
+"""
+class CircleAvatar extends StatelessWidget {
+  # Widget hijo (típicamente Text con iniciales)
+  child: Option<Widget> = None
+  
+  # Imagen de fondo
+  backgroundImage: Option<Image> = None
+  
+  # Color de fondo
+  backgroundColor: Option<Color> = None
+  
+  # Color de primer plano (para child)
+  foregroundColor: Option<Color> = None
+  
+  # Radio del avatar
+  radius: Float = 20
+  
+  # Radio mínimo
+  minRadius: Option<Float> = None
+  
+  # Radio máximo
+  maxRadius: Option<Float> = None
+  
+  fn build(context: BuildContext) -> Widget {
+    effectiveRadius = this.radius
+      .clamp(
+        this.minRadius.unwrapOr(0),
+        this.maxRadius.unwrapOr(Float.infinity)
+      )
+    
+    effectiveBackgroundColor = this.backgroundColor.unwrapOr(
+      context.theme.colorScheme.primary
+    )
+    
+    # Si hay imagen de fondo, usarla
+    decoration = match this.backgroundImage {
+      Some(image) => BoxDecoration {
+        color: effectiveBackgroundColor,
+        shape: BoxShape.Circle,
+        image: Some(DecorationImage {
+          image: image,
+          fit: BoxFit.Cover
+        })
+      }
+      None => BoxDecoration {
+        color: effectiveBackgroundColor,
+        shape: BoxShape.Circle
+      }
+    }
+    
+    return Container {
+      width: Some(effectiveRadius * 2),
+      height: Some(effectiveRadius * 2),
+      decoration: decoration,
+      alignment: Alignment.center,
+      child: this.child
+    }
+  }
+}
+
+# ============================================================================
+# ENUMS Y STRUCTS DE SOPORTE
+# ============================================================================
+
+"""Clip - Comportamiento de recorte"""
+enum Clip {
+  None         # Sin recorte
+  HardEdge     # Recorte duro
+  AntiAlias    # Anti-aliasing
+  AntiAliasWithSaveLayer  # Anti-aliasing con save layer
+}
+
+"""ShapeBorder - Forma de borde abstracta"""
+abstract class ShapeBorder {
+  borderRadius: BorderRadius
+}
+
+"""RoundedRectangleBorder - Borde rectangular redondeado"""
+class RoundedRectangleBorder extends ShapeBorder {
+  borderRadius: BorderRadius = BorderRadius.zero
+  side: BorderSide = BorderSide.none
+}
+
+"""BoxShape - Forma de box"""
+enum BoxShape {
+  Rectangle  # Rectangular
+  Circle     # Circular
+}
+
+"""DecorationImage - Imagen de decoración"""
+struct DecorationImage {
+  image: Image
+  fit: BoxFit = BoxFit.Cover
+  alignment: Alignment = Alignment.center
+  repeat: ImageRepeat = ImageRepeat.NoRepeat
+  opacity: Float = 1.0
+}
+
+"""ImageRepeat - Repetición de imagen"""
+enum ImageRepeat {
+  NoRepeat  # Sin repetir
+  Repeat    # Repetir en ambas direcciones
+  RepeatX   # Repetir horizontalmente
+  RepeatY   # Repetir verticalmente
+}
+
+"""InkWell - Widget con efecto de ink splash al tocar"""
+class InkWell extends StatelessWidget {
+  child: Widget
+  onTap: Option<() -> void> = None
+  onLongPress: Option<() -> void> = None
+  onDoubleTap: Option<() -> void> = None
+  
+  fn build(context: BuildContext) -> Widget {
+    # Implementación simplificada
+    return this.child
+  }
+}
+
+"""Stack - Layout de apilamiento (simplificado)"""
+class Stack extends StatelessWidget {
+  children: List<Widget> = []
+  alignment: Alignment = Alignment.topLeft
+  
+  fn build(context: BuildContext) -> Widget {
+    # Delegaría a ui/layout/stack.vela
+    return StackPrimitive {
+      children: this.children,
+      alignment: this.alignment
+    }
+  }
+}
+
+"""StackPrimitive - Primitivo de stack"""
+class StackPrimitive extends Widget {
+  children: List<Widget>
+  alignment: Alignment
+}
+
+"""Positioned - Posicionamiento dentro de Stack"""
+class Positioned extends StatelessWidget {
+  child: Widget
+  left: Option<Float> = None
+  top: Option<Float> = None
+  right: Option<Float> = None
+  bottom: Option<Float> = None
+  width: Option<Float> = None
+  height: Option<Float> = None
+  
+  fn build(context: BuildContext) -> Widget {
+    return this.child  # Simplificado
+  }
+}
+
+"""Expanded - Widget que se expande (simplificado)"""
+class Expanded extends StatelessWidget {
+  child: Widget
+  flex: Number = 1
+  
+  fn build(context: BuildContext) -> Widget {
+    return this.child  # Simplificado
+  }
+}
+
+"""Padding - Widget con padding (simplificado)"""
+class Padding extends StatelessWidget {
+  padding: EdgeInsets
+  child: Widget
+  
+  fn build(context: BuildContext) -> Widget {
+    return Container {
+      padding: Some(this.padding),
+      child: Some(this.child)
+    }
+  }
+}
+
+"""MainAxisSize - Tamaño del eje principal"""
+enum MainAxisSize {
+  Min  # Mínimo necesario
+  Max  # Máximo disponible
+}
+
+"""Border - Borde de box"""
+struct Border {
+  top: BorderSide = BorderSide.none
+  right: BorderSide = BorderSide.none
+  bottom: BorderSide = BorderSide.none
+  left: BorderSide = BorderSide.none
+}
+
+"""BorderSide - Lado de borde"""
+struct BorderSide {
+  color: Color = Color.black
+  width: Float = 1.0
+  style: BorderStyle = BorderStyle.Solid
+  
+  static none: BorderSide = BorderSide { width: 0, style: BorderStyle.None }
+}
+
+"""BorderStyle - Estilo de borde"""
+enum BorderStyle {
+  None    # Sin borde
+  Solid   # Sólido
+  Dashed  # Discontinuo
+  Dotted  # Punteado
+}
+
+"""BoxShadow - Sombra de box"""
+struct BoxShadow {
+  color: Color = Color.black
+  offset: Offset = Offset { dx: 0, dy: 0 }
+  blurRadius: Float = 0
+  spreadRadius: Float = 0
+}
+
+"""Offset - Desplazamiento 2D"""
+struct Offset {
+  dx: Float
+  dy: Float
+}
+
+# ============================================================================
+# HELPERS
+# ============================================================================
+
+"""Color - Definición de color"""
+struct Color {
+  red: Number
+  green: Number
+  blue: Number
+  alpha: Float
+  
+  static black: Color = Color { red: 0, green: 0, blue: 0, alpha: 1.0 }
+  static white: Color = Color { red: 255, green: 255, blue: 255, alpha: 1.0 }
+  static red: Color = Color { red: 255, green: 0, blue: 0, alpha: 1.0 }
+  static grey: Color = Color { red: 128, green: 128, blue: 128, alpha: 1.0 }
+  static yellow: Color = Color { red: 255, green: 255, blue: 0, alpha: 1.0 }
+  static transparent: Color = Color { red: 0, green: 0, blue: 0, alpha: 0.0 }
+  
+  fn withOpacity(opacity: Float) -> Color {
+    return Color {
+      red: this.red,
+      green: this.green,
+      blue: this.blue,
+      alpha: opacity
+    }
+  }
+}
+
+"""TextDirection - Dirección del texto"""
+enum TextDirection {
+  LTR  # Left to Right
+  RTL  # Right to Left
+}
+
+"""BoxFit - Ajuste de contenido"""
+enum BoxFit {
+  Fill
+  Contain
+  Cover
+  FitWidth
+  FitHeight
+  None
+  ScaleDown
+}
+
+"""Float - Tipo float con infinito"""
+struct Float {
+  static infinity: Float = Float { value: 999999999 }
+  value: Number = 0
+  
+  fn clamp(min: Float, max: Float) -> Float {
+    if this.value < min.value { return min }
+    if this.value > max.value { return max }
+    return this
+  }
+}
