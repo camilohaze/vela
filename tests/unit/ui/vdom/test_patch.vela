@@ -1,0 +1,937 @@
+"""
+Tests unitarios para Patching System
+
+Jira: VELA-583
+Sprint: Sprint 21 - Sistema Reactivo Integrado en UI
+"""
+
+import 'system:testing' show { describe, it, assert, beforeEach, afterEach }
+import 'ui:vdom:vnode' show { VNode, VTree, VDOMRenderer, VTextNode, VNodeFactory }
+import 'ui:vdom:diff' show { Patch, PatchType, DiffResult }
+import 'ui:vdom:patch' show { 
+  PatchContext, 
+  PatchStats, 
+  Patcher, 
+  BatchPatcher,
+  applyDiff,
+  applyDiffBatched,
+  applyPatch
+}
+import 'system:ui' show { Widget, BuildContext, StatefulWidget }
+import 'system:dom' show { document, DOMElement }
+
+
+# ============================================================================
+# TEST: PATCH CONTEXT
+# ============================================================================
+
+describe("PatchContext", () => {
+  
+  it("should initialize with renderer and parent element", () => {
+    buildContext = BuildContext {}
+    parentElement = document.createElement("div")
+    renderer = VDOMRenderer(buildContext)
+    
+    context = PatchContext(renderer, buildContext, parentElement)
+    
+    assert(context.renderer == renderer)
+    assert(context.buildContext == buildContext)
+    assert(context.parentElement == parentElement)
+    assert(context.elementMap.isEmpty())
+    assert(context.widgetMap.isEmpty())
+  })
+  
+  
+  it("should register and retrieve elements", () => {
+    buildContext = BuildContext {}
+    parentElement = document.createElement("div")
+    renderer = VDOMRenderer(buildContext)
+    context = PatchContext(renderer, buildContext, parentElement)
+    
+    vnode = VNode { type: "div", props: Map {}, children: [] }
+    element = document.createElement("div")
+    
+    context.registerElement(vnode, element)
+    
+    assert(context.getElement(vnode) == Some(element))
+    assert(vnode.domElement == Some(element))
+  })
+  
+  
+  it("should register and retrieve widgets", () => {
+    buildContext = BuildContext {}
+    parentElement = document.createElement("div")
+    renderer = VDOMRenderer(buildContext)
+    context = PatchContext(renderer, buildContext, parentElement)
+    
+    widget = TestWidget {}
+    vnode = VNode { type: "TestWidget", props: Map {}, children: [], widget: Some(widget) }
+    
+    context.registerWidget(vnode, widget)
+    
+    assert(context.getWidget(vnode) == Some(widget))
+  })
+})
+
+
+# ============================================================================
+# TEST: PATCH STATS
+# ============================================================================
+
+describe("PatchStats", () => {
+  
+  it("should initialize with zeros", () => {
+    stats = PatchStats {}
+    
+    assert(stats.created == 0)
+    assert(stats.removed == 0)
+    assert(stats.replaced == 0)
+    assert(stats.updated == 0)
+    assert(stats.reordered == 0)
+    assert(stats.textUpdated == 0)
+    assert(stats.propsUpdated == 0)
+    assert(stats.total() == 0)
+  })
+  
+  
+  it("should increment counters by type", () => {
+    stats = PatchStats {}
+    
+    stats.increment(PatchType.Create)
+    stats.increment(PatchType.Create)
+    stats.increment(PatchType.Remove)
+    stats.increment(PatchType.Update)
+    
+    assert(stats.created == 2)
+    assert(stats.removed == 1)
+    assert(stats.updated == 1)
+    assert(stats.total() == 4)
+  })
+  
+  
+  it("should calculate duration", () => {
+    stats = PatchStats {
+      startTime: 1000,
+      endTime: 1150
+    }
+    
+    assert(stats.duration() == 150)
+  })
+  
+  
+  it("should convert to string", () => {
+    stats = PatchStats {
+      created: 2,
+      removed: 1,
+      updated: 1,
+      startTime: 1000,
+      endTime: 1100
+    }
+    
+    str = stats.toString()
+    
+    assert(str.contains("Created: 2"))
+    assert(str.contains("Removed: 1"))
+    assert(str.contains("Total: 4"))
+    assert(str.contains("Duration: 100ms"))
+  })
+})
+
+
+# ============================================================================
+# TEST: PATCHER - CREATE
+# ============================================================================
+
+describe("Patcher - CREATE", () => {
+  
+  it("should create and append new element", () => {
+    buildContext = BuildContext {}
+    parentElement = document.createElement("div")
+    renderer = VDOMRenderer(buildContext)
+    context = PatchContext(renderer, buildContext, parentElement)
+    patcher = Patcher(context)
+    
+    vnode = VNode {
+      type: "span",
+      props: Map { "className": "test" },
+      children: []
+    }
+    
+    patch = Patch {
+      type: PatchType.Create,
+      node: vnode
+    }
+    
+    patcher.applyPatch(patch)
+    
+    # Verificar que se creó el elemento
+    assert(parentElement.children.length == 1)
+    assert(parentElement.children[0].tagName == "SPAN")
+    assert(parentElement.children[0].className == "test")
+    
+    # Verificar que se registró
+    assert(context.getElement(vnode).isSome())
+  })
+  
+  
+  it("should call mount() on widget", () => {
+    buildContext = BuildContext {}
+    parentElement = document.createElement("div")
+    renderer = VDOMRenderer(buildContext)
+    context = PatchContext(renderer, buildContext, parentElement)
+    patcher = Patcher(context)
+    
+    widget = TestWidget {}
+    vnode = VNode {
+      type: "TestWidget",
+      props: Map {},
+      children: [],
+      widget: Some(widget)
+    }
+    
+    patch = Patch {
+      type: PatchType.Create,
+      node: vnode
+    }
+    
+    patcher.applyPatch(patch)
+    
+    # Verificar que se llamó mount()
+    assert(widget.mounted == true)
+  })
+})
+
+
+# ============================================================================
+# TEST: PATCHER - REMOVE
+# ============================================================================
+
+describe("Patcher - REMOVE", () => {
+  
+  it("should remove element from DOM", () => {
+    buildContext = BuildContext {}
+    parentElement = document.createElement("div")
+    renderer = VDOMRenderer(buildContext)
+    context = PatchContext(renderer, buildContext, parentElement)
+    patcher = Patcher(context)
+    
+    # Crear elemento manualmente
+    element = document.createElement("span")
+    parentElement.appendChild(element)
+    
+    vnode = VNode { type: "span", props: Map {}, children: [] }
+    context.registerElement(vnode, element)
+    
+    patch = Patch {
+      type: PatchType.Remove,
+      node: vnode
+    }
+    
+    patcher.applyPatch(patch)
+    
+    # Verificar que se removió
+    assert(parentElement.children.length == 0)
+    assert(context.getElement(vnode).isNone())
+  })
+  
+  
+  it("should call destroy() on widget", () => {
+    buildContext = BuildContext {}
+    parentElement = document.createElement("div")
+    renderer = VDOMRenderer(buildContext)
+    context = PatchContext(renderer, buildContext, parentElement)
+    patcher = Patcher(context)
+    
+    widget = TestWidget {}
+    element = document.createElement("div")
+    parentElement.appendChild(element)
+    
+    vnode = VNode {
+      type: "TestWidget",
+      props: Map {},
+      children: [],
+      widget: Some(widget)
+    }
+    
+    context.registerElement(vnode, element)
+    context.registerWidget(vnode, widget)
+    
+    patch = Patch {
+      type: PatchType.Remove,
+      node: vnode
+    }
+    
+    patcher.applyPatch(patch)
+    
+    # Verificar que se llamó destroy()
+    assert(widget.destroyed == true)
+  })
+})
+
+
+# ============================================================================
+# TEST: PATCHER - REPLACE
+# ============================================================================
+
+describe("Patcher - REPLACE", () => {
+  
+  it("should replace element with new one", () => {
+    buildContext = BuildContext {}
+    parentElement = document.createElement("div")
+    renderer = VDOMRenderer(buildContext)
+    context = PatchContext(renderer, buildContext, parentElement)
+    patcher = Patcher(context)
+    
+    # Elemento viejo
+    oldElement = document.createElement("span")
+    oldElement.textContent = "Old"
+    parentElement.appendChild(oldElement)
+    
+    oldNode = VNode {
+      type: "span",
+      props: Map {},
+      children: []
+    }
+    context.registerElement(oldNode, oldElement)
+    
+    # Elemento nuevo
+    newNode = VNode {
+      type: "div",
+      props: Map { "className": "new" },
+      children: []
+    }
+    
+    patch = Patch {
+      type: PatchType.Replace,
+      oldNode: Some(oldNode),
+      newNode: Some(newNode)
+    }
+    
+    patcher.applyPatch(patch)
+    
+    # Verificar reemplazo
+    assert(parentElement.children.length == 1)
+    assert(parentElement.children[0].tagName == "DIV")
+    assert(parentElement.children[0].className == "new")
+  })
+  
+  
+  it("should call destroy() on old widget and mount() on new widget", () => {
+    buildContext = BuildContext {}
+    parentElement = document.createElement("div")
+    renderer = VDOMRenderer(buildContext)
+    context = PatchContext(renderer, buildContext, parentElement)
+    patcher = Patcher(context)
+    
+    # Widget viejo
+    oldWidget = TestWidget {}
+    oldElement = document.createElement("div")
+    parentElement.appendChild(oldElement)
+    
+    oldNode = VNode {
+      type: "TestWidget",
+      props: Map {},
+      children: [],
+      widget: Some(oldWidget)
+    }
+    context.registerElement(oldNode, oldElement)
+    context.registerWidget(oldNode, oldWidget)
+    
+    # Widget nuevo
+    newWidget = TestWidget {}
+    newNode = VNode {
+      type: "TestWidget",
+      props: Map {},
+      children: [],
+      widget: Some(newWidget)
+    }
+    
+    patch = Patch {
+      type: PatchType.Replace,
+      oldNode: Some(oldNode),
+      newNode: Some(newNode)
+    }
+    
+    patcher.applyPatch(patch)
+    
+    # Verificar lifecycle hooks
+    assert(oldWidget.destroyed == true)
+    assert(newWidget.mounted == true)
+  })
+})
+
+
+# ============================================================================
+# TEST: PATCHER - UPDATE
+# ============================================================================
+
+describe("Patcher - UPDATE", () => {
+  
+  it("should update element attributes", () => {
+    buildContext = BuildContext {}
+    parentElement = document.createElement("div")
+    renderer = VDOMRenderer(buildContext)
+    context = PatchContext(renderer, buildContext, parentElement)
+    patcher = Patcher(context)
+    
+    element = document.createElement("div")
+    element.className = "old"
+    parentElement.appendChild(element)
+    
+    vnode = VNode {
+      type: "div",
+      props: Map { "className": "old" },
+      children: []
+    }
+    context.registerElement(vnode, element)
+    
+    patch = Patch {
+      type: PatchType.Update,
+      node: vnode,
+      props: Map { "className": "new", "id": "test-id" }
+    }
+    
+    patcher.applyPatch(patch)
+    
+    # Verificar actualización
+    assert(element.className == "new")
+    assert(element.id == "test-id")
+  })
+  
+  
+  it("should call update() on widget", () => {
+    buildContext = BuildContext {}
+    parentElement = document.createElement("div")
+    renderer = VDOMRenderer(buildContext)
+    context = PatchContext(renderer, buildContext, parentElement)
+    patcher = Patcher(context)
+    
+    widget = TestWidget {}
+    element = document.createElement("div")
+    parentElement.appendChild(element)
+    
+    vnode = VNode {
+      type: "TestWidget",
+      props: Map {},
+      children: [],
+      widget: Some(widget)
+    }
+    context.registerElement(vnode, element)
+    context.registerWidget(vnode, widget)
+    
+    patch = Patch {
+      type: PatchType.Update,
+      node: vnode,
+      props: Map { "title": "Updated" }
+    }
+    
+    patcher.applyPatch(patch)
+    
+    # Verificar que se llamó update()
+    assert(widget.updated == true)
+  })
+})
+
+
+# ============================================================================
+# TEST: PATCHER - TEXT
+# ============================================================================
+
+describe("Patcher - TEXT", () => {
+  
+  it("should update text content", () => {
+    buildContext = BuildContext {}
+    parentElement = document.createElement("div")
+    renderer = VDOMRenderer(buildContext)
+    context = PatchContext(renderer, buildContext, parentElement)
+    patcher = Patcher(context)
+    
+    element = document.createElement("span")
+    element.textContent = "Old Text"
+    parentElement.appendChild(element)
+    
+    vnode = VNode {
+      type: "span",
+      props: Map {},
+      children: []
+    }
+    context.registerElement(vnode, element)
+    
+    patch = Patch {
+      type: PatchType.Text,
+      node: vnode,
+      props: Map { "text": "New Text" }
+    }
+    
+    patcher.applyPatch(patch)
+    
+    # Verificar actualización
+    assert(element.textContent == "New Text")
+  })
+})
+
+
+# ============================================================================
+# TEST: PATCHER - PROPS
+# ============================================================================
+
+describe("Patcher - PROPS", () => {
+  
+  it("should update only props", () => {
+    buildContext = BuildContext {}
+    parentElement = document.createElement("div")
+    renderer = VDOMRenderer(buildContext)
+    context = PatchContext(renderer, buildContext, parentElement)
+    patcher = Patcher(context)
+    
+    element = document.createElement("input")
+    element.type = "text"
+    element.value = "old"
+    parentElement.appendChild(element)
+    
+    vnode = VNode {
+      type: "input",
+      props: Map { "type": "text", "value": "old" },
+      children: []
+    }
+    context.registerElement(vnode, element)
+    
+    patch = Patch {
+      type: PatchType.Props,
+      node: vnode,
+      props: Map { "value": "new", "placeholder": "Enter text" }
+    }
+    
+    patcher.applyPatch(patch)
+    
+    # Verificar actualización
+    assert(element.value == "new")
+    assert(element.placeholder == "Enter text")
+  })
+  
+  
+  it("should handle style updates", () => {
+    buildContext = BuildContext {}
+    parentElement = document.createElement("div")
+    renderer = VDOMRenderer(buildContext)
+    context = PatchContext(renderer, buildContext, parentElement)
+    patcher = Patcher(context)
+    
+    element = document.createElement("div")
+    parentElement.appendChild(element)
+    
+    vnode = VNode {
+      type: "div",
+      props: Map {},
+      children: []
+    }
+    context.registerElement(vnode, element)
+    
+    patch = Patch {
+      type: PatchType.Props,
+      node: vnode,
+      props: Map {
+        "style": Map {
+          "color": "red",
+          "fontSize": "16px"
+        }
+      }
+    }
+    
+    patcher.applyPatch(patch)
+    
+    # Verificar estilos
+    assert(element.style.color == "red")
+    assert(element.style.fontSize == "16px")
+  })
+  
+  
+  it("should handle event listeners", () => {
+    buildContext = BuildContext {}
+    parentElement = document.createElement("div")
+    renderer = VDOMRenderer(buildContext)
+    context = PatchContext(renderer, buildContext, parentElement)
+    patcher = Patcher(context)
+    
+    element = document.createElement("button")
+    parentElement.appendChild(element)
+    
+    vnode = VNode {
+      type: "button",
+      props: Map {},
+      children: []
+    }
+    context.registerElement(vnode, element)
+    
+    clicked = false
+    handler = () => { clicked = true }
+    
+    patch = Patch {
+      type: PatchType.Props,
+      node: vnode,
+      props: Map {
+        "onClick": handler
+      }
+    }
+    
+    patcher.applyPatch(patch)
+    
+    # Simular click
+    element.click()
+    
+    # Verificar que se llamó el handler
+    assert(clicked == true)
+  })
+})
+
+
+# ============================================================================
+# TEST: PATCHER - REORDER
+# ============================================================================
+
+describe("Patcher - REORDER", () => {
+  
+  it("should reorder children by keys", () => {
+    buildContext = BuildContext {}
+    parentElement = document.createElement("div")
+    renderer = VDOMRenderer(buildContext)
+    context = PatchContext(renderer, buildContext, parentElement)
+    patcher = Patcher(context)
+    
+    # Crear children con keys
+    child1 = document.createElement("span")
+    child1.textContent = "1"
+    child2 = document.createElement("span")
+    child2.textContent = "2"
+    child3 = document.createElement("span")
+    child3.textContent = "3"
+    
+    parentElement.appendChild(child1)
+    parentElement.appendChild(child2)
+    parentElement.appendChild(child3)
+    
+    # VNodes viejos (orden: 1, 2, 3)
+    vnode1 = VNode { type: "span", props: Map {}, children: [], key: Some("1") }
+    vnode2 = VNode { type: "span", props: Map {}, children: [], key: Some("2") }
+    vnode3 = VNode { type: "span", props: Map {}, children: [], key: Some("3") }
+    
+    context.registerElement(vnode1, child1)
+    context.registerElement(vnode2, child2)
+    context.registerElement(vnode3, child3)
+    
+    oldNode = VNode {
+      type: "div",
+      props: Map {},
+      children: [vnode1, vnode2, vnode3]
+    }
+    context.registerElement(oldNode, parentElement)
+    
+    # VNodes nuevos (orden: 3, 1, 2)
+    newNode = VNode {
+      type: "div",
+      props: Map {},
+      children: [vnode3, vnode1, vnode2]
+    }
+    
+    patch = Patch {
+      type: PatchType.Reorder,
+      oldNode: Some(oldNode),
+      newNode: Some(newNode)
+    }
+    
+    patcher.applyPatch(patch)
+    
+    # Verificar orden nuevo
+    assert(parentElement.children[0].textContent == "3")
+    assert(parentElement.children[1].textContent == "1")
+    assert(parentElement.children[2].textContent == "2")
+  })
+})
+
+
+# ============================================================================
+# TEST: BATCH PATCHER
+# ============================================================================
+
+describe("BatchPatcher", () => {
+  
+  it("should schedule patches for batched application", async () => {
+    buildContext = BuildContext {}
+    parentElement = document.createElement("div")
+    renderer = VDOMRenderer(buildContext)
+    context = PatchContext(renderer, buildContext, parentElement)
+    batchPatcher = BatchPatcher(context)
+    
+    vnode1 = VNode { type: "div", props: Map {}, children: [] }
+    vnode2 = VNode { type: "span", props: Map {}, children: [] }
+    
+    patch1 = Patch { type: PatchType.Create, node: vnode1 }
+    patch2 = Patch { type: PatchType.Create, node: vnode2 }
+    
+    # Programar patches
+    batchPatcher.schedulePatch(patch1)
+    batchPatcher.schedulePatch(patch2)
+    
+    # Verificar que están en queue
+    assert(batchPatcher.pendingPatches.length == 2)
+    assert(batchPatcher.frameScheduled == true)
+    
+    # Esperar frame
+    await waitForFrame()
+    
+    # Verificar que se aplicaron
+    assert(parentElement.children.length == 2)
+    assert(batchPatcher.pendingPatches.isEmpty())
+  })
+  
+  
+  it("should flush sync", () => {
+    buildContext = BuildContext {}
+    parentElement = document.createElement("div")
+    renderer = VDOMRenderer(buildContext)
+    context = PatchContext(renderer, buildContext, parentElement)
+    batchPatcher = BatchPatcher(context)
+    
+    vnode = VNode { type: "div", props: Map {}, children: [] }
+    patch = Patch { type: PatchType.Create, node: vnode }
+    
+    # Programar y flush inmediato
+    batchPatcher.schedulePatch(patch)
+    stats = batchPatcher.flushSync()
+    
+    # Verificar aplicación inmediata
+    assert(parentElement.children.length == 1)
+    assert(stats.created == 1)
+    assert(batchPatcher.pendingPatches.isEmpty())
+  })
+})
+
+
+# ============================================================================
+# TEST: PUBLIC API
+# ============================================================================
+
+describe("Public API", () => {
+  
+  it("applyDiff should apply all patches", () => {
+    buildContext = BuildContext {}
+    parentElement = document.createElement("div")
+    
+    # Crear DiffResult con patches
+    patches = [
+      Patch {
+        type: PatchType.Create,
+        node: VNode { type: "div", props: Map {}, children: [] }
+      },
+      Patch {
+        type: PatchType.Create,
+        node: VNode { type: "span", props: Map {}, children: [] }
+      }
+    ]
+    
+    diffResult = DiffResult { patches }
+    
+    stats = applyDiff(diffResult, parentElement, buildContext)
+    
+    # Verificar aplicación
+    assert(parentElement.children.length == 2)
+    assert(stats.created == 2)
+  })
+  
+  
+  it("applyDiffBatched should return BatchPatcher", () => {
+    buildContext = BuildContext {}
+    parentElement = document.createElement("div")
+    
+    patches = [
+      Patch {
+        type: PatchType.Create,
+        node: VNode { type: "div", props: Map {}, children: [] }
+      }
+    ]
+    
+    diffResult = DiffResult { patches }
+    
+    batchPatcher = applyDiffBatched(diffResult, parentElement, buildContext)
+    
+    # Verificar que se programó
+    assert(batchPatcher.pendingPatches.length == 1)
+    assert(batchPatcher.frameScheduled == true)
+  })
+  
+  
+  it("applyPatch should apply single patch", () => {
+    buildContext = BuildContext {}
+    parentElement = document.createElement("div")
+    
+    patch = Patch {
+      type: PatchType.Create,
+      node: VNode { type: "div", props: Map {}, children: [] }
+    }
+    
+    applyPatch(patch, parentElement, buildContext)
+    
+    # Verificar aplicación
+    assert(parentElement.children.length == 1)
+  })
+})
+
+
+# ============================================================================
+# INTEGRATION TESTS - REAL WORLD
+# ============================================================================
+
+describe("Integration - Real World", () => {
+  
+  it("should handle todo list update", () => {
+    buildContext = BuildContext {}
+    parentElement = document.createElement("ul")
+    renderer = VDOMRenderer(buildContext)
+    context = PatchContext(renderer, buildContext, parentElement)
+    patcher = Patcher(context)
+    
+    # Árbol inicial: 2 items
+    oldTree = VNode {
+      type: "ul",
+      props: Map {},
+      children: [
+        VNode { type: "li", props: Map {}, children: [], key: Some("1") },
+        VNode { type: "li", props: Map {}, children: [], key: Some("2") }
+      ]
+    }
+    
+    # Crear elementos
+    patches = [
+      Patch { type: PatchType.Create, node: oldTree.children[0] },
+      Patch { type: PatchType.Create, node: oldTree.children[1] }
+    ]
+    
+    patcher.applyPatches(patches)
+    
+    # Verificar 2 items
+    assert(parentElement.children.length == 2)
+    
+    # Árbol nuevo: agregar 1 item
+    newTree = VNode {
+      type: "ul",
+      props: Map {},
+      children: [
+        oldTree.children[0],
+        oldTree.children[1],
+        VNode { type: "li", props: Map {}, children: [], key: Some("3") }
+      ]
+    }
+    
+    # Aplicar patch de creación
+    createPatch = Patch { type: PatchType.Create, node: newTree.children[2] }
+    patcher.applyPatch(createPatch)
+    
+    # Verificar 3 items
+    assert(parentElement.children.length == 3)
+  })
+  
+  
+  it("should handle form field update", () => {
+    buildContext = BuildContext {}
+    parentElement = document.createElement("form")
+    renderer = VDOMRenderer(buildContext)
+    context = PatchContext(renderer, buildContext, parentElement)
+    patcher = Patcher(context)
+    
+    # Input inicial
+    input = document.createElement("input")
+    input.type = "text"
+    input.value = ""
+    parentElement.appendChild(input)
+    
+    vnode = VNode {
+      type: "input",
+      props: Map { "type": "text", "value": "" },
+      children: []
+    }
+    context.registerElement(vnode, input)
+    
+    # Actualizar value
+    patch = Patch {
+      type: PatchType.Props,
+      node: vnode,
+      props: Map { "value": "Hello Vela" }
+    }
+    
+    patcher.applyPatch(patch)
+    
+    # Verificar actualización
+    assert(input.value == "Hello Vela")
+  })
+})
+
+
+# ============================================================================
+# PERFORMANCE TESTS
+# ============================================================================
+
+describe("Performance", () => {
+  
+  it("should apply 100 CREATE patches < 50ms", () => {
+    buildContext = BuildContext {}
+    parentElement = document.createElement("div")
+    renderer = VDOMRenderer(buildContext)
+    context = PatchContext(renderer, buildContext, parentElement)
+    patcher = Patcher(context)
+    
+    # Generar 100 patches
+    patches = (0..100).map(i => {
+      return Patch {
+        type: PatchType.Create,
+        node: VNode {
+          type: "div",
+          props: Map { "key": "${i}" },
+          children: []
+        }
+      }
+    })
+    
+    startTime = Date.now()
+    stats = patcher.applyPatches(patches)
+    duration = Date.now() - startTime
+    
+    assert(duration < 50, "Duration ${duration}ms should be < 50ms")
+    assert(stats.created == 100)
+  })
+})
+
+
+# ============================================================================
+# HELPERS
+# ============================================================================
+
+class TestWidget extends StatefulWidget {
+  mounted: Bool = false
+  destroyed: Bool = false
+  updated: Bool = false
+  
+  override fn mount() -> void {
+    this.mounted = true
+  }
+  
+  override fn destroy() -> void {
+    this.destroyed = true
+  }
+  
+  override fn update() -> void {
+    this.updated = true
+  }
+  
+  override fn build(context: BuildContext) -> Widget {
+    return Container {}
+  }
+}
+
+
+fn waitForFrame() -> Promise<void> {
+  return Promise((resolve) => {
+    requestAnimationFrame(() => {
+      resolve()
+    })
+  })
+}

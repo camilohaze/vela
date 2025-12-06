@@ -1,0 +1,728 @@
+"""
+TASK-061: Implementar Patching System
+
+Implementación de: VELA-583
+Historia: Sprint 21 - Sistema Reactivo Integrado en UI
+Fecha: 2025-12-06
+
+Descripción:
+Sistema que aplica patches (generados por el diffing algorithm) al DOM real.
+Maneja todas las operaciones: CREATE, REMOVE, REPLACE, UPDATE, REORDER, TEXT, PROPS.
+Incluye optimizaciones y manejo de lifecycle hooks de widgets.
+
+Inspiración:
+- React: Commit phase del reconciler
+- Vue 3: Patch application con scheduler
+- Preact: Direct DOM manipulation
+- Svelte: Compiled updates (no runtime patching)
+"""
+
+import 'ui:vdom:vnode' show { VNode, VTree, VDOMRenderer }
+import 'ui:vdom:diff' show { Patch, PatchType, DiffResult }
+import 'system:ui' show { Widget, BuildContext }
+
+
+# ============================================================================
+# PATCH CONTEXT - CONTEXTO DE APLICACIÓN DE PATCHES
+# ============================================================================
+
+"""
+Contexto compartido durante la aplicación de patches.
+Mantiene referencias a widgets montados y elementos DOM.
+"""
+class PatchContext {
+  # Renderer para crear elementos DOM
+  renderer: VDOMRenderer
+  
+  # Build context
+  buildContext: BuildContext
+  
+  # Map de VNode -> DOMElement (para lookup rápido)
+  elementMap: Map<VNode, DOMElement> = Map {}
+  
+  # Map de VNode -> Widget (para lifecycle hooks)
+  widgetMap: Map<VNode, Widget> = Map {}
+  
+  # Parent element donde aplicar patches
+  parentElement: DOMElement
+  
+  # Stats para debugging
+  stats: PatchStats = PatchStats {}
+  
+  
+  constructor(renderer: VDOMRenderer, buildContext: BuildContext, parentElement: DOMElement) {
+    this.renderer = renderer
+    this.buildContext = buildContext
+    this.parentElement = parentElement
+  }
+  
+  
+  """
+  Registrar elemento DOM para un VNode.
+  """
+  fn registerElement(vnode: VNode, element: DOMElement) -> void {
+    this.elementMap.set(vnode, element)
+    vnode.domElement = Some(element)
+  }
+  
+  
+  """
+  Obtener elemento DOM de un VNode.
+  """
+  fn getElement(vnode: VNode) -> Option<DOMElement> {
+    match this.elementMap.get(vnode) {
+      Some(element) => Some(element)
+      None => vnode.domElement
+    }
+  }
+  
+  
+  """
+  Registrar widget para un VNode.
+  """
+  fn registerWidget(vnode: VNode, widget: Widget) -> void {
+    this.widgetMap.set(vnode, widget)
+  }
+  
+  
+  """
+  Obtener widget de un VNode.
+  """
+  fn getWidget(vnode: VNode) -> Option<Widget> {
+    this.widgetMap.get(vnode)
+  }
+}
+
+
+# ============================================================================
+# PATCH STATS - ESTADÍSTICAS DE PATCHING
+# ============================================================================
+
+"""
+Estadísticas de la operación de patching.
+Útil para debugging y profiling.
+"""
+struct PatchStats {
+  created: Number = 0
+  removed: Number = 0
+  replaced: Number = 0
+  updated: Number = 0
+  reordered: Number = 0
+  textUpdated: Number = 0
+  propsUpdated: Number = 0
+  
+  startTime: Number = 0
+  endTime: Number = 0
+  
+  
+  """
+  Incrementar contador de tipo específico.
+  """
+  fn increment(type: PatchType) -> void {
+    match type {
+      PatchType.Create => this.created = this.created + 1
+      PatchType.Remove => this.removed = this.removed + 1
+      PatchType.Replace => this.replaced = this.replaced + 1
+      PatchType.Update => this.updated = this.updated + 1
+      PatchType.Reorder => this.reordered = this.reordered + 1
+      PatchType.Text => this.textUpdated = this.textUpdated + 1
+      PatchType.Props => this.propsUpdated = this.propsUpdated + 1
+    }
+  }
+  
+  
+  """
+  Calcular duración total.
+  """
+  fn duration() -> Number {
+    return this.endTime - this.startTime
+  }
+  
+  
+  """
+  Total de patches aplicados.
+  """
+  fn total() -> Number {
+    return this.created + this.removed + this.replaced + 
+           this.updated + this.reordered + this.textUpdated + 
+           this.propsUpdated
+  }
+  
+  
+  """
+  Convertir a string para debugging.
+  """
+  fn toString() -> String {
+    return """
+PatchStats:
+  Created: ${this.created}
+  Removed: ${this.removed}
+  Replaced: ${this.replaced}
+  Updated: ${this.updated}
+  Reordered: ${this.reordered}
+  Text: ${this.textUpdated}
+  Props: ${this.propsUpdated}
+  ---
+  Total: ${this.total()}
+  Duration: ${this.duration()}ms
+"""
+  }
+}
+
+
+# ============================================================================
+# PATCHER - APLICADOR DE PATCHES
+# ============================================================================
+
+"""
+Clase principal que aplica patches al DOM.
+"""
+class Patcher {
+  context: PatchContext
+  
+  
+  constructor(context: PatchContext) {
+    this.context = context
+  }
+  
+  
+  """
+  Aplicar lista de patches.
+  """
+  fn applyPatches(patches: List<Patch>) -> PatchStats {
+    this.context.stats.startTime = Date.now()
+    
+    # Aplicar cada patch en orden
+    patches.forEach(patch => {
+      this.applyPatch(patch)
+      this.context.stats.increment(patch.type)
+    })
+    
+    this.context.stats.endTime = Date.now()
+    
+    return this.context.stats
+  }
+  
+  
+  """
+  Aplicar un patch individual.
+  """
+  fn applyPatch(patch: Patch) -> void {
+    match patch.type {
+      PatchType.Create => this.patchCreate(patch)
+      PatchType.Remove => this.patchRemove(patch)
+      PatchType.Replace => this.patchReplace(patch)
+      PatchType.Update => this.patchUpdate(patch)
+      PatchType.Reorder => this.patchReorder(patch)
+      PatchType.Text => this.patchText(patch)
+      PatchType.Props => this.patchProps(patch)
+    }
+  }
+  
+  
+  # --------------------------------------------------------------------------
+  # PATCH OPERATIONS
+  # --------------------------------------------------------------------------
+  
+  """
+  CREATE: Crear y montar nuevo nodo.
+  """
+  fn patchCreate(patch: Patch) -> void {
+    vnode = patch.node
+    
+    # Renderizar VNode a elemento DOM
+    element = this.context.renderer.render(vnode)
+    
+    # Registrar elemento
+    this.context.registerElement(vnode, element)
+    
+    # Si el VNode tiene widget, ejecutar lifecycle hooks
+    match vnode.widget {
+      Some(widget) => {
+        this.context.registerWidget(vnode, widget)
+        widget.mount()
+      }
+      None => {}
+    }
+    
+    # Insertar en DOM
+    this.context.parentElement.appendChild(element)
+  }
+  
+  
+  """
+  REMOVE: Desmontar y remover nodo.
+  """
+  fn patchRemove(patch: Patch) -> void {
+    vnode = patch.node
+    
+    # Si el VNode tiene widget, ejecutar lifecycle hooks
+    match this.context.getWidget(vnode) {
+      Some(widget) => {
+        widget.destroy()
+      }
+      None => {}
+    }
+    
+    # Obtener elemento DOM
+    match this.context.getElement(vnode) {
+      Some(element) => {
+        # Remover del DOM
+        match element.parentNode {
+          Some(parent) => parent.removeChild(element)
+          None => {}
+        }
+        
+        # Limpiar referencias
+        this.context.elementMap.delete(vnode)
+      }
+      None => {
+        # Elemento no encontrado (warning)
+        console.warn("REMOVE: Element not found for VNode ${vnode.type}")
+      }
+    }
+  }
+  
+  
+  """
+  REPLACE: Reemplazar nodo completamente.
+  """
+  fn patchReplace(patch: Patch) -> void {
+    match (patch.oldNode, patch.newNode) {
+      (Some(oldNode), Some(newNode)) => {
+        # Desmontar nodo viejo
+        this.unmountNode(oldNode)
+        
+        # Obtener elemento viejo
+        match this.context.getElement(oldNode) {
+          Some(oldElement) => {
+            # Renderizar nodo nuevo
+            newElement = this.context.renderer.render(newNode)
+            
+            # Registrar elemento nuevo
+            this.context.registerElement(newNode, newElement)
+            
+            # Montar widget nuevo (si existe)
+            match newNode.widget {
+              Some(widget) => {
+                this.context.registerWidget(newNode, widget)
+                widget.mount()
+              }
+              None => {}
+            }
+            
+            # Reemplazar en DOM
+            match oldElement.parentNode {
+              Some(parent) => {
+                parent.replaceChild(newElement, oldElement)
+              }
+              None => {
+                console.warn("REPLACE: Parent not found")
+              }
+            }
+            
+            # Limpiar referencias viejas
+            this.context.elementMap.delete(oldNode)
+          }
+          None => {
+            console.warn("REPLACE: Old element not found")
+          }
+        }
+      }
+      _ => {
+        console.error("REPLACE: Missing oldNode or newNode")
+      }
+    }
+  }
+  
+  
+  """
+  UPDATE: Actualizar nodo existente.
+  """
+  fn patchUpdate(patch: Patch) -> void {
+    vnode = patch.node
+    
+    # Obtener elemento
+    match this.context.getElement(vnode) {
+      Some(element) => {
+        # Actualizar props
+        patch.props.forEach((key, value) => {
+          this.updateAttribute(element, key, value)
+        })
+        
+        # Si hay widget, ejecutar update hook
+        match this.context.getWidget(vnode) {
+          Some(widget) => {
+            widget.update()
+          }
+          None => {}
+        }
+      }
+      None => {
+        console.warn("UPDATE: Element not found")
+      }
+    }
+  }
+  
+  
+  """
+  REORDER: Reordenar children.
+  """
+  fn patchReorder(patch: Patch) -> void {
+    match (patch.oldNode, patch.newNode) {
+      (Some(oldNode), Some(newNode)) => {
+        # Obtener elemento padre
+        match this.context.getElement(oldNode) {
+          Some(parentElement) => {
+            # Estrategia: remover todos los children y re-insertarlos en orden nuevo
+            oldChildren = oldNode.children
+            newChildren = newNode.children
+            
+            # Crear map de key -> element
+            elementsByKey = Map<String, DOMElement> {}
+            
+            oldChildren.forEach(child => {
+              match (child.key, this.context.getElement(child)) {
+                (Some(key), Some(element)) => {
+                  elementsByKey.set(key, element)
+                  parentElement.removeChild(element)
+                }
+                _ => {}
+              }
+            })
+            
+            # Re-insertar en orden nuevo
+            newChildren.forEach(child => {
+              match child.key {
+                Some(key) => {
+                  match elementsByKey.get(key) {
+                    Some(element) => {
+                      parentElement.appendChild(element)
+                    }
+                    None => {
+                      # Child nuevo (no debería pasar en REORDER)
+                      console.warn("REORDER: New child found")
+                    }
+                  }
+                }
+                None => {}
+              }
+            })
+          }
+          None => {
+            console.warn("REORDER: Parent element not found")
+          }
+        }
+      }
+      _ => {
+        console.error("REORDER: Missing oldNode or newNode")
+      }
+    }
+  }
+  
+  
+  """
+  TEXT: Actualizar contenido de texto.
+  """
+  fn patchText(patch: Patch) -> void {
+    vnode = patch.node
+    
+    # Obtener elemento
+    match this.context.getElement(vnode) {
+      Some(element) => {
+        newText = patch.props.get("text").unwrapOr("")
+        
+        # Si es text node, actualizar textContent
+        if element.nodeType == Node.TEXT_NODE {
+          element.textContent = newText
+        } else {
+          # Si es elemento, actualizar innerText
+          element.innerText = newText
+        }
+      }
+      None => {
+        console.warn("TEXT: Element not found")
+      }
+    }
+  }
+  
+  
+  """
+  PROPS: Actualizar solo props.
+  """
+  fn patchProps(patch: Patch) -> void {
+    vnode = patch.node
+    
+    # Obtener elemento
+    match this.context.getElement(vnode) {
+      Some(element) => {
+        # Actualizar cada prop
+        patch.props.forEach((key, value) => {
+          this.updateAttribute(element, key, value)
+        })
+      }
+      None => {
+        console.warn("PROPS: Element not found")
+      }
+    }
+  }
+  
+  
+  # --------------------------------------------------------------------------
+  # HELPERS
+  # --------------------------------------------------------------------------
+  
+  """
+  Actualizar atributo de elemento DOM.
+  """
+  fn updateAttribute(element: DOMElement, key: String, value: Any) -> void {
+    # Casos especiales
+    match key {
+      "className" | "class" => {
+        element.className = value.toString()
+      }
+      "style" => {
+        this.updateStyle(element, value)
+      }
+      "value" => {
+        # Input value
+        element.value = value
+      }
+      "checked" => {
+        # Checkbox/radio checked
+        element.checked = value
+      }
+      "disabled" => {
+        element.disabled = value
+      }
+      _ => {
+        # Eventos (onClick, onInput, etc.)
+        if key.startsWith("on") {
+          eventName = key.substring(2).toLowerCase()
+          
+          # Remover listener viejo (si existe)
+          if element.hasOwnProperty("_velaListeners") {
+            oldListener = element._velaListeners.get(eventName)
+            if oldListener.isSome() {
+              element.removeEventListener(eventName, oldListener.unwrap())
+            }
+          } else {
+            element._velaListeners = Map {}
+          }
+          
+          # Agregar listener nuevo
+          if value.isSome() {
+            element.addEventListener(eventName, value)
+            element._velaListeners.set(eventName, value)
+          }
+        }
+        # Atributo normal
+        else {
+          if value.isSome() {
+            element.setAttribute(key, value.toString())
+          } else {
+            element.removeAttribute(key)
+          }
+        }
+      }
+    }
+  }
+  
+  
+  """
+  Actualizar estilo de elemento.
+  """
+  fn updateStyle(element: DOMElement, styleValue: Any) -> void {
+    # Si es string, asignar directamente
+    if typeof(styleValue) == "string" {
+      element.style.cssText = styleValue
+      return
+    }
+    
+    # Si es objeto, asignar cada prop
+    if typeof(styleValue) == "object" {
+      styleValue.forEach((prop, value) => {
+        # Convertir camelCase a kebab-case
+        cssProp = this.camelToKebab(prop)
+        element.style.setProperty(cssProp, value.toString())
+      })
+    }
+  }
+  
+  
+  """
+  Convertir camelCase a kebab-case.
+  """
+  fn camelToKebab(str: String) -> String {
+    return str.replace(/[A-Z]/g, (match) => "-${match.toLowerCase()}")
+  }
+  
+  
+  """
+  Desmontar nodo (llamar destroy en widget).
+  """
+  fn unmountNode(vnode: VNode) -> void {
+    # Desmontar widget
+    match this.context.getWidget(vnode) {
+      Some(widget) => {
+        widget.destroy()
+        this.context.widgetMap.delete(vnode)
+      }
+      None => {}
+    }
+    
+    # Desmontar children recursivamente
+    vnode.children.forEach(child => {
+      this.unmountNode(child)
+    })
+  }
+}
+
+
+# ============================================================================
+# BATCH PATCHER - APLICACIÓN DE PATCHES EN BATCH
+# ============================================================================
+
+"""
+Optimización: aplicar múltiples patches en batch para reducir reflows.
+Usa requestAnimationFrame para timing óptimo.
+"""
+class BatchPatcher {
+  context: PatchContext
+  patcher: Patcher
+  
+  # Queue de patches pendientes
+  pendingPatches: List<Patch> = []
+  
+  # Flag de animación frame pendiente
+  frameScheduled: Bool = false
+  
+  
+  constructor(context: PatchContext) {
+    this.context = context
+    this.patcher = Patcher(context)
+  }
+  
+  
+  """
+  Encolar patches para aplicación en batch.
+  """
+  fn schedulePatch(patch: Patch) -> void {
+    this.pendingPatches.push(patch)
+    
+    # Programar frame si no está programado
+    if !this.frameScheduled {
+      this.scheduleFrame()
+    }
+  }
+  
+  
+  """
+  Encolar múltiples patches.
+  """
+  fn schedulePatches(patches: List<Patch>) -> void {
+    this.pendingPatches = [...this.pendingPatches, ...patches]
+    
+    if !this.frameScheduled {
+      this.scheduleFrame()
+    }
+  }
+  
+  
+  """
+  Programar animación frame.
+  """
+  fn scheduleFrame() -> void {
+    this.frameScheduled = true
+    
+    requestAnimationFrame(() => {
+      this.flush()
+    })
+  }
+  
+  
+  """
+  Aplicar todos los patches pendientes.
+  """
+  fn flush() -> PatchStats {
+    if this.pendingPatches.isEmpty() {
+      this.frameScheduled = false
+      return PatchStats {}
+    }
+    
+    # Copiar y limpiar queue
+    patches = this.pendingPatches
+    this.pendingPatches = []
+    this.frameScheduled = false
+    
+    # Aplicar patches
+    stats = this.patcher.applyPatches(patches)
+    
+    return stats
+  }
+  
+  
+  """
+  Forzar aplicación inmediata (bypass batch).
+  """
+  fn flushSync() -> PatchStats {
+    if !this.pendingPatches.isEmpty() {
+      return this.flush()
+    }
+    return PatchStats {}
+  }
+}
+
+
+# ============================================================================
+# PUBLIC API
+# ============================================================================
+
+"""
+Aplicar DiffResult a un elemento DOM.
+"""
+fn applyDiff(
+  diffResult: DiffResult,
+  parentElement: DOMElement,
+  buildContext: BuildContext
+) -> PatchStats {
+  renderer = VDOMRenderer(buildContext)
+  context = PatchContext(renderer, buildContext, parentElement)
+  patcher = Patcher(context)
+  
+  return patcher.applyPatches(diffResult.patches)
+}
+
+
+"""
+Aplicar patches en batch (async).
+"""
+fn applyDiffBatched(
+  diffResult: DiffResult,
+  parentElement: DOMElement,
+  buildContext: BuildContext
+) -> BatchPatcher {
+  renderer = VDOMRenderer(buildContext)
+  context = PatchContext(renderer, buildContext, parentElement)
+  batchPatcher = BatchPatcher(context)
+  
+  batchPatcher.schedulePatches(diffResult.patches)
+  
+  return batchPatcher
+}
+
+
+"""
+Aplicar un patch individual.
+"""
+fn applyPatch(
+  patch: Patch,
+  parentElement: DOMElement,
+  buildContext: BuildContext
+) -> void {
+  renderer = VDOMRenderer(buildContext)
+  context = PatchContext(renderer, buildContext, parentElement)
+  patcher = Patcher(context)
+  
+  patcher.applyPatch(patch)
+}
