@@ -1,0 +1,863 @@
+"""
+TASK-060: Implementar Diffing Algorithm
+
+Implementación de: VELA-583
+Historia: Sprint 21 - Sistema Reactivo Integrado en UI
+Fecha: 2025-12-06
+
+Descripción:
+Algoritmo para comparar dos árboles virtuales (VTrees) y detectar cambios mínimos
+necesarios para actualizar el DOM. Identifica inserciones, eliminaciones,
+actualizaciones y movimientos de nodos.
+
+Inspiración:
+- React Fiber: Reconciliation algorithm con time-slicing
+- Vue 3: Compiler-informed diffing con PatchFlags
+- Inferno: Fast diffing con key-based algorithms
+- Preact: Minimal diffing algorithm
+"""
+
+import 'ui:vdom:vnode' show { VNode, VTextNode, VFragmentNode, VTree }
+
+
+# ============================================================================
+# PATCH TYPES - TIPOS DE CAMBIOS
+# ============================================================================
+
+"""
+Tipos de operaciones de patch que el diffing puede detectar.
+"""
+enum PatchType {
+  Create,       # Crear nuevo nodo
+  Remove,       # Eliminar nodo existente
+  Replace,      # Reemplazar nodo completamente
+  Update,       # Actualizar props del nodo
+  Reorder,      # Reordenar hijos (movimientos)
+  Text,         # Actualizar contenido de texto
+  Props         # Actualizar solo props (sin hijos)
+}
+
+
+# ============================================================================
+# PATCH - OPERACIÓN DE CAMBIO
+# ============================================================================
+
+"""
+Representa un cambio que debe aplicarse al DOM.
+"""
+struct Patch {
+  type: PatchType
+  node: VNode
+  newNode: Option<VNode> = None
+  oldNode: Option<VNode> = None
+  index: Number = 0
+  props: Map<String, Any> = Map {}
+  
+  
+  """
+  Convertir a string para debugging.
+  """
+  fn toString() -> String {
+    match this.type {
+      PatchType.Create => "CREATE ${this.node.type}"
+      PatchType.Remove => "REMOVE ${this.node.type}"
+      PatchType.Replace => {
+        oldType = this.oldNode.map(n => n.type).unwrapOr("?")
+        newType = this.newNode.map(n => n.type).unwrapOr("?")
+        return "REPLACE ${oldType} -> ${newType}"
+      }
+      PatchType.Update => "UPDATE ${this.node.type}"
+      PatchType.Reorder => "REORDER ${this.node.type}"
+      PatchType.Text => {
+        text = this.props.get("text").unwrapOr("?")
+        return "TEXT \"${text}\""
+      }
+      PatchType.Props => "PROPS ${this.node.type}"
+    }
+  }
+}
+
+
+# ============================================================================
+# DIFF RESULT - RESULTADO DEL DIFFING
+# ============================================================================
+
+"""
+Resultado del algoritmo de diffing.
+Contiene todos los patches necesarios para actualizar el DOM.
+"""
+struct DiffResult {
+  patches: List<Patch> = []
+  
+  
+  """
+  Agregar patch al resultado.
+  """
+  fn addPatch(patch: Patch) -> void {
+    this.patches.push(patch)
+  }
+  
+  
+  """
+  Verificar si hay cambios.
+  """
+  fn hasChanges() -> Bool {
+    return !this.patches.isEmpty()
+  }
+  
+  
+  """
+  Contar patches por tipo.
+  """
+  fn countByType(type: PatchType) -> Number {
+    return this.patches.filter(p => p.type == type).length
+  }
+  
+  
+  """
+  Convertir a string para debugging.
+  """
+  fn toString() -> String {
+    if this.patches.isEmpty() {
+      return "DiffResult: No changes"
+    }
+    
+    lines = ["DiffResult: ${this.patches.length} patches"]
+    this.patches.forEach(patch => {
+      lines.push("  - ${patch.toString()}")
+    })
+    
+    return lines.join("\n")
+  }
+}
+
+
+# ============================================================================
+# DIFF ALGORITHM - ALGORITMO DE DIFFING
+# ============================================================================
+
+"""
+Algoritmo principal de diffing.
+Compara dos VTrees y genera lista de patches.
+"""
+class DiffAlgorithm {
+  # Resultado acumulado
+  result: DiffResult = DiffResult {}
+  
+  # Índice global para tracking de posiciones
+  currentIndex: Number = 0
+  
+  
+  """
+  Comparar dos árboles virtuales.
+  """
+  fn diff(oldTree: VTree, newTree: VTree) -> DiffResult {
+    this.result = DiffResult {}
+    this.currentIndex = 0
+    
+    # Comparar nodos raíz
+    this.diffNode(oldTree.root, newTree.root, 0)
+    
+    return this.result
+  }
+  
+  
+  """
+  Comparar dos VNodes recursivamente.
+  """
+  fn diffNode(oldNode: VNode, newNode: VNode, index: Number) -> void {
+    this.currentIndex = index
+    
+    # Caso 1: Nodos idénticos (shallow check)
+    if this.areNodesIdentical(oldNode, newNode) {
+      return  # No hay cambios
+    }
+    
+    # Caso 2: Tipos diferentes → REPLACE completo
+    if !oldNode.isSameType(newNode) {
+      this.result.addPatch(Patch {
+        type: PatchType.Replace,
+        node: newNode,
+        oldNode: Some(oldNode),
+        newNode: Some(newNode),
+        index: index
+      })
+      return
+    }
+    
+    # Caso 3: Mismo tipo → DIFF props y children
+    
+    # 3.1: Si es texto, comparar contenido
+    if oldNode.type == "#text" {
+      this.diffText(oldNode, newNode, index)
+      return
+    }
+    
+    # 3.2: Si es fragmento, comparar hijos directamente
+    if oldNode.type == "#fragment" {
+      this.diffChildren(oldNode, newNode, index)
+      return
+    }
+    
+    # 3.3: Comparar props
+    if this.propsChanged(oldNode, newNode) {
+      this.result.addPatch(Patch {
+        type: PatchType.Props,
+        node: newNode,
+        oldNode: Some(oldNode),
+        props: this.diffProps(oldNode.props, newNode.props),
+        index: index
+      })
+    }
+    
+    # 3.4: Comparar children
+    this.diffChildren(oldNode, newNode, index)
+  }
+  
+  
+  # --------------------------------------------------------------------------
+  # DIFF HELPERS
+  # --------------------------------------------------------------------------
+  
+  """
+  Comparar nodos de texto.
+  """
+  fn diffText(oldNode: VNode, newNode: VNode, index: Number) -> void {
+    oldText = oldNode.props.get("text").unwrapOr("")
+    newText = newNode.props.get("text").unwrapOr("")
+    
+    if oldText != newText {
+      this.result.addPatch(Patch {
+        type: PatchType.Text,
+        node: newNode,
+        oldNode: Some(oldNode),
+        props: Map { "text": newText },
+        index: index
+      })
+    }
+  }
+  
+  
+  """
+  Comparar children de dos nodos.
+  Usa key-based diffing cuando sea posible.
+  """
+  fn diffChildren(oldNode: VNode, newNode: VNode, index: Number) -> void {
+    oldChildren = oldNode.children
+    newChildren = newNode.children
+    
+    # Caso simple: sin children en ambos
+    if oldChildren.isEmpty() && newChildren.isEmpty() {
+      return
+    }
+    
+    # Caso: solo hay nuevos children (todos son CREATE)
+    if oldChildren.isEmpty() {
+      newChildren.forEach((child, i) => {
+        this.result.addPatch(Patch {
+          type: PatchType.Create,
+          node: child,
+          index: index + i + 1
+        })
+      })
+      return
+    }
+    
+    # Caso: solo hay viejos children (todos son REMOVE)
+    if newChildren.isEmpty() {
+      oldChildren.forEach((child, i) => {
+        this.result.addPatch(Patch {
+          type: PatchType.Remove,
+          node: child,
+          index: index + i + 1
+        })
+      })
+      return
+    }
+    
+    # Caso general: usar algoritmo de diffing con keys
+    if this.hasKeys(oldChildren) || this.hasKeys(newChildren) {
+      this.diffChildrenWithKeys(oldChildren, newChildren, index)
+    } else {
+      this.diffChildrenByIndex(oldChildren, newChildren, index)
+    }
+  }
+  
+  
+  """
+  Diff children usando keys (optimizado para reordenamientos).
+  Inspirado en React's reconciliation con keys.
+  """
+  fn diffChildrenWithKeys(
+    oldChildren: List<VNode>,
+    newChildren: List<VNode>,
+    parentIndex: Number
+  ) -> void {
+    # Crear maps de key -> node
+    oldKeyMap = this.createKeyMap(oldChildren)
+    newKeyMap = this.createKeyMap(newChildren)
+    
+    # Track nodos visitados
+    visitedKeys = Set<String> {}
+    
+    # Pass 1: Comparar nodos con keys matching
+    newChildren.forEach((newChild, i) => {
+      match newChild.key {
+        Some(key) => {
+          visitedKeys.add(key)
+          
+          match oldKeyMap.get(key) {
+            Some(oldChild) => {
+              # Mismo key → DIFF recursivo
+              childIndex = parentIndex + i + 1
+              this.diffNode(oldChild, newChild, childIndex)
+            }
+            None => {
+              # Key nuevo → CREATE
+              this.result.addPatch(Patch {
+                type: PatchType.Create,
+                node: newChild,
+                index: parentIndex + i + 1
+              })
+            }
+          }
+        }
+        None => {
+          # Sin key → comparar por índice
+          if i < oldChildren.length {
+            childIndex = parentIndex + i + 1
+            this.diffNode(oldChildren[i], newChild, childIndex)
+          } else {
+            # Índice fuera de rango → CREATE
+            this.result.addPatch(Patch {
+              type: PatchType.Create,
+              node: newChild,
+              index: parentIndex + i + 1
+            })
+          }
+        }
+      }
+    })
+    
+    # Pass 2: Detectar nodos removidos (keys que ya no existen)
+    oldChildren.forEach((oldChild, i) => {
+      match oldChild.key {
+        Some(key) => {
+          if !visitedKeys.contains(key) {
+            # Key removido → REMOVE
+            this.result.addPatch(Patch {
+              type: PatchType.Remove,
+              node: oldChild,
+              index: parentIndex + i + 1
+            })
+          }
+        }
+        None => {
+          # Sin key → ya procesado en Pass 1
+        }
+      }
+    })
+    
+    # Pass 3: Detectar reordenamientos (keys en posiciones diferentes)
+    if this.childrenReordered(oldChildren, newChildren) {
+      this.result.addPatch(Patch {
+        type: PatchType.Reorder,
+        node: newChildren[0],  # Placeholder
+        oldNode: Some(oldChildren[0]),
+        index: parentIndex
+      })
+    }
+  }
+  
+  
+  """
+  Diff children sin keys (comparación por índice).
+  """
+  fn diffChildrenByIndex(
+    oldChildren: List<VNode>,
+    newChildren: List<VNode>,
+    parentIndex: Number
+  ) -> void {
+    maxLength = Math.max(oldChildren.length, newChildren.length)
+    
+    (0..maxLength).forEach(i => {
+      hasOld = i < oldChildren.length
+      hasNew = i < newChildren.length
+      
+      childIndex = parentIndex + i + 1
+      
+      if hasOld && hasNew {
+        # Ambos existen → DIFF
+        this.diffNode(oldChildren[i], newChildren[i], childIndex)
+      } else if hasNew {
+        # Solo nuevo → CREATE
+        this.result.addPatch(Patch {
+          type: PatchType.Create,
+          node: newChildren[i],
+          index: childIndex
+        })
+      } else if hasOld {
+        # Solo viejo → REMOVE
+        this.result.addPatch(Patch {
+          type: PatchType.Remove,
+          node: oldChildren[i],
+          index: childIndex
+        })
+      }
+    })
+  }
+  
+  
+  # --------------------------------------------------------------------------
+  # COMPARISON UTILITIES
+  # --------------------------------------------------------------------------
+  
+  """
+  Verificar si dos nodos son idénticos (shallow check).
+  """
+  fn areNodesIdentical(oldNode: VNode, newNode: VNode) -> Bool {
+    # Tipos diferentes → no idénticos
+    if !oldNode.isSameType(newNode) {
+      return false
+    }
+    
+    # Props diferentes → no idénticos
+    if this.propsChanged(oldNode, newNode) {
+      return false
+    }
+    
+    # Número de children diferente → no idénticos
+    if oldNode.children.length != newNode.children.length {
+      return false
+    }
+    
+    # Si llegamos aquí, son idénticos (shallow)
+    return true
+  }
+  
+  
+  """
+  Verificar si las props cambiaron.
+  """
+  fn propsChanged(oldNode: VNode, newNode: VNode) -> Bool {
+    oldProps = oldNode.props
+    newProps = newNode.props
+    
+    # Diferente número de props
+    if oldProps.size() != newProps.size() {
+      return true
+    }
+    
+    # Comparar cada prop
+    changed = false
+    newProps.forEach((key, newValue) => {
+      match oldProps.get(key) {
+        Some(oldValue) => {
+          if !this.valuesEqual(oldValue, newValue) {
+            changed = true
+          }
+        }
+        None => {
+          changed = true  # Prop nueva
+        }
+      }
+    })
+    
+    return changed
+  }
+  
+  
+  """
+  Diff de props: retorna solo las props que cambiaron.
+  """
+  fn diffProps(oldProps: Map<String, Any>, newProps: Map<String, Any>) -> Map<String, Any> {
+    changedProps = Map<String, Any> {}
+    
+    newProps.forEach((key, newValue) => {
+      match oldProps.get(key) {
+        Some(oldValue) => {
+          if !this.valuesEqual(oldValue, newValue) {
+            changedProps.set(key, newValue)
+          }
+        }
+        None => {
+          changedProps.set(key, newValue)  # Prop nueva
+        }
+      }
+    })
+    
+    # Detectar props removidas (set a undefined)
+    oldProps.forEach((key, _) => {
+      if !newProps.has(key) {
+        changedProps.set(key, undefined)
+      }
+    })
+    
+    return changedProps
+  }
+  
+  
+  """
+  Comparar dos valores (deep equality).
+  """
+  fn valuesEqual(a: Any, b: Any) -> Bool {
+    # Tipos primitivos → comparación directa
+    if this.isPrimitive(a) && this.isPrimitive(b) {
+      return a == b
+    }
+    
+    # Tipos diferentes → no iguales
+    if typeof(a) != typeof(b) {
+      return false
+    }
+    
+    # Arrays → comparar elementos
+    if this.isArray(a) && this.isArray(b) {
+      return this.arraysEqual(a, b)
+    }
+    
+    # Objects → comparar props
+    if this.isObject(a) && this.isObject(b) {
+      return this.objectsEqual(a, b)
+    }
+    
+    # Fallback: comparación directa
+    return a == b
+  }
+  
+  
+  """
+  Verificar si un valor es primitivo.
+  """
+  fn isPrimitive(value: Any) -> Bool {
+    t = typeof(value)
+    return t == "string" || t == "number" || t == "boolean" || t == "undefined"
+  }
+  
+  
+  """
+  Verificar si un valor es array.
+  """
+  fn isArray(value: Any) -> Bool {
+    return typeof(value) == "array" || value.constructor.name == "Array"
+  }
+  
+  
+  """
+  Verificar si un valor es object.
+  """
+  fn isObject(value: Any) -> Bool {
+    return typeof(value) == "object" && !this.isArray(value)
+  }
+  
+  
+  """
+  Comparar arrays (deep).
+  """
+  fn arraysEqual(a: List<Any>, b: List<Any>) -> Bool {
+    if a.length != b.length {
+      return false
+    }
+    
+    return a.every((item, i) => this.valuesEqual(item, b[i]))
+  }
+  
+  
+  """
+  Comparar objects (deep).
+  """
+  fn objectsEqual(a: Map<String, Any>, b: Map<String, Any>) -> Bool {
+    keysA = a.keys()
+    keysB = b.keys()
+    
+    if keysA.length != keysB.length {
+      return false
+    }
+    
+    return keysA.every(key => {
+      return b.has(key) && this.valuesEqual(a.get(key), b.get(key))
+    })
+  }
+  
+  
+  # --------------------------------------------------------------------------
+  # KEY-BASED UTILITIES
+  # --------------------------------------------------------------------------
+  
+  """
+  Verificar si algún child tiene key.
+  """
+  fn hasKeys(children: List<VNode>) -> Bool {
+    return children.some(child => child.key.isSome())
+  }
+  
+  
+  """
+  Crear map de key -> node.
+  """
+  fn createKeyMap(children: List<VNode>) -> Map<String, VNode> {
+    keyMap = Map<String, VNode> {}
+    
+    children.forEach(child => {
+      match child.key {
+        Some(key) => keyMap.set(key, child)
+        None => {}
+      }
+    })
+    
+    return keyMap
+  }
+  
+  
+  """
+  Detectar si children fueron reordenados.
+  """
+  fn childrenReordered(oldChildren: List<VNode>, newChildren: List<VNode>) -> Bool {
+    # Extraer keys en orden
+    oldKeys = oldChildren
+      .filter(child => child.key.isSome())
+      .map(child => child.key.unwrap())
+    
+    newKeys = newChildren
+      .filter(child => child.key.isSome())
+      .map(child => child.key.unwrap())
+    
+    # Si no hay keys, no hay reordenamiento
+    if oldKeys.isEmpty() || newKeys.isEmpty() {
+      return false
+    }
+    
+    # Comparar orden de keys
+    return !this.keysInSameOrder(oldKeys, newKeys)
+  }
+  
+  
+  """
+  Verificar si las keys están en el mismo orden.
+  """
+  fn keysInSameOrder(oldKeys: List<String>, newKeys: List<String>) -> Bool {
+    # Encontrar keys comunes
+    commonKeys = oldKeys.filter(key => newKeys.contains(key))
+    
+    if commonKeys.isEmpty() {
+      return true
+    }
+    
+    # Verificar si el orden es el mismo
+    oldIndices = commonKeys.map(key => oldKeys.indexOf(key))
+    newIndices = commonKeys.map(key => newKeys.indexOf(key))
+    
+    # Orden es el mismo si los índices están en orden ascendente
+    return this.isAscending(oldIndices) && this.isAscending(newIndices)
+  }
+  
+  
+  """
+  Verificar si una lista está en orden ascendente.
+  """
+  fn isAscending(list: List<Number>) -> Bool {
+    return list.every((val, i) => {
+      if i == 0 { return true }
+      return val > list[i - 1]
+    })
+  }
+}
+
+
+# ============================================================================
+# DIFF OPTIMIZER - OPTIMIZACIONES DEL DIFFING
+# ============================================================================
+
+"""
+Optimizador que aplica heurísticas para reducir patches innecesarios.
+"""
+class DiffOptimizer {
+  
+  """
+  Optimizar resultado de diffing.
+  """
+  static fn optimize(result: DiffResult) -> DiffResult {
+    optimized = DiffResult {}
+    
+    # 1. Eliminar patches redundantes
+    deduplicated = this.deduplicatePatches(result.patches)
+    
+    # 2. Fusionar patches consecutivos
+    merged = this.mergeConsecutivePatches(deduplicated)
+    
+    # 3. Eliminar patches que se cancelan entre sí
+    filtered = this.filterCancelingPatches(merged)
+    
+    optimized.patches = filtered
+    
+    return optimized
+  }
+  
+  
+  """
+  Eliminar patches duplicados.
+  """
+  static fn deduplicatePatches(patches: List<Patch>) -> List<Patch> {
+    seen = Set<String> {}
+    unique = []
+    
+    patches.forEach(patch => {
+      key = this.patchKey(patch)
+      if !seen.contains(key) {
+        seen.add(key)
+        unique.push(patch)
+      }
+    })
+    
+    return unique
+  }
+  
+  
+  """
+  Generar key única para un patch.
+  """
+  static fn patchKey(patch: Patch) -> String {
+    return "${patch.type}:${patch.index}:${patch.node.type}"
+  }
+  
+  
+  """
+  Fusionar patches consecutivos del mismo tipo.
+  """
+  static fn mergeConsecutivePatches(patches: List<Patch>) -> List<Patch> {
+    if patches.length <= 1 {
+      return patches
+    }
+    
+    merged = [patches[0]]
+    
+    (1..patches.length).forEach(i => {
+      current = patches[i]
+      previous = merged[merged.length - 1]
+      
+      # Intentar fusionar
+      match this.tryMerge(previous, current) {
+        Some(mergedPatch) => {
+          merged[merged.length - 1] = mergedPatch
+        }
+        None => {
+          merged.push(current)
+        }
+      }
+    })
+    
+    return merged
+  }
+  
+  
+  """
+  Intentar fusionar dos patches.
+  """
+  static fn tryMerge(p1: Patch, p2: Patch) -> Option<Patch> {
+    # Solo fusionar props updates consecutivos del mismo nodo
+    if p1.type == PatchType.Props && p2.type == PatchType.Props {
+      if p1.index == p2.index && p1.node.type == p2.node.type {
+        # Fusionar props
+        mergedProps = p1.props.clone()
+        p2.props.forEach((key, value) => {
+          mergedProps.set(key, value)
+        })
+        
+        return Some(Patch {
+          type: PatchType.Props,
+          node: p2.node,
+          oldNode: p1.oldNode,
+          props: mergedProps,
+          index: p1.index
+        })
+      }
+    }
+    
+    return None
+  }
+  
+  
+  """
+  Filtrar patches que se cancelan entre sí.
+  """
+  static fn filterCancelingPatches(patches: List<Patch>) -> List<Patch> {
+    # Detectar pares CREATE -> REMOVE del mismo nodo
+    filtered = []
+    removed = Set<Number> {}
+    
+    patches.forEach((patch, i) => {
+      if removed.contains(i) {
+        return  # Skip
+      }
+      
+      # Buscar patch opuesto
+      match this.findCancelingPatch(patch, patches, i + 1) {
+        Some(j) => {
+          # Cancelar ambos
+          removed.add(i)
+          removed.add(j)
+        }
+        None => {
+          filtered.push(patch)
+        }
+      }
+    })
+    
+    return filtered
+  }
+  
+  
+  """
+  Buscar patch que cancela a otro.
+  """
+  static fn findCancelingPatch(patch: Patch, patches: List<Patch>, startIndex: Number) -> Option<Number> {
+    if patch.type == PatchType.Create {
+      # Buscar REMOVE del mismo nodo
+      return patches.findIndex((p, i) => {
+        return i >= startIndex && 
+               p.type == PatchType.Remove && 
+               p.index == patch.index
+      })
+    }
+    
+    if patch.type == PatchType.Remove {
+      # Buscar CREATE del mismo nodo
+      return patches.findIndex((p, i) => {
+        return i >= startIndex && 
+               p.type == PatchType.Create && 
+               p.index == patch.index
+      })
+    }
+    
+    return None
+  }
+}
+
+
+# ============================================================================
+# PUBLIC API
+# ============================================================================
+
+"""
+API pública para diffing.
+"""
+fn diff(oldTree: VTree, newTree: VTree) -> DiffResult {
+  algorithm = DiffAlgorithm {}
+  result = algorithm.diff(oldTree, newTree)
+  
+  # Optimizar resultado
+  optimized = DiffOptimizer.optimize(result)
+  
+  return optimized
+}
+
+
+"""
+API simplificada: diff de VNodes directamente.
+"""
+fn diffNodes(oldNode: VNode, newNode: VNode) -> DiffResult {
+  oldTree = VTree(oldNode)
+  newTree = VTree(newNode)
+  
+  return diff(oldTree, newTree)
+}
