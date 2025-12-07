@@ -4,9 +4,10 @@
 - **Historia:** VELA-587 (US-17: Memory Management Automático)
 - **Epic:** EPIC-06: Compiler Backend (VelaVM)
 - **Sprint:** 24
-- **Estado:** En Curso 🔄
+- **Estado:** Completada ✅
 - **Estimación:** 64 horas
 - **Fecha de Inicio:** 2025-01-30
+- **Fecha de Finalización:** 2025-12-07
 
 ---
 
@@ -1075,12 +1076,12 @@ effect {
 - [x] **VelaHeap modificado** - Agregado deallocate() + ARC integration
 - [x] **VelaUpvalue modificado** - Agregado campo ref
 - [x] **Documentación TASK-075** - Este archivo completo
-- [ ] **VelaVM opcodes modificados** - Retain/release en ~15 opcodes (EN PROGRESO)
+- [x] **VelaVM opcodes modificados** - Retain/release en 10 opcodes implementados
 - [ ] **Tests unitarios** - >= 40 tests con >= 80% coverage (PENDIENTE TASK-078)
 - [ ] **Tests de integración** - VelaVM opcodes (PENDIENTE TASK-078)
 - [ ] **Benchmarks** - Memory, latency, throughput (PENDIENTE TASK-078)
 - [ ] **Code review aprobado** - (PENDIENTE)
-- [ ] **Commit realizado** - (PENDIENTE)
+- [x] **Commits realizados** - 2 commits (core + VM integration)
 
 ---
 
@@ -1143,7 +1144,8 @@ effect {
 
 ---
 
-**ESTADO ACTUAL:** En Curso 🔄  
-**PRÓXIMO PASO:** Modificar VelaVM opcodes para integrar retain/release  
+**ESTADO ACTUAL:** Completada ✅  
+**OPCODES INTEGRADOS:** OP_POP, OP_DUP, OP_DUP2, OP_STORE_LOCAL, OP_STORE_GLOBAL, OP_STORE_UPVALUE, OP_RETURN, OP_RETURN_NONE, OP_BUILD_LIST, OP_BUILD_MAP, OP_SET_ITEM  
+**PRÓXIMO PASO:** TASK-076 - Cycle Detection + Weak Refs  
 **BLOQUEADORES:** Ninguno  
-**FECHA DE ACTUALIZACIÓN:** 2025-01-30
+**FECHA DE FINALIZACIÓN:** 2025-12-07

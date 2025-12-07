@@ -71,6 +71,11 @@ import 'module:vm/heap' show {
   VelaBoundMethod, VelaString, VelaHeapList, VelaHeapMap
 }
 
+import 'module:vm/arc' show {
+  ARCManager, ARCStats,
+  retainValue, releaseValue, autoreleaseValue
+}
+
 import 'module:vm/exceptions' show {
   VelaException, StackTraceEntry, ExceptionHandler, ExceptionFrame,
   AsyncContext, AsyncFrame, StackUnwinder,
@@ -377,6 +382,9 @@ public class VelaVM {
   heap: VelaHeap = VelaHeap()
   gc: VelaGC
   
+  # ARC (TASK-075): Automatic Reference Counting
+  arc: ARCManager
+  
   # Exception handling
   unwinder: StackUnwinder = StackUnwinder()
   currentException: Option<VelaException> = None
@@ -390,6 +398,10 @@ public class VelaVM {
   
   constructor() {
     this.gc = VelaGC(this.heap)
+    
+    # ARC (TASK-075): Inicializar ARCManager
+    this.arc = ARCManager(this.heap)
+    this.heap.setARCManager(this.arc)
   } []
   
   # Estado
@@ -573,17 +585,24 @@ public class VelaVM {
         OP_NOP => { /* no-op */ }
         
         OP_POP => {
-          this._pop()
+          value = this._pop()
+          # ARC (TASK-075): Release valor popped
+          releaseValue(this.arc, value)
         }
         
         OP_DUP => {
           value = this._peek(0)
+          # ARC (TASK-075): Retain el duplicado
+          retainValue(this.arc, value)
           this._push(value)
         }
         
         OP_DUP2 => {
           a = this._peek(1)
           b = this._peek(0)
+          # ARC (TASK-075): Retain duplicados
+          retainValue(this.arc, a)
+          retainValue(this.arc, b)
           this._push(a)
           this._push(b)
         }
@@ -754,6 +773,13 @@ public class VelaVM {
             frame.slots.append(Value.None)
           }
           
+          # ARC (TASK-075): Release valor antiguo, retain nuevo
+          if idx < frame.slots.length() {
+            oldValue = frame.slots[idx]
+            releaseValue(this.arc, oldValue)
+          }
+          retainValue(this.arc, value)
+          
           frame.slots[idx] = value
         }
         
@@ -768,6 +794,21 @@ public class VelaVM {
         }
         
         OP_STORE_GLOBAL => {
+          idx = frame.readU16(this.bytecode)
+          name = this._getConstantString(idx)
+          value = this._peek(0)
+          
+          # ARC (TASK-075): Release valor antiguo, retain nuevo
+          match this.globals.get(name) {
+            Some(oldValue) => releaseValue(this.arc, oldValue)
+            None => {}
+          }
+          retainValue(this.arc, value)
+          
+          this.globals.set(name, value)
+        }
+        
+        OP_LOAD_UPVALUE => {
         OP_CALL => {
           argc = frame.readByte(this.bytecode)
           
@@ -797,10 +838,20 @@ public class VelaVM {
         OP_RETURN => {
           returnValue = this._pop()
           
+          # ARC (TASK-075): Release locals del frame
+          if let Some(frame) = this.currentFrame {
+            frame.slots.forEach(slot => {
+              releaseValue(this.arc, slot)
+            })
+          }
+          
           # Close upvalues cuando función retorna
           if let Some(frame) = this.currentFrame {
             this.heap.closeUpvalues(frame.slotsOffset, this.valueStack)
           }
+          
+          # ARC (TASK-075): Drain autorelease pool
+          this.arc.drainAutoreleasePool()
           
           # Pop frame
           this._popFrame()
@@ -815,10 +866,20 @@ public class VelaVM {
                   # Store closure for upvalue access
                   this.currentFrame.unwrap().closure = Some(closure)
         OP_RETURN_NONE => {
+          # ARC (TASK-075): Release locals del frame
+          if let Some(frame) = this.currentFrame {
+            frame.slots.forEach(slot => {
+              releaseValue(this.arc, slot)
+            })
+          }
+          
           # Close upvalues cuando función retorna
           if let Some(frame) = this.currentFrame {
             this.heap.closeUpvalues(frame.slotsOffset, this.valueStack)
           }
+          
+          # ARC (TASK-075): Drain autorelease pool
+          this.arc.drainAutoreleasePool()
           
           this._popFrame()
           
@@ -892,6 +953,12 @@ public class VelaVM {
           if let Some(closure) = frame.closure {
             if idx < closure.upvalues.length() {
               upvalue = closure.upvalues[idx]
+              
+              # ARC (TASK-075): Release valor antiguo, retain nuevo
+              oldValue = upvalue.read(this.valueStack)
+              releaseValue(this.arc, oldValue)
+              retainValue(this.arc, value)
+              
               upvalue.write(this.valueStack, value)
             } else {
               return Err("Invalid upvalue index: ${idx}")
@@ -944,7 +1011,12 @@ public class VelaVM {
           
           # Pop elements (reverse order)
           elements = (0..size).map(_ => this._pop()).reverse()
-          elements.forEach(elem => list.append(elem))
+          
+          # ARC (TASK-075): Retain cada item (la lista los posee)
+          elements.forEach(elem => {
+            retainValue(this.arc, elem)
+            list.append(elem)
+          })
           
           this._push(Value.List(list))
         }
@@ -957,6 +1029,10 @@ public class VelaVM {
           (0..size).forEach(_ => {
             value = this._pop()
             key = this._popString()
+            
+            # ARC (TASK-075): Retain value (el map lo posee)
+            retainValue(this.arc, value)
+            
             map.set(key, value)
           })
           
@@ -985,6 +1061,13 @@ public class VelaVM {
           
           match collection {
             Value.List(list) => {
+              # ARC (TASK-075): Release item antiguo, retain nuevo
+              match list.get(index) {
+                Some(oldValue) => releaseValue(this.arc, oldValue)
+                None => {}
+              }
+              retainValue(this.arc, value)
+              
               list.set(index, value)
               this._push(Value.List(list))
             }
