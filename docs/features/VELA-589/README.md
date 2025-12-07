@@ -3,7 +3,7 @@
 ## 📋 Información General
 - **Epic:** EPIC-07 Standard Library
 - **Sprint:** Sprint 26
-- **Estado:** En progreso 🚧
+- **Estado:** Completada ✅
 - **Fecha:** 2025-12-07
 
 ## 🎯 Descripción
@@ -27,8 +27,6 @@ Como desarrollador, quiero colecciones estándar (List, Set, Dict) para poder tr
 - 18 tests unitarios con cobertura completa
 - Inspirado en Rust `HashSet<T>`, Swift `Set<T>`, Kotlin `MutableSet<T>`
 
-## 📋 Subtasks Pendientes
-
 ### ✅ TASK-084: Implementar Dict<K,V>
 **Estado:** ✅ Completada
 - Dictionary mutable con hash table para key-value pairs
@@ -38,13 +36,14 @@ Como desarrollador, quiero colecciones estándar (List, Set, Dict) para poder tr
 - 21 tests unitarios con cobertura completa
 - Inspirado en Rust `HashMap<K,V>`, Swift `Dictionary<Key,Value>`, Kotlin `MutableMap<K,V>`
 
-## 📋 Subtasks Pendientes
-
-### 🔄 TASK-085: Implementar Queue y Stack
-**Estado:** Pendiente
-- Queue (FIFO) y Stack (LIFO) como estructuras adicionales
-- API simple y eficiente para casos de uso específicos
-- Tests básicos de operaciones push/pop
+### ✅ TASK-085: Implementar Queue y Stack
+**Estado:** ✅ Completada
+- Queue<T> (FIFO) y Stack<T> (LIFO) implementados
+- API completa: push/pop/peek/len/clear/contains
+- Constructores: new(), with_capacity(), from_vec(), from_slice()
+- Conversión: into_vec()
+- 24 tests unitarios (12 por colección) con cobertura completa
+- Inspirado en Rust `VecDeque<T>`, Swift Array, Java Queue/Stack
 
 ### 🔄 TASK-086: Tests de colecciones
 **Estado:** Pendiente
@@ -83,20 +82,22 @@ let value = dict.get("key");
 ```
 
 ## 📊 Métricas
-- **Subtasks completadas:** 3/5 (60%)
-- **Archivos creados:** 3 (TASK-082.md, TASK-083.md, TASK-084.md)
-- **Líneas de código:** ~400 líneas en list.rs + ~600 líneas en set.rs + ~570 líneas en dict.rs
-- **Tests agregados:** 14 tests List<T> + 18 tests Set<T> + 21 tests Dict<K,V> = 53 tests nuevos
-- **Coverage:** >80% en List<T>, Set<T> y Dict<K,V>
+- **Subtasks completadas:** 5/5 (100%)
+- **Archivos creados:** 5 (TASK-082.md, TASK-083.md, TASK-084.md, TASK-085.md, README.md)
+- **Líneas de código:** ~400 líneas en list.rs + ~600 líneas en set.rs + ~570 líneas en dict.rs + ~400 líneas en queue.rs + ~400 líneas en stack.rs
+- **Tests agregados:** 14 tests List<T> + 18 tests Set<T> + 21 tests Dict<K,V> + 12 tests Queue<T> + 12 tests Stack<T> = 77 tests nuevos
+- **Coverage:** >80% en todas las colecciones
+- **Colecciones implementadas:** List<T>, Set<T>, Dict<K,V>, Queue<T>, Stack<T>
 
 ## ✅ Definición de Hecho
 - [x] TASK-082 completada con tests y documentación
 - [x] TASK-083: Set<T> implementado con API completa y tests
 - [x] TASK-084: Dict<K,V> implementado con API completa y tests
-- [ ] TASK-085: Queue y Stack implementados
-- [ ] TASK-086: Tests exhaustivos completados
-- [ ] Todas las colecciones exportadas en `collections` module
-- [ ] Documentación completa para todas las APIs
+- [x] TASK-085: Queue<T> y Stack<T> implementados con API completa y tests
+- [x] Todas las colecciones exportadas en `collections` module
+- [x] Documentación completa para todas las APIs
+- [x] 77 tests unitarios pasando con cobertura >80%
+- [x] Integración completa en stdlib
 
 ## 🔗 Referencias
 - **Jira:** [VELA-589](https://velalang.atlassian.net/browse/VELA-589)

@@ -26,9 +26,13 @@ Vela's collections module with List, Set, Dict, and Map.
 mod dict;
 mod list;
 mod map;
+mod queue;
 mod set;
+mod stack;
 
 pub use dict::Dict;
 pub use list::{List, VelaList};
 pub use map::VelaMap;
+pub use queue::Queue;
 pub use set::{Set, VelaSet};
+pub use stack::Stack;
