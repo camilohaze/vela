@@ -1,0 +1,859 @@
+"""
+Navigator API y gestión de navigation stack
+
+Implementación de: VELA-585 (Sistema de navegación y routing)
+Subtask: TASK-067 (Navigation API)
+Fecha: 2025-12-06
+
+Descripción:
+Navigator para gestión de navigation stack con métodos push/pop/replace,
+transiciones animadas, y estado reactivo de navegación.
+
+Inspiración:
+- Flutter Navigator (push, pop, pushNamed)
+- React Navigation (navigation stack, transitions)
+- Angular Router (NavigationExtras, RouterStateSnapshot)
+- Vue Router (router.push, router.replace, router.go)
+"""
+
+import 'system:ui' show { Widget, BuildContext }
+import 'system:reactive' show { signal, computed, effect }
+import './router.vela' show { Router, RouteMatch, RouteDefinition }
+
+
+"""
+═══════════════════════════════════════════════════════════════════════════
+NAVIGATION TRANSITIONS
+═══════════════════════════════════════════════════════════════════════════
+Enums y clases para transiciones de navegación
+"""
+
+enum TransitionType {
+    """
+    Tipos de transiciones entre rutas.
+    
+    - Slide: Deslizamiento horizontal (izquierda/derecha)
+    - Fade: Desvanecimiento (opacity)
+    - Scale: Escalado (zoom in/out)
+    - SlideUp: Deslizamiento vertical (abajo hacia arriba)
+    - None: Sin transición (instantáneo)
+    """
+    Slide,
+    Fade,
+    Scale,
+    SlideUp,
+    None
+}
+
+
+enum SlideDirection {
+    """
+    Dirección del slide para transiciones Slide.
+    
+    - LeftToRight: Desde izquierda (back navigation)
+    - RightToLeft: Desde derecha (forward navigation)
+    - TopToBottom: Desde arriba
+    - BottomToTop: Desde abajo
+    """
+    LeftToRight,
+    RightToLeft,
+    TopToBottom,
+    BottomToTop
+}
+
+
+class TransitionConfig {
+    """
+    Configuración de transición para navegación.
+    
+    Properties:
+        type: Tipo de transición (Slide, Fade, Scale, etc.)
+        duration: Duración en milisegundos
+        curve: Curva de animación (ease, linear, easeInOut, etc.)
+        direction: Dirección del slide (si type == Slide)
+    """
+    
+    type: TransitionType
+    duration: Number  # milisegundos
+    curve: String  # "ease" | "linear" | "ease-in" | "ease-out" | "ease-in-out"
+    direction: Option<SlideDirection>
+    
+    constructor(
+        type: TransitionType = TransitionType.Slide,
+        duration: Number = 300,
+        curve: String = "ease-in-out",
+        direction: Option<SlideDirection> = None
+    ) {
+        this.type = type
+        this.duration = duration
+        this.curve = curve
+        this.direction = direction
+    }
+    
+    """
+    Configuración por defecto para push (forward)
+    """
+    static fn defaultPush() -> TransitionConfig {
+        return TransitionConfig(
+            type: TransitionType.Slide,
+            duration: 300,
+            curve: "ease-in-out",
+            direction: Some(SlideDirection.RightToLeft)
+        )
+    }
+    
+    """
+    Configuración por defecto para pop (back)
+    """
+    static fn defaultPop() -> TransitionConfig {
+        return TransitionConfig(
+            type: TransitionType.Slide,
+            duration: 300,
+            curve: "ease-in-out",
+            direction: Some(SlideDirection.LeftToRight)
+        )
+    }
+    
+    """
+    Sin transición
+    """
+    static fn none() -> TransitionConfig {
+        return TransitionConfig(
+            type: TransitionType.None,
+            duration: 0,
+            curve: "linear"
+        )
+    }
+    
+    """
+    Transición fade
+    """
+    static fn fade(duration: Number = 300) -> TransitionConfig {
+        return TransitionConfig(
+            type: TransitionType.Fade,
+            duration: duration,
+            curve: "ease-in-out"
+        )
+    }
+    
+    """
+    Transición scale
+    """
+    static fn scale(duration: Number = 300) -> TransitionConfig {
+        return TransitionConfig(
+            type: TransitionType.Scale,
+            duration: duration,
+            curve: "ease-in-out"
+        )
+    }
+}
+
+
+"""
+═══════════════════════════════════════════════════════════════════════════
+ROUTE ENTRY
+═══════════════════════════════════════════════════════════════════════════
+Representa una entrada en el navigation stack
+"""
+
+class RouteEntry {
+    """
+    Entrada en el navigation stack.
+    
+    Representa una ruta en el historial de navegación con su match,
+    widget construido, y configuración de transición.
+    
+    Properties:
+        match: RouteMatch de la ruta
+        widget: Widget construido para esta ruta
+        transition: Configuración de transición usada
+        timestamp: Timestamp de cuándo se agregó al stack
+    """
+    
+    match: RouteMatch
+    widget: Widget
+    transition: TransitionConfig
+    timestamp: Number  # Unix timestamp en ms
+    
+    constructor(
+        match: RouteMatch,
+        widget: Widget,
+        transition: TransitionConfig = TransitionConfig.defaultPush()
+    ) {
+        this.match = match
+        this.widget = widget
+        this.transition = transition
+        this.timestamp = DateTime.now().millisecondsSinceEpoch
+    }
+    
+    """
+    Path de la ruta
+    """
+    fn getPath() -> String {
+        return this.match.path
+    }
+    
+    """
+    Nombre de la ruta (si existe)
+    """
+    fn getName() -> Option<String> {
+        return this.match.definition.name
+    }
+    
+    """
+    Parámetros de la ruta
+    """
+    fn getParams() -> Map<String, String> {
+        return this.match.params
+    }
+}
+
+
+"""
+═══════════════════════════════════════════════════════════════════════════
+NAVIGATION RESULT
+═══════════════════════════════════════════════════════════════════════════
+Resultado de una operación de navegación
+"""
+
+enum NavigationResultType {
+    Success,
+    Blocked,  # Bloqueado por guard
+    NotFound,  # Ruta no encontrada
+    InvalidOperation  # Operación inválida (ej: pop en stack vacío)
+}
+
+
+class NavigationResult {
+    """
+    Resultado de una operación de navegación.
+    
+    Properties:
+        type: Tipo de resultado
+        message: Mensaje descriptivo (para errores)
+        entry: RouteEntry resultante (si success)
+    """
+    
+    type: NavigationResultType
+    message: String
+    entry: Option<RouteEntry>
+    
+    constructor(
+        type: NavigationResultType,
+        message: String = "",
+        entry: Option<RouteEntry> = None
+    ) {
+        this.type = type
+        this.message = message
+        this.entry = entry
+    }
+    
+    fn isSuccess() -> Bool {
+        return this.type == NavigationResultType.Success
+    }
+    
+    fn isBlocked() -> Bool {
+        return this.type == NavigationResultType.Blocked
+    }
+    
+    fn isNotFound() -> Bool {
+        return this.type == NavigationResultType.NotFound
+    }
+    
+    fn isInvalidOperation() -> Bool {
+        return this.type == NavigationResultType.InvalidOperation
+    }
+}
+
+
+"""
+═══════════════════════════════════════════════════════════════════════════
+NAVIGATOR
+═══════════════════════════════════════════════════════════════════════════
+Navigator principal para gestión de navigation stack
+"""
+
+class Navigator {
+    """
+    Navigator principal de la aplicación.
+    
+    Gestiona el navigation stack, transiciones, y estado de navegación.
+    Proporciona métodos para push, pop, replace, y navegación nombrada.
+    
+    Properties:
+        router: Router con definiciones de rutas
+        history: Stack de navegación (lista de RouteEntry)
+        currentRoute: Ruta activa actual (señal reactiva)
+        canGoBack: Booleano si se puede hacer pop (computed)
+        
+    Callbacks:
+        onRouteChanged: Se ejecuta cuando cambia la ruta activa
+        
+    Ejemplo de uso:
+        navigator = Navigator(router: myRouter)
+        
+        # Push nueva ruta
+        result = navigator.push("/users/123")
+        
+        # Pop (back)
+        navigator.pop()
+        
+        # Push por nombre
+        navigator.pushNamed("user-profile", {id: "123"})
+        
+        # Replace
+        navigator.replace("/dashboard")
+        
+        # Pop hasta condición
+        navigator.popUntil(entry => entry.getPath() == "/home")
+    """
+    
+    router: Router
+    context: BuildContext
+    
+    # Navigation stack (reactive)
+    _history: List<RouteEntry>
+    
+    # Señales reactivas
+    currentRoute: signal<Option<RouteEntry>>
+    
+    # Callbacks
+    onRouteChanged: Option<(Option<RouteEntry>, Option<RouteEntry>) -> void>
+    
+    
+    constructor(
+        router: Router,
+        context: BuildContext,
+        initialPath: Option<String> = None,
+        onRouteChanged: Option<(Option<RouteEntry>, Option<RouteEntry>) -> void> = None
+    ) {
+        this.router = router
+        this.context = context
+        this._history = []
+        this.currentRoute = signal(None)
+        this.onRouteChanged = onRouteChanged
+        
+        # Navegar a ruta inicial si se especifica
+        pathToNavigate = initialPath.unwrapOr(router.initialRoute)
+        this.push(pathToNavigate, transition: TransitionConfig.none())
+    }
+    
+    
+    """
+    ═══════════════════════════════════════════════════════════════════════
+    COMPUTED PROPERTIES
+    ═══════════════════════════════════════════════════════════════════════
+    """
+    
+    computed canGoBack: Bool {
+        return this._history.length > 1
+    }
+    
+    computed stackDepth: Number {
+        return this._history.length
+    }
+    
+    
+    """
+    ═══════════════════════════════════════════════════════════════════════
+    NAVIGATION METHODS
+    ═══════════════════════════════════════════════════════════════════════
+    """
+    
+    """
+    Push nueva ruta al stack
+    
+    Args:
+        path: Path de la ruta (ej: "/users/123?page=2")
+        transition: Configuración de transición (default: slide right-to-left)
+        
+    Returns:
+        NavigationResult con el resultado de la operación
+        
+    Example:
+        result = navigator.push("/users/123")
+        match result.type {
+            NavigationResultType.Success => print("Navegación exitosa")
+            NavigationResultType.Blocked => print("Bloqueado por guard")
+            NavigationResultType.NotFound => print("Ruta no encontrada")
+        }
+    """
+    fn push(
+        path: String,
+        transition: TransitionConfig = TransitionConfig.defaultPush()
+    ) -> NavigationResult {
+        # Intentar match
+        matchResult = this.router.match(path)
+        
+        match matchResult {
+            None => {
+                return NavigationResult(
+                    type: NavigationResultType.NotFound,
+                    message: "Route not found: ${path}"
+                )
+            }
+            Some(routeMatch) => {
+                # Verificar guards
+                if !routeMatch.definition.canActivate(this.context, routeMatch.params) {
+                    return NavigationResult(
+                        type: NavigationResultType.Blocked,
+                        message: "Navigation blocked by guard"
+                    )
+                }
+                
+                # Construir widget
+                widget = routeMatch.build(this.context)
+                
+                # Crear entry
+                entry = RouteEntry(
+                    match: routeMatch,
+                    widget: widget,
+                    transition: transition
+                )
+                
+                # Guardar ruta anterior para callback
+                oldRoute = this.currentRoute.value
+                
+                # Agregar al stack
+                this._history.add(entry)
+                
+                # Actualizar señal reactiva
+                this.currentRoute.value = Some(entry)
+                
+                # Ejecutar callback
+                if this.onRouteChanged.isSome() {
+                    callback = this.onRouteChanged.unwrap()
+                    callback(oldRoute, Some(entry))
+                }
+                
+                return NavigationResult(
+                    type: NavigationResultType.Success,
+                    message: "Navigation successful",
+                    entry: Some(entry)
+                )
+            }
+        }
+    }
+    
+    
+    """
+    Pop ruta actual del stack (back navigation)
+    
+    Args:
+        transition: Configuración de transición (default: slide left-to-right)
+        
+    Returns:
+        NavigationResult
+        
+    Example:
+        if navigator.canGoBack {
+            navigator.pop()
+        }
+    """
+    fn pop(
+        transition: TransitionConfig = TransitionConfig.defaultPop()
+    ) -> NavigationResult {
+        if !this.canGoBack {
+            return NavigationResult(
+                type: NavigationResultType.InvalidOperation,
+                message: "Cannot pop: navigation stack has only one entry"
+            )
+        }
+        
+        # Remover ruta actual
+        oldRoute = Some(this._history.removeLast())
+        
+        # Nueva ruta actual
+        newEntry = this._history.last()
+        
+        # Actualizar transición de la nueva ruta actual
+        newEntry.transition = transition
+        
+        # Actualizar señal reactiva
+        this.currentRoute.value = Some(newEntry)
+        
+        # Ejecutar callback
+        if this.onRouteChanged.isSome() {
+            callback = this.onRouteChanged.unwrap()
+            callback(oldRoute, Some(newEntry))
+        }
+        
+        return NavigationResult(
+            type: NavigationResultType.Success,
+            message: "Pop successful",
+            entry: Some(newEntry)
+        )
+    }
+    
+    
+    """
+    Replace ruta actual sin agregar al stack
+    
+    Args:
+        path: Path de la nueva ruta
+        transition: Configuración de transición
+        
+    Returns:
+        NavigationResult
+        
+    Example:
+        # Reemplazar login con dashboard (sin poder volver a login)
+        navigator.replace("/dashboard")
+    """
+    fn replace(
+        path: String,
+        transition: TransitionConfig = TransitionConfig.defaultPush()
+    ) -> NavigationResult {
+        # Intentar match
+        matchResult = this.router.match(path)
+        
+        match matchResult {
+            None => {
+                return NavigationResult(
+                    type: NavigationResultType.NotFound,
+                    message: "Route not found: ${path}"
+                )
+            }
+            Some(routeMatch) => {
+                # Verificar guards
+                if !routeMatch.definition.canActivate(this.context, routeMatch.params) {
+                    return NavigationResult(
+                        type: NavigationResultType.Blocked,
+                        message: "Navigation blocked by guard"
+                    )
+                }
+                
+                # Construir widget
+                widget = routeMatch.build(this.context)
+                
+                # Crear entry
+                entry = RouteEntry(
+                    match: routeMatch,
+                    widget: widget,
+                    transition: transition
+                )
+                
+                # Guardar ruta anterior
+                oldRoute = if this._history.isEmpty() {
+                    None
+                } else {
+                    Some(this._history.removeLast())
+                }
+                
+                # Reemplazar última entrada (o agregar si stack vacío)
+                this._history.add(entry)
+                
+                # Actualizar señal reactiva
+                this.currentRoute.value = Some(entry)
+                
+                # Ejecutar callback
+                if this.onRouteChanged.isSome() {
+                    callback = this.onRouteChanged.unwrap()
+                    callback(oldRoute, Some(entry))
+                }
+                
+                return NavigationResult(
+                    type: NavigationResultType.Success,
+                    message: "Replace successful",
+                    entry: Some(entry)
+                )
+            }
+        }
+    }
+    
+    
+    """
+    Push ruta por nombre
+    
+    Args:
+        name: Nombre de la ruta
+        params: Parámetros para construir el path
+        transition: Configuración de transición
+        
+    Returns:
+        NavigationResult
+        
+    Example:
+        navigator.pushNamed("user-profile", {id: "123"})
+    """
+    fn pushNamed(
+        name: String,
+        params: Map<String, String> = {},
+        transition: TransitionConfig = TransitionConfig.defaultPush()
+    ) -> NavigationResult {
+        # Intentar match por nombre
+        matchResult = this.router.matchNamed(name, params)
+        
+        match matchResult {
+            None => {
+                return NavigationResult(
+                    type: NavigationResultType.NotFound,
+                    message: "Named route not found: ${name}"
+                )
+            }
+            Some(routeMatch) => {
+                # Usar push normal con el path construido
+                return this.push(routeMatch.path, transition: transition)
+            }
+        }
+    }
+    
+    
+    """
+    Replace ruta por nombre
+    
+    Args:
+        name: Nombre de la ruta
+        params: Parámetros para construir el path
+        transition: Configuración de transición
+        
+    Returns:
+        NavigationResult
+    """
+    fn replaceNamed(
+        name: String,
+        params: Map<String, String> = {},
+        transition: TransitionConfig = TransitionConfig.defaultPush()
+    ) -> NavigationResult {
+        # Intentar match por nombre
+        matchResult = this.router.matchNamed(name, params)
+        
+        match matchResult {
+            None => {
+                return NavigationResult(
+                    type: NavigationResultType.NotFound,
+                    message: "Named route not found: ${name}"
+                )
+            }
+            Some(routeMatch) => {
+                # Usar replace normal con el path construido
+                return this.replace(routeMatch.path, transition: transition)
+            }
+        }
+    }
+    
+    
+    """
+    Pop hasta que se cumpla una condición
+    
+    Args:
+        predicate: Función que retorna true para detener el pop
+        
+    Returns:
+        NavigationResult (del último pop exitoso)
+        
+    Example:
+        # Pop hasta llegar a home
+        navigator.popUntil(entry => entry.getPath() == "/home")
+        
+        # Pop hasta llegar a una ruta nombrada
+        navigator.popUntil(entry => 
+            entry.getName().isSome() && entry.getName().unwrap() == "dashboard"
+        )
+    """
+    fn popUntil(
+        predicate: (RouteEntry) -> Bool
+    ) -> NavigationResult {
+        if this._history.isEmpty() {
+            return NavigationResult(
+                type: NavigationResultType.InvalidOperation,
+                message: "Cannot pop: navigation stack is empty"
+            )
+        }
+        
+        # Pop mientras no se cumpla la condición y haya más de 1 entrada
+        result: NavigationResult = NavigationResult(
+            type: NavigationResultType.Success,
+            message: "No pop needed"
+        )
+        
+        while this._history.length > 1 {
+            currentEntry = this._history.last()
+            
+            if predicate(currentEntry) {
+                break  # Condición cumplida, detener
+            }
+            
+            result = this.pop()
+            
+            if !result.isSuccess() {
+                break  # Error en pop, detener
+            }
+        }
+        
+        return result
+    }
+    
+    
+    """
+    Pop todas las rutas excepto la primera (ir a root)
+    
+    Example:
+        navigator.popToRoot()
+    """
+    fn popToRoot() -> NavigationResult {
+        return this.popUntil(entry => this._history.length == 1)
+    }
+    
+    
+    """
+    ═══════════════════════════════════════════════════════════════════════
+    QUERY METHODS
+    ═══════════════════════════════════════════════════════════════════════
+    """
+    
+    """
+    Obtiene la ruta actual
+    """
+    fn getCurrentRoute() -> Option<RouteEntry> {
+        return this.currentRoute.value
+    }
+    
+    """
+    Obtiene el path actual
+    """
+    fn getCurrentPath() -> Option<String> {
+        return this.currentRoute.value.map(entry => entry.getPath())
+    }
+    
+    """
+    Obtiene todo el historial de navegación
+    """
+    fn getHistory() -> List<RouteEntry> {
+        return this._history.toList()  # Copia defensiva
+    }
+    
+    """
+    Obtiene el tamaño del stack
+    """
+    fn getStackDepth() -> Number {
+        return this._history.length
+    }
+    
+    """
+    Verifica si puede hacer pop
+    """
+    fn canPop() -> Bool {
+        return this.canGoBack
+    }
+    
+    """
+    Busca una ruta en el historial por path
+    """
+    fn findInHistory(path: String) -> Option<RouteEntry> {
+        return this._history.find(entry => entry.getPath() == path)
+    }
+    
+    """
+    Busca una ruta en el historial por nombre
+    """
+    fn findInHistoryByName(name: String) -> Option<RouteEntry> {
+        return this._history.find(entry => {
+            entryName = entry.getName()
+            return entryName.isSome() && entryName.unwrap() == name
+        })
+    }
+    
+    
+    """
+    ═══════════════════════════════════════════════════════════════════════
+    STATE MANAGEMENT
+    ═══════════════════════════════════════════════════════════════════════
+    """
+    
+    """
+    Limpia todo el historial y navega a una ruta inicial
+    
+    Example:
+        navigator.reset("/home")
+    """
+    fn reset(initialPath: String) -> NavigationResult {
+        # Limpiar historial
+        this._history.clear()
+        
+        # Navegar a ruta inicial sin transición
+        return this.push(initialPath, transition: TransitionConfig.none())
+    }
+    
+    """
+    Obtiene un snapshot del estado actual de navegación
+    """
+    fn getSnapshot() -> NavigationSnapshot {
+        return NavigationSnapshot(
+            history: this._history.toList(),
+            currentRoute: this.currentRoute.value,
+            stackDepth: this._history.length
+        )
+    }
+}
+
+
+"""
+═══════════════════════════════════════════════════════════════════════════
+NAVIGATION SNAPSHOT
+═══════════════════════════════════════════════════════════════════════════
+Snapshot inmutable del estado de navegación
+"""
+
+class NavigationSnapshot {
+    """
+    Snapshot del estado de navegación en un momento dado.
+    
+    Útil para debugging, testing, y state persistence.
+    """
+    
+    history: List<RouteEntry>
+    currentRoute: Option<RouteEntry>
+    stackDepth: Number
+    timestamp: Number
+    
+    constructor(
+        history: List<RouteEntry>,
+        currentRoute: Option<RouteEntry>,
+        stackDepth: Number
+    ) {
+        this.history = history
+        this.currentRoute = currentRoute
+        this.stackDepth = stackDepth
+        this.timestamp = DateTime.now().millisecondsSinceEpoch
+    }
+    
+    """
+    Serializa a Map para persistence
+    """
+    fn toMap() -> Map<String, Any> {
+        return {
+            history: this.history.map(entry => {
+                path: entry.getPath(),
+                timestamp: entry.timestamp
+            }),
+            currentPath: this.currentRoute.map(e => e.getPath()).unwrapOr(""),
+            stackDepth: this.stackDepth,
+            timestamp: this.timestamp
+        }
+    }
+}
+
+
+"""
+═══════════════════════════════════════════════════════════════════════════
+HELPER FUNCTIONS
+═══════════════════════════════════════════════════════════════════════════
+"""
+
+"""
+Crea un Navigator con configuración básica
+"""
+public fn createNavigator(
+    router: Router,
+    context: BuildContext,
+    initialPath: Option<String> = None,
+    onRouteChanged: Option<(Option<RouteEntry>, Option<RouteEntry>) -> void> = None
+) -> Navigator {
+    return Navigator(
+        router: router,
+        context: context,
+        initialPath: initialPath,
+        onRouteChanged: onRouteChanged
+    )
+}

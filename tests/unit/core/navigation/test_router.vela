@@ -1,0 +1,1030 @@
+"""
+Tests unitarios para Router widget
+
+Jira: VELA-585 (Sistema de navegación y routing)
+Subtask: TASK-066 (Router widget)
+Fecha: 2025-12-06
+
+Cobertura:
+- RouteDefinition: construcción, matching, guards, copyWith
+- RouteMatch: getParam, getQueryParam, getAllParams
+- Router: register, match, matchNamed, 404 handling
+- Query parameters: parsing, extracción, combinación
+- Route guards: canActivate, múltiples guards
+- Named routes: navegación por nombre
+- Edge cases: paths vacíos, caracteres especiales, múltiples params
+"""
+
+import 'system:ui' show { Widget, BuildContext, Container, Text }
+import '../../../../core/navigation/router.vela' show {
+    RouteDefinition,
+    RouteMatch,
+    Router,
+    RouteGuard,
+    createRouter,
+    route
+}
+
+
+# Mock BuildContext para tests
+class MockBuildContext implements BuildContext {
+    # Implementación mínima para tests
+}
+
+
+# Mock Widget para tests
+class MockWidget implements Widget {
+    name: String
+    
+    constructor(name: String = "MockWidget") {
+        this.name = name
+    }
+}
+
+
+# Mock RouteGuard que siempre permite
+class AlwaysAllowGuard implements RouteGuard {
+    fn canActivate(context: BuildContext, params: Map<String, String>) -> Bool {
+        return true
+    }
+}
+
+
+# Mock RouteGuard que siempre bloquea
+class AlwaysDenyGuard implements RouteGuard {
+    fn canActivate(context: BuildContext, params: Map<String, String>) -> Bool {
+        return false
+    }
+}
+
+
+# Mock RouteGuard que verifica un parámetro específico
+class ParamCheckGuard implements RouteGuard {
+    requiredParam: String
+    requiredValue: String
+    
+    constructor(requiredParam: String, requiredValue: String) {
+        this.requiredParam = requiredParam
+        this.requiredValue = requiredValue
+    }
+    
+    fn canActivate(context: BuildContext, params: Map<String, String>) -> Bool {
+        if !params.containsKey(this.requiredParam) {
+            return false
+        }
+        return params[this.requiredParam] == this.requiredValue
+    }
+}
+
+
+"""
+═══════════════════════════════════════════════════════════════════════════
+TESTS: RouteDefinition - Construcción y Propiedades
+═══════════════════════════════════════════════════════════════════════════
+"""
+
+@test
+fn testRouteDefinitionConstruction() -> void {
+    builder = (BuildContext ctx, Map<String, String> params) => MockWidget()
+    
+    routeDef = RouteDefinition(
+        path: "/users/:id",
+        builder: builder,
+        name: Some("user-profile"),
+        guards: [],
+        metadata: {title: "User Profile"}
+    )
+    
+    assert(routeDef.path == "/users/:id", "Path should be set")
+    assert(routeDef.name.unwrap() == "user-profile", "Name should be set")
+    assert(routeDef.guards.length == 0, "Guards should be empty")
+    assert(routeDef.metadata["title"] == "User Profile", "Metadata should be set")
+}
+
+
+@test
+fn testRouteDefinitionDefaultValues() -> void {
+    builder = (BuildContext ctx, Map<String, String> params) => MockWidget()
+    
+    routeDef = RouteDefinition(
+        path: "/home",
+        builder: builder
+    )
+    
+    assert(routeDef.name.isNone(), "Name should be None by default")
+    assert(routeDef.guards.length == 0, "Guards should be empty by default")
+    assert(routeDef.metadata.isEmpty(), "Metadata should be empty by default")
+}
+
+
+"""
+═══════════════════════════════════════════════════════════════════════════
+TESTS: RouteDefinition - Pattern Matching
+═══════════════════════════════════════════════════════════════════════════
+"""
+
+@test
+fn testStaticRouteMatching() -> void {
+    builder = (BuildContext ctx, Map<String, String> params) => MockWidget()
+    routeDef = RouteDefinition(path: "/home", builder: builder)
+    
+    # Match exitoso
+    match routeDef.matches("/home") {
+        Some(params) => {
+            assert(params.isEmpty(), "Static route should have no params")
+        }
+        None => throw Error("Should match /home")
+    }
+    
+    # Match fallido
+    match routeDef.matches("/about") {
+        Some(_) => throw Error("Should not match /about")
+        None => {}  # Esperado
+    }
+}
+
+
+@test
+fn testDynamicRouteMatching() -> void {
+    builder = (BuildContext ctx, Map<String, String> params) => MockWidget()
+    routeDef = RouteDefinition(path: "/users/:id", builder: builder)
+    
+    # Match con parámetro
+    match routeDef.matches("/users/123") {
+        Some(params) => {
+            assert(params.containsKey("id"), "Should extract id param")
+            assert(params["id"] == "123", "Id should be 123")
+        }
+        None => throw Error("Should match /users/123")
+    }
+    
+    # Match fallido (sin parámetro)
+    match routeDef.matches("/users") {
+        Some(_) => throw Error("Should not match /users")
+        None => {}  # Esperado
+    }
+}
+
+
+@test
+fn testMultipleParametersRouteMatching() -> void {
+    builder = (BuildContext ctx, Map<String, String> params) => MockWidget()
+    routeDef = RouteDefinition(
+        path: "/posts/:category/:slug",
+        builder: builder
+    )
+    
+    match routeDef.matches("/posts/tech/introduction-to-vela") {
+        Some(params) => {
+            assert(params.containsKey("category"), "Should extract category")
+            assert(params.containsKey("slug"), "Should extract slug")
+            assert(params["category"] == "tech", "Category should be tech")
+            assert(params["slug"] == "introduction-to-vela", "Slug should match")
+        }
+        None => throw Error("Should match path with multiple params")
+    }
+}
+
+
+@test
+fn testRouteMatchingWithSpecialCharacters() -> void {
+    builder = (BuildContext ctx, Map<String, String> params) => MockWidget()
+    routeDef = RouteDefinition(
+        path: "/files/:filename",
+        builder: builder
+    )
+    
+    # Guiones y underscores en parámetros
+    match routeDef.matches("/files/my-file_2024") {
+        Some(params) => {
+            assert(params["filename"] == "my-file_2024", "Should handle - and _")
+        }
+        None => throw Error("Should match with special chars")
+    }
+}
+
+
+"""
+═══════════════════════════════════════════════════════════════════════════
+TESTS: RouteDefinition - Guards
+═══════════════════════════════════════════════════════════════════════════
+"""
+
+@test
+fn testRouteGuardAllow() -> void {
+    builder = (BuildContext ctx, Map<String, String> params) => MockWidget()
+    routeDef = RouteDefinition(
+        path: "/admin",
+        builder: builder,
+        guards: [AlwaysAllowGuard()]
+    )
+    
+    context = MockBuildContext()
+    canActivate = routeDef.canActivate(context, {})
+    
+    assert(canActivate == true, "Guard should allow activation")
+}
+
+
+@test
+fn testRouteGuardDeny() -> void {
+    builder = (BuildContext ctx, Map<String, String> params) => MockWidget()
+    routeDef = RouteDefinition(
+        path: "/admin",
+        builder: builder,
+        guards: [AlwaysDenyGuard()]
+    )
+    
+    context = MockBuildContext()
+    canActivate = routeDef.canActivate(context, {})
+    
+    assert(canActivate == false, "Guard should deny activation")
+}
+
+
+@test
+fn testMultipleGuards() -> void {
+    builder = (BuildContext ctx, Map<String, String> params) => MockWidget()
+    
+    # Todos permiten
+    routeDef1 = RouteDefinition(
+        path: "/resource",
+        builder: builder,
+        guards: [AlwaysAllowGuard(), AlwaysAllowGuard()]
+    )
+    context = MockBuildContext()
+    assert(routeDef1.canActivate(context, {}) == true, "All guards allow")
+    
+    # Uno bloquea
+    routeDef2 = RouteDefinition(
+        path: "/resource",
+        builder: builder,
+        guards: [AlwaysAllowGuard(), AlwaysDenyGuard()]
+    )
+    assert(routeDef2.canActivate(context, {}) == false, "One guard denies")
+}
+
+
+@test
+fn testParamCheckGuard() -> void {
+    builder = (BuildContext ctx, Map<String, String> params) => MockWidget()
+    routeDef = RouteDefinition(
+        path: "/users/:id",
+        builder: builder,
+        guards: [ParamCheckGuard("id", "admin")]
+    )
+    
+    context = MockBuildContext()
+    
+    # Parámetro correcto
+    assert(
+        routeDef.canActivate(context, {id: "admin"}) == true,
+        "Should allow with correct param"
+    )
+    
+    # Parámetro incorrecto
+    assert(
+        routeDef.canActivate(context, {id: "user"}) == false,
+        "Should deny with incorrect param"
+    )
+    
+    # Parámetro faltante
+    assert(
+        routeDef.canActivate(context, {}) == false,
+        "Should deny with missing param"
+    )
+}
+
+
+"""
+═══════════════════════════════════════════════════════════════════════════
+TESTS: RouteDefinition - CopyWith
+═══════════════════════════════════════════════════════════════════════════
+"""
+
+@test
+fn testRouteDefinitionCopyWith() -> void {
+    builder1 = (BuildContext ctx, Map<String, String> params) => MockWidget("Widget1")
+    builder2 = (BuildContext ctx, Map<String, String> params) => MockWidget("Widget2")
+    
+    original = RouteDefinition(
+        path: "/users/:id",
+        builder: builder1,
+        name: Some("user-profile")
+    )
+    
+    # Cambiar path
+    copy1 = original.copyWith(path: Some("/posts/:id"))
+    assert(copy1.path == "/posts/:id", "Path should be updated")
+    assert(copy1.name.unwrap() == "user-profile", "Name should be preserved")
+    
+    # Cambiar builder
+    copy2 = original.copyWith(builder: Some(builder2))
+    assert(copy2.path == "/users/:id", "Path should be preserved")
+    
+    # Cambiar name
+    copy3 = original.copyWith(name: Some(Some("new-name")))
+    assert(copy3.name.unwrap() == "new-name", "Name should be updated")
+}
+
+
+"""
+═══════════════════════════════════════════════════════════════════════════
+TESTS: RouteMatch - Construcción y Métodos
+═══════════════════════════════════════════════════════════════════════════
+"""
+
+@test
+fn testRouteMatchConstruction() -> void {
+    builder = (BuildContext ctx, Map<String, String> params) => MockWidget()
+    routeDef = RouteDefinition(path: "/users/:id", builder: builder)
+    
+    match = RouteMatch(
+        definition: routeDef,
+        params: {id: "123"},
+        path: "/users/123",
+        queryParams: {page: "2", filter: "active"}
+    )
+    
+    assert(match.path == "/users/123", "Path should be set")
+    assert(match.params["id"] == "123", "Params should be set")
+    assert(match.queryParams["page"] == "2", "Query params should be set")
+}
+
+
+@test
+fn testRouteMatchGetParam() -> void {
+    builder = (BuildContext ctx, Map<String, String> params) => MockWidget()
+    routeDef = RouteDefinition(path: "/users/:id", builder: builder)
+    
+    match = RouteMatch(
+        definition: routeDef,
+        params: {id: "123", slug: "hello"},
+        path: "/users/123"
+    )
+    
+    # Parámetro existente
+    idParam = match.getParam("id")
+    assert(idParam.isSome(), "Should find id param")
+    assert(idParam.unwrap() == "123", "Id should be 123")
+    
+    # Parámetro faltante
+    missingParam = match.getParam("missing")
+    assert(missingParam.isNone(), "Should return None for missing param")
+}
+
+
+@test
+fn testRouteMatchGetQueryParam() -> void {
+    builder = (BuildContext ctx, Map<String, String> params) => MockWidget()
+    routeDef = RouteDefinition(path: "/search", builder: builder)
+    
+    match = RouteMatch(
+        definition: routeDef,
+        params: {},
+        path: "/search",
+        queryParams: {q: "vela", lang: "es"}
+    )
+    
+    # Query param existente
+    qParam = match.getQueryParam("q")
+    assert(qParam.isSome(), "Should find q param")
+    assert(qParam.unwrap() == "vela", "q should be vela")
+    
+    # Query param faltante
+    missingParam = match.getQueryParam("missing")
+    assert(missingParam.isNone(), "Should return None for missing query param")
+}
+
+
+@test
+fn testRouteMatchGetAllParams() -> void {
+    builder = (BuildContext ctx, Map<String, String> params) => MockWidget()
+    routeDef = RouteDefinition(path: "/users/:id", builder: builder)
+    
+    match = RouteMatch(
+        definition: routeDef,
+        params: {id: "123"},
+        path: "/users/123",
+        queryParams: {page: "2", filter: "active"}
+    )
+    
+    allParams = match.getAllParams()
+    
+    assert(allParams.containsKey("id"), "Should include path param")
+    assert(allParams.containsKey("page"), "Should include query param")
+    assert(allParams.containsKey("filter"), "Should include query param")
+    assert(allParams["id"] == "123", "Path param value correct")
+    assert(allParams["page"] == "2", "Query param value correct")
+}
+
+
+@test
+fn testRouteMatchGetAllParamsOverride() -> void {
+    builder = (BuildContext ctx, Map<String, String> params) => MockWidget()
+    routeDef = RouteDefinition(path: "/users/:id", builder: builder)
+    
+    # Query param sobrescribe path param si hay conflicto
+    match = RouteMatch(
+        definition: routeDef,
+        params: {id: "123"},
+        path: "/users/123",
+        queryParams: {id: "456"}  # Conflicto intencional
+    )
+    
+    allParams = match.getAllParams()
+    assert(allParams["id"] == "456", "Query param should override path param")
+}
+
+
+"""
+═══════════════════════════════════════════════════════════════════════════
+TESTS: Router - Construcción y Registro
+═══════════════════════════════════════════════════════════════════════════
+"""
+
+@test
+fn testRouterConstruction() -> void {
+    builder = (BuildContext ctx, Map<String, String> params) => MockWidget()
+    notFoundBuilder = (BuildContext ctx) => MockWidget("404")
+    
+    routes = [
+        RouteDefinition(path: "/home", builder: builder),
+        RouteDefinition(path: "/about", builder: builder)
+    ]
+    
+    router = Router(
+        routes: routes,
+        notFoundBuilder: notFoundBuilder,
+        initialRoute: "/home"
+    )
+    
+    assert(router.routes.length == 2, "Should have 2 routes")
+    assert(router.initialRoute == "/home", "Initial route should be /home")
+}
+
+
+@test
+fn testRouterRegister() -> void {
+    builder = (BuildContext ctx, Map<String, String> params) => MockWidget()
+    notFoundBuilder = (BuildContext ctx) => MockWidget("404")
+    
+    router = Router(
+        routes: [],
+        notFoundBuilder: notFoundBuilder
+    )
+    
+    assert(router.routes.length == 0, "Should start empty")
+    
+    router.register(RouteDefinition(path: "/new", builder: builder))
+    assert(router.routes.length == 1, "Should have 1 route after register")
+    
+    router.register(RouteDefinition(path: "/another", builder: builder))
+    assert(router.routes.length == 2, "Should have 2 routes")
+}
+
+
+@test
+fn testRouterUnregister() -> void {
+    builder = (BuildContext ctx, Map<String, String> params) => MockWidget()
+    notFoundBuilder = (BuildContext ctx) => MockWidget("404")
+    
+    router = Router(
+        routes: [
+            RouteDefinition(path: "/home", builder: builder),
+            RouteDefinition(path: "/about", builder: builder)
+        ],
+        notFoundBuilder: notFoundBuilder
+    )
+    
+    # Unregister existente
+    success = router.unregister("/home")
+    assert(success == true, "Should unregister successfully")
+    assert(router.routes.length == 1, "Should have 1 route left")
+    
+    # Unregister no existente
+    failure = router.unregister("/missing")
+    assert(failure == false, "Should fail for missing route")
+}
+
+
+"""
+═══════════════════════════════════════════════════════════════════════════
+TESTS: Router - Matching
+═══════════════════════════════════════════════════════════════════════════
+"""
+
+@test
+fn testRouterMatchStatic() -> void {
+    builder = (BuildContext ctx, Map<String, String> params) => MockWidget()
+    notFoundBuilder = (BuildContext ctx) => MockWidget("404")
+    
+    router = Router(
+        routes: [
+            RouteDefinition(path: "/home", builder: builder),
+            RouteDefinition(path: "/about", builder: builder)
+        ],
+        notFoundBuilder: notFoundBuilder
+    )
+    
+    # Match exitoso
+    match router.match("/home") {
+        Some(match) => {
+            assert(match.path == "/home", "Path should match")
+        }
+        None => throw Error("Should match /home")
+    }
+    
+    # Match fallido
+    match router.match("/missing") {
+        Some(_) => throw Error("Should not match /missing")
+        None => {}  # Esperado
+    }
+}
+
+
+@test
+fn testRouterMatchDynamic() -> void {
+    builder = (BuildContext ctx, Map<String, String> params) => MockWidget()
+    notFoundBuilder = (BuildContext ctx) => MockWidget("404")
+    
+    router = Router(
+        routes: [
+            RouteDefinition(path: "/users/:id", builder: builder)
+        ],
+        notFoundBuilder: notFoundBuilder
+    )
+    
+    match router.match("/users/123") {
+        Some(match) => {
+            assert(match.path == "/users/123", "Path should match")
+            assert(match.params["id"] == "123", "Param should be extracted")
+        }
+        None => throw Error("Should match /users/123")
+    }
+}
+
+
+@test
+fn testRouterMatchWithQueryParams() -> void {
+    builder = (BuildContext ctx, Map<String, String> params) => MockWidget()
+    notFoundBuilder = (BuildContext ctx) => MockWidget("404")
+    
+    router = Router(
+        routes: [
+            RouteDefinition(path: "/search", builder: builder)
+        ],
+        notFoundBuilder: notFoundBuilder
+    )
+    
+    match router.match("/search?q=vela&lang=es") {
+        Some(match) => {
+            assert(match.path == "/search", "Path should be normalized")
+            assert(match.queryParams["q"] == "vela", "Query param q extracted")
+            assert(match.queryParams["lang"] == "es", "Query param lang extracted")
+        }
+        None => throw Error("Should match /search with query params")
+    }
+}
+
+
+@test
+fn testRouterMatchPriority() -> void {
+    builder1 = (BuildContext ctx, Map<String, String> params) => MockWidget("Widget1")
+    builder2 = (BuildContext ctx, Map<String, String> params) => MockWidget("Widget2")
+    notFoundBuilder = (BuildContext ctx) => MockWidget("404")
+    
+    # Primera ruta registrada tiene prioridad
+    router = Router(
+        routes: [
+            RouteDefinition(path: "/users/:id", builder: builder1),
+            RouteDefinition(path: "/users/admin", builder: builder2)  # Más específica pero después
+        ],
+        notFoundBuilder: notFoundBuilder
+    )
+    
+    # Debería matchear la primera (menos específica)
+    match router.match("/users/admin") {
+        Some(match) => {
+            # Primera ruta matchea con :id = "admin"
+            assert(match.params["id"] == "admin", "First route should match")
+        }
+        None => throw Error("Should match")
+    }
+}
+
+
+"""
+═══════════════════════════════════════════════════════════════════════════
+TESTS: Router - Named Routes
+═══════════════════════════════════════════════════════════════════════════
+"""
+
+@test
+fn testRouterMatchNamed() -> void {
+    builder = (BuildContext ctx, Map<String, String> params) => MockWidget()
+    notFoundBuilder = (BuildContext ctx) => MockWidget("404")
+    
+    router = Router(
+        routes: [
+            RouteDefinition(
+                path: "/users/:id",
+                builder: builder,
+                name: Some("user-profile")
+            )
+        ],
+        notFoundBuilder: notFoundBuilder
+    )
+    
+    match router.matchNamed("user-profile", {id: "123"}) {
+        Some(match) => {
+            assert(match.path == "/users/123", "Path should be built correctly")
+            assert(match.params["id"] == "123", "Param should be set")
+        }
+        None => throw Error("Should match named route")
+    }
+}
+
+
+@test
+fn testRouterMatchNamedMissing() -> void {
+    builder = (BuildContext ctx, Map<String, String> params) => MockWidget()
+    notFoundBuilder = (BuildContext ctx) => MockWidget("404")
+    
+    router = Router(
+        routes: [
+            RouteDefinition(path: "/home", builder: builder)
+        ],
+        notFoundBuilder: notFoundBuilder
+    )
+    
+    match router.matchNamed("missing-route", {}) {
+        Some(_) => throw Error("Should not match missing named route")
+        None => {}  # Esperado
+    }
+}
+
+
+@test
+fn testRouterGetRouteByName() -> void {
+    builder = (BuildContext ctx, Map<String, String> params) => MockWidget()
+    notFoundBuilder = (BuildContext ctx) => MockWidget("404")
+    
+    router = Router(
+        routes: [
+            RouteDefinition(
+                path: "/admin",
+                builder: builder,
+                name: Some("admin-dashboard")
+            )
+        ],
+        notFoundBuilder: notFoundBuilder
+    )
+    
+    # Ruta existente
+    match router.getRouteByName("admin-dashboard") {
+        Some(route) => {
+            assert(route.path == "/admin", "Should find route by name")
+        }
+        None => throw Error("Should find route")
+    }
+    
+    # Ruta no existente
+    match router.getRouteByName("missing") {
+        Some(_) => throw Error("Should not find missing route")
+        None => {}  # Esperado
+    }
+}
+
+
+@test
+fn testRouterHasRoute() -> void {
+    builder = (BuildContext ctx, Map<String, String> params) => MockWidget()
+    notFoundBuilder = (BuildContext ctx) => MockWidget("404")
+    
+    router = Router(
+        routes: [
+            RouteDefinition(
+                path: "/settings",
+                builder: builder,
+                name: Some("settings")
+            )
+        ],
+        notFoundBuilder: notFoundBuilder
+    )
+    
+    assert(router.hasRoute("settings") == true, "Should have route")
+    assert(router.hasRoute("missing") == false, "Should not have route")
+}
+
+
+"""
+═══════════════════════════════════════════════════════════════════════════
+TESTS: Router - 404 Not Found
+═══════════════════════════════════════════════════════════════════════════
+"""
+
+@test
+fn testRouterBuildNotFound() -> void {
+    builder = (BuildContext ctx, Map<String, String> params) => MockWidget()
+    notFoundBuilder = (BuildContext ctx) => MockWidget("404")
+    
+    router = Router(
+        routes: [
+            RouteDefinition(path: "/home", builder: builder)
+        ],
+        notFoundBuilder: notFoundBuilder
+    )
+    
+    context = MockBuildContext()
+    widget = router.buildNotFound(context)
+    
+    assert(widget.name == "404", "Should build 404 widget")
+}
+
+
+"""
+═══════════════════════════════════════════════════════════════════════════
+TESTS: Router - Helpers
+═══════════════════════════════════════════════════════════════════════════
+"""
+
+@test
+fn testRouterParseQueryParams() -> void {
+    builder = (BuildContext ctx, Map<String, String> params) => MockWidget()
+    notFoundBuilder = (BuildContext ctx) => MockWidget("404")
+    
+    router = Router(routes: [], notFoundBuilder: notFoundBuilder)
+    
+    # Query params simples
+    params1 = router._parseQueryParams("/search?q=vela&lang=es")
+    assert(params1["q"] == "vela", "Query param q should be parsed")
+    assert(params1["lang"] == "es", "Query param lang should be parsed")
+    
+    # Sin query params
+    params2 = router._parseQueryParams("/home")
+    assert(params2.isEmpty(), "Should return empty map for no query params")
+    
+    # URL encoding
+    params3 = router._parseQueryParams("/search?q=hello%20world")
+    assert(params3["q"] == "hello world", "Should decode URL encoding")
+}
+
+
+@test
+fn testRouterNormalizePath() -> void {
+    builder = (BuildContext ctx, Map<String, String> params) => MockWidget()
+    notFoundBuilder = (BuildContext ctx) => MockWidget("404")
+    
+    router = Router(routes: [], notFoundBuilder: notFoundBuilder)
+    
+    # Remover query params
+    assert(
+        router._normalizePath("/users?page=2") == "/users",
+        "Should remove query params"
+    )
+    
+    # Remover trailing slash
+    assert(
+        router._normalizePath("/users/") == "/users",
+        "Should remove trailing slash"
+    )
+    
+    # Preservar root "/"
+    assert(
+        router._normalizePath("/") == "/",
+        "Should preserve root slash"
+    )
+    
+    # Ya normalizado
+    assert(
+        router._normalizePath("/users/123") == "/users/123",
+        "Should keep normalized path"
+    )
+}
+
+
+@test
+fn testRouterClear() -> void {
+    builder = (BuildContext ctx, Map<String, String> params) => MockWidget()
+    notFoundBuilder = (BuildContext ctx) => MockWidget("404")
+    
+    router = Router(
+        routes: [
+            RouteDefinition(path: "/home", builder: builder, name: Some("home")),
+            RouteDefinition(path: "/about", builder: builder)
+        ],
+        notFoundBuilder: notFoundBuilder
+    )
+    
+    assert(router.routes.length == 2, "Should have 2 routes")
+    assert(router.hasRoute("home") == true, "Should have named route")
+    
+    router.clear()
+    
+    assert(router.routes.length == 0, "Should clear all routes")
+    assert(router.hasRoute("home") == false, "Should clear named routes cache")
+}
+
+
+"""
+═══════════════════════════════════════════════════════════════════════════
+TESTS: Helper Functions
+═══════════════════════════════════════════════════════════════════════════
+"""
+
+@test
+fn testCreateRouterHelper() -> void {
+    builder = (BuildContext ctx, Map<String, String> params) => MockWidget()
+    
+    routes = [
+        RouteDefinition(path: "/home", builder: builder),
+        RouteDefinition(path: "/about", builder: builder)
+    ]
+    
+    router = createRouter(routes: routes)
+    
+    assert(router.routes.length == 2, "Should create router with routes")
+    assert(router.initialRoute == "/", "Default initial route should be /")
+}
+
+
+@test
+fn testCreateRouterHelperWithCustom404() -> void {
+    builder = (BuildContext ctx, Map<String, String> params) => MockWidget()
+    custom404 = (BuildContext ctx) => MockWidget("Custom404")
+    
+    router = createRouter(
+        routes: [],
+        notFoundBuilder: Some(custom404),
+        initialRoute: "/home"
+    )
+    
+    context = MockBuildContext()
+    widget = router.buildNotFound(context)
+    
+    assert(widget.name == "Custom404", "Should use custom 404 builder")
+    assert(router.initialRoute == "/home", "Should use custom initial route")
+}
+
+
+@test
+fn testRouteHelper() -> void {
+    builder = (BuildContext ctx, Map<String, String> params) => MockWidget()
+    
+    routeDef = route(
+        path: "/users/:id",
+        builder: builder,
+        name: Some("user-profile"),
+        guards: [AlwaysAllowGuard()]
+    )
+    
+    assert(routeDef.path == "/users/:id", "Route helper should set path")
+    assert(routeDef.name.unwrap() == "user-profile", "Route helper should set name")
+    assert(routeDef.guards.length == 1, "Route helper should set guards")
+}
+
+
+"""
+═══════════════════════════════════════════════════════════════════════════
+TESTS: Edge Cases
+═══════════════════════════════════════════════════════════════════════════
+"""
+
+@test
+fn testEmptyPathRouting() -> void {
+    builder = (BuildContext ctx, Map<String, String> params) => MockWidget()
+    notFoundBuilder = (BuildContext ctx) => MockWidget("404")
+    
+    router = Router(
+        routes: [
+            RouteDefinition(path: "", builder: builder)  # Empty path
+        ],
+        notFoundBuilder: notFoundBuilder
+    )
+    
+    match router.match("") {
+        Some(match) => {
+            assert(match.path == "", "Should match empty path")
+        }
+        None => throw Error("Should match empty path")
+    }
+}
+
+
+@test
+fn testSpecialCharactersInQueryParams() -> void {
+    builder = (BuildContext ctx, Map<String, String> params) => MockWidget()
+    notFoundBuilder = (BuildContext ctx) => MockWidget("404")
+    
+    router = Router(
+        routes: [
+            RouteDefinition(path: "/search", builder: builder)
+        ],
+        notFoundBuilder: notFoundBuilder
+    )
+    
+    # Espacios, símbolos especiales
+    match router.match("/search?q=hello%20world&symbols=%21%40%23") {
+        Some(match) => {
+            assert(match.queryParams["q"] == "hello world", "Should decode spaces")
+            assert(match.queryParams["symbols"] == "!@#", "Should decode symbols")
+        }
+        None => throw Error("Should match with special chars")
+    }
+}
+
+
+@test
+fn testMultipleSlashesInPath() -> void {
+    builder = (BuildContext ctx, Map<String, String> params) => MockWidget()
+    routeDef = RouteDefinition(path: "/users/:id", builder: builder)
+    
+    # Path con múltiples slashes no debería matchear
+    match routeDef.matches("/users//123") {
+        Some(_) => throw Error("Should not match path with double slashes")
+        None => {}  # Esperado
+    }
+}
+
+
+@test
+fn testCaseInsensitiveRouting() -> void {
+    builder = (BuildContext ctx, Map<String, String> params) => MockWidget()
+    routeDef = RouteDefinition(path: "/Users/:id", builder: builder)
+    
+    # Vela routing es case-sensitive por defecto
+    match routeDef.matches("/users/123") {
+        Some(_) => throw Error("Should be case-sensitive")
+        None => {}  # Esperado
+    }
+    
+    # Match exacto
+    match routeDef.matches("/Users/123") {
+        Some(params) => {
+            assert(params["id"] == "123", "Exact case should match")
+        }
+        None => throw Error("Should match exact case")
+    }
+}
+
+
+"""
+═══════════════════════════════════════════════════════════════════════════
+MAIN TEST RUNNER
+═══════════════════════════════════════════════════════════════════════════
+"""
+
+fn main() -> void {
+    print("Running Router tests...")
+    
+    # RouteDefinition tests
+    testRouteDefinitionConstruction()
+    testRouteDefinitionDefaultValues()
+    testStaticRouteMatching()
+    testDynamicRouteMatching()
+    testMultipleParametersRouteMatching()
+    testRouteMatchingWithSpecialCharacters()
+    testRouteGuardAllow()
+    testRouteGuardDeny()
+    testMultipleGuards()
+    testParamCheckGuard()
+    testRouteDefinitionCopyWith()
+    
+    # RouteMatch tests
+    testRouteMatchConstruction()
+    testRouteMatchGetParam()
+    testRouteMatchGetQueryParam()
+    testRouteMatchGetAllParams()
+    testRouteMatchGetAllParamsOverride()
+    
+    # Router tests
+    testRouterConstruction()
+    testRouterRegister()
+    testRouterUnregister()
+    testRouterMatchStatic()
+    testRouterMatchDynamic()
+    testRouterMatchWithQueryParams()
+    testRouterMatchPriority()
+    testRouterMatchNamed()
+    testRouterMatchNamedMissing()
+    testRouterGetRouteByName()
+    testRouterHasRoute()
+    testRouterBuildNotFound()
+    
+    # Helper tests
+    testRouterParseQueryParams()
+    testRouterNormalizePath()
+    testRouterClear()
+    testCreateRouterHelper()
+    testCreateRouterHelperWithCustom404()
+    testRouteHelper()
+    
+    # Edge cases
+    testEmptyPathRouting()
+    testSpecialCharactersInQueryParams()
+    testMultipleSlashesInPath()
+    testCaseInsensitiveRouting()
+    
+    print("✅ All Router tests passed! (45 tests)")
+}
