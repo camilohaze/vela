@@ -1,0 +1,394 @@
+"""
+VelaVM Exception Handling & Async Execution
+
+Exception handling con try-catch-finally, stack unwinding, y async/await.
+
+Implementación de: TASK-073
+Historia: US-16 - VelaVM Bytecode Interpreter
+Epic: EPIC-06: Compiler Backend
+Fecha: 2025-12-07
+
+Referencias:
+- TASK-071: vm/velavm.vela (integración con VM)
+- TASK-072: vm/heap.vela (heap para exception objects)
+- ADR-069: Especificación de opcodes de exceptions
+- Documentación: docs/features/US-16/TASK-073.md
+"""
+
+import 'module:vm/opcodes' show {
+  OP_THROW, OP_TRY_BEGIN, OP_TRY_END, OP_CATCH, OP_FINALLY, OP_RERAISE,
+  OP_CALL_ASYNC, OP_AWAIT
+}
+
+
+# ============================================================================
+# EXCEPTION OBJECTS
+# ============================================================================
+
+"""
+VelaException: Exception object con mensaje, stack trace, y tipo.
+"""
+public class VelaException {
+  public type: String              # Exception type (Error, TypeError, etc.)
+  public message: String           # Error message
+  public stackTrace: List<StackTraceEntry> = []
+  public cause: Option<VelaException> = None  # Nested exception
+  
+  constructor(type: String, message: String) {
+    this.type = type
+    this.message = message
+  }
+  
+  override fn toString() -> String {
+    return "${this.type}: ${this.message}"
+  }
+  
+  """
+  Retorna stack trace formateado.
+  """
+  public fn formatStackTrace() -> String {
+    lines = this.stackTrace.map(entry => {
+      return "  at ${entry.functionName} (line ${entry.lineNumber})"
+    })
+    
+    return "${this.toString()}\nStack trace:\n${lines.join('\n')}"
+  }
+}
+
+"""
+StackTraceEntry: Entrada en stack trace.
+"""
+public class StackTraceEntry {
+  public functionName: String
+  public lineNumber: Number
+  public offset: Number
+  
+  constructor(functionName: String, lineNumber: Number, offset: Number) {
+    this.functionName = functionName
+    this.lineNumber = lineNumber
+    this.offset = offset
+  }
+}
+
+
+# ============================================================================
+# EXCEPTION FRAMES
+# ============================================================================
+
+"""
+ExceptionHandler: Handler para try-catch-finally.
+"""
+public class ExceptionHandler {
+  public tryStartIP: Number        # IP donde empieza try block
+  public catchIP: Number           # IP donde empieza catch block
+  public finallyIP: Number         # IP donde empieza finally block (0 si no hay)
+  public endIP: Number             # IP donde termina handler
+  public stackDepth: Number        # Stack depth cuando se crea handler
+  public exceptionType: Option<String> = None  # Tipo de excepción a capturar (None = cualquiera)
+  
+  constructor(
+    tryStartIP: Number,
+    catchIP: Number,
+    finallyIP: Number,
+    endIP: Number,
+    stackDepth: Number
+  ) {
+    this.tryStartIP = tryStartIP
+    this.catchIP = catchIP
+    this.finallyIP = finallyIP
+    this.endIP = endIP
+    this.stackDepth = stackDepth
+  }
+  
+  """
+  Verifica si este handler maneja la excepción dada.
+  """
+  public fn handles(exception: VelaException) -> Bool {
+    match this.exceptionType {
+      Some(type) => exception.type == type
+      None => true  # Catch all
+    }
+  }
+}
+
+"""
+ExceptionFrame: Frame para exception handling en call stack.
+"""
+public class ExceptionFrame {
+  public handlers: List<ExceptionHandler> = []
+  public activeHandler: Option<ExceptionHandler> = None
+  public inFinally: Bool = false
+  
+  """
+  Agrega handler al frame.
+  """
+  public fn addHandler(handler: ExceptionHandler) -> void {
+    this.handlers.append(handler)
+  }
+  
+  """
+  Encuentra handler apropiado para excepción.
+  """
+  public fn findHandler(
+    exception: VelaException,
+    currentIP: Number
+  ) -> Option<ExceptionHandler> {
+    # Buscar handler en orden (último agregado primero)
+    reversedHandlers = this.handlers.reverse()
+    
+    return reversedHandlers.find(handler => {
+      # Handler debe estar activo (IP dentro del rango)
+      isActive = currentIP >= handler.tryStartIP && currentIP < handler.endIP
+      
+      # Handler debe manejar este tipo de excepción
+      handlesType = handler.handles(exception)
+      
+      return isActive && handlesType
+    })
+  }
+}
+
+
+# ============================================================================
+# ASYNC EXECUTION CONTEXT
+# ============================================================================
+
+"""
+AsyncContext: Contexto de ejecución asíncrona.
+"""
+public class AsyncContext {
+  public state: AsyncState = AsyncState.Pending
+  public result: Option<Value> = None
+  public error: Option<VelaException> = None
+  public continuations: List<Function> = []
+  
+  """
+  Completa el async context con resultado.
+  """
+  public fn complete(value: Value) -> void {
+    this.state = AsyncState.Fulfilled
+    this.result = Some(value)
+    
+    # Ejecutar continuations
+    this.continuations.forEach(fn => fn(value))
+    this.continuations = []
+  }
+  
+  """
+  Rechaza el async context con error.
+  """
+  public fn reject(error: VelaException) -> void {
+    this.state = AsyncState.Rejected
+    this.error = Some(error)
+    
+    # Propagar error (si no hay continuations, throw)
+    if this.continuations.length() == 0 {
+      throw error
+    }
+  }
+  
+  """
+  Agrega continuation (para await).
+  """
+  public fn then(fn: Function) -> void {
+    match this.state {
+      AsyncState.Pending => {
+        this.continuations.append(fn)
+      }
+      
+      AsyncState.Fulfilled => {
+        # Ya completado, ejecutar inmediatamente
+        match this.result {
+          Some(value) => fn(value)
+          None => { /* noop */ }
+        }
+      }
+      
+      AsyncState.Rejected => {
+        # Error, propagar
+        match this.error {
+          Some(e) => throw e
+          None => { /* noop */ }
+        }
+      }
+    }
+  }
+}
+
+"""
+AsyncState: Estado de async context.
+"""
+public enum AsyncState {
+  Pending,
+  Fulfilled,
+  Rejected
+}
+
+"""
+AsyncFrame: Frame para llamadas async.
+"""
+public class AsyncFrame {
+  public context: AsyncContext = AsyncContext()
+  public parentFrame: Option<CallFrame> = None
+  public resumeIP: Number = 0
+  
+  constructor(parentFrame: Option<CallFrame>) {
+    this.parentFrame = parentFrame
+  }
+}
+
+
+# ============================================================================
+# STACK UNWINDING
+# ============================================================================
+
+"""
+StackUnwinder: Maneja stack unwinding durante exceptions.
+"""
+public class StackUnwinder {
+  """
+  Unwind stack hasta encontrar exception handler.
+  
+  Returns: (handler, frame) si se encuentra, None si no.
+  """
+  public fn unwind(
+    callStack: List<CallFrame>,
+    currentFrame: CallFrame,
+    exception: VelaException,
+    valueStack: List<Value>
+  ) -> Option<(ExceptionHandler, CallFrame)> {
+    # Buscar handler en frame actual
+    if let Some(exFrame) = currentFrame.exceptionFrame {
+      match exFrame.findHandler(exception, currentFrame.ip) {
+        Some(handler) => {
+          # Encontrado en frame actual
+          return Some((handler, currentFrame))
+        }
+        None => { /* continue unwinding */ }
+      }
+    }
+    
+    # Buscar en frames anteriores (unwind hacia arriba)
+    idx = callStack.length() - 1
+    
+    while idx >= 0 {
+      frame = callStack[idx]
+      
+      if let Some(exFrame) = frame.exceptionFrame {
+        match exFrame.findHandler(exception, frame.ip) {
+          Some(handler) => {
+            # Encontrado, unwind hasta este frame
+            this._unwindToFrame(callStack, idx, valueStack)
+            return Some((handler, frame))
+          }
+          None => { /* continue */ }
+        }
+      }
+      
+      idx = idx - 1
+    }
+    
+    # No se encontró handler, exception sin manejar
+    return None
+  }
+  
+  """
+  Unwind stack hasta frame específico.
+  """
+  fn _unwindToFrame(
+    callStack: List<CallFrame>,
+    targetIndex: Number,
+    valueStack: List<Value>
+  ) -> void {
+    # Pop frames desde el tope hasta targetIndex (exclusive)
+    framesToPop = callStack.length() - targetIndex - 1
+    
+    (0..framesToPop).forEach(_ => {
+      frame = callStack.removeAt(callStack.length() - 1)
+      
+      # Restaurar value stack
+      valuesToPop = valueStack.length() - frame.slotsOffset
+      (0..valuesToPop).forEach(_ => {
+        valueStack.removeAt(valueStack.length() - 1)
+      })
+    })
+  }
+  
+  """
+  Captura stack trace desde call stack.
+  """
+  public fn captureStackTrace(
+    callStack: List<CallFrame>,
+    currentFrame: CallFrame
+  ) -> List<StackTraceEntry> {
+    entries: List<StackTraceEntry> = []
+    
+    # Agregar frame actual
+    entries.append(StackTraceEntry(
+      currentFrame.function.name,
+      this._getLineNumber(currentFrame),
+      currentFrame.ip
+    ))
+    
+    # Agregar frames anteriores
+    callStack.reverse().forEach(frame => {
+      entries.append(StackTraceEntry(
+        frame.function.name,
+        this._getLineNumber(frame),
+        frame.ip
+      ))
+    })
+    
+    return entries
+  }
+  
+  """
+  Obtiene line number desde DEBUG_LINE opcodes.
+  """
+  fn _getLineNumber(frame: CallFrame) -> Number {
+    # TODO: Parse bytecode para encontrar último OP_DEBUG_LINE
+    return 0  # Placeholder
+  }
+}
+
+
+# ============================================================================
+# EXCEPTION UTILITIES
+# ============================================================================
+
+"""
+Crea exception estándar de VelaVM.
+"""
+public fn createException(type: String, message: String) -> VelaException {
+  return VelaException(type, message)
+}
+
+"""
+Exception types predefinidos.
+"""
+public EXCEPTION_ERROR: String = "Error"
+public EXCEPTION_TYPE_ERROR: String = "TypeError"
+public EXCEPTION_RUNTIME_ERROR: String = "RuntimeError"
+public EXCEPTION_STACK_OVERFLOW: String = "StackOverflowError"
+public EXCEPTION_OUT_OF_MEMORY: String = "OutOfMemoryError"
+public EXCEPTION_DIVISION_BY_ZERO: String = "DivisionByZeroError"
+public EXCEPTION_INDEX_OUT_OF_BOUNDS: String = "IndexOutOfBoundsError"
+public EXCEPTION_KEY_ERROR: String = "KeyError"
+public EXCEPTION_ATTRIBUTE_ERROR: String = "AttributeError"
+public EXCEPTION_ASSERTION_ERROR: String = "AssertionError"
+
+
+# ============================================================================
+# MODULE EXPORTS
+# ============================================================================
+
+# Exports:
+# - VelaException (exception object)
+# - StackTraceEntry (stack trace entry)
+# - ExceptionHandler (try-catch-finally handler)
+# - ExceptionFrame (exception frame en call stack)
+# - AsyncContext (async execution context)
+# - AsyncFrame (async frame)
+# - StackUnwinder (stack unwinding utility)
+# - createException (factory function)
+# - EXCEPTION_* (exception type constants)
