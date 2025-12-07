@@ -4,8 +4,10 @@
 //! according to RFC 8259 specification.
 
 pub mod parser;
+pub mod serialization;
 
 pub use parser::{JsonParser, JsonValue, JsonParseError};
+pub use serialization::*;
 
 /// Convenience function to parse JSON string
 pub fn parse(input: &str) -> Result<JsonValue, JsonParseError> {
