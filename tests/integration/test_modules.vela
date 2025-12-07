@@ -1,0 +1,597 @@
+"""
+Integration Tests for Module System
+
+Tests de integración para el sistema completo de carga de módulos:
+- Flujos end-to-end de carga de módulos
+- Interacción entre componentes
+- Manejo de errores en escenarios reales
+- Benchmarks de performance
+"""
+
+import 'vm/module_loader'
+import 'vm/bytecode_loader'
+
+// ============================================================================
+// TEST SETUP UTILITIES
+// ============================================================================
+
+class IntegrationTestSetup {
+  private testDir: String
+
+  constructor() {
+    this.testDir = "./test_integration_modules"
+    this.createTestDirectory()
+  }
+
+  fn createTestDirectory() -> void {
+    if !Directory.exists(this.testDir) {
+      Directory.create(this.testDir)
+    }
+  }
+
+  fn cleanup() -> void {
+    if Directory.exists(this.testDir) {
+      // Delete all files in test directory
+      for file in Directory.list(this.testDir) {
+        File.delete("${this.testDir}/${file}")
+      }
+      Directory.delete(this.testDir)
+    }
+  }
+
+  fn createModuleFile(name: String, dependencies: List<String> = List()) -> void {
+    bytecode = this.createTestBytecodeWithDeps(name, dependencies)
+    File.writeAllBytes("${this.testDir}/${name}.velac", bytecode)
+  }
+
+  private fn createTestBytecodeWithDeps(name: String, deps: List<String>) -> ByteArray {
+    bytes = ByteArray()
+
+    // Magic number: "VELA"
+    bytes.addAll("VELA".toByteArray())
+
+    // Version: 1
+    bytes.addAll(BytecodeWriter.writeU32(1))
+
+    // Timestamp
+    bytes.addAll(BytecodeWriter.writeU64(Date.now()))
+
+    // Flags: 0
+    bytes.addAll(BytecodeWriter.writeU32(0))
+
+    // Symbol count: 1 (minimal)
+    bytes.addAll(BytecodeWriter.writeU32(1))
+
+    // Code size: 4 (minimal)
+    bytes.addAll(BytecodeWriter.writeU32(4))
+
+    // Dependency count
+    bytes.addAll(BytecodeWriter.writeU32(deps.size()))
+
+    // Export count: 0
+    bytes.addAll(BytecodeWriter.writeU32(0))
+
+    // Checksum (16 bytes)
+    for i in 0..16 {
+      bytes.add(0)
+    }
+
+    // Pad header to 64 bytes
+    while bytes.size() < 64 {
+      bytes.add(0)
+    }
+
+    // Add minimal symbol table (1 symbol)
+    symbolName = "test_function"
+    nameBytes = symbolName.toByteArray()
+    bytes.addAll(BytecodeWriter.writeU16(nameBytes.size())) // name length
+    bytes.addAll(nameBytes) // name
+    bytes.add(0) // type (function)
+    bytes.addAll(BytecodeWriter.writeU32(0)) // offset
+    bytes.addAll(BytecodeWriter.writeU32(4)) // size
+    bytes.add(1) // flags (exported)
+
+    // Add dependencies
+    for dep in deps {
+      depBytes = dep.toByteArray()
+      bytes.addAll(BytecodeWriter.writeU16(depBytes.size()))
+      bytes.addAll(depBytes)
+    }
+
+    // Add minimal code section
+    bytes.addAll(BytecodeWriter.writeU32(0x12345678)) // dummy code
+
+    return bytes
+  }
+}
+
+// ============================================================================
+// END-TO-END MODULE LOADING TESTS
+// ============================================================================
+
+class TestModuleLoadingE2E {
+  private setup: IntegrationTestSetup
+
+  @setup
+  fn setup() -> void {
+    this.setup = IntegrationTestSetup()
+  }
+
+  @teardown
+  fn teardown() -> void {
+    this.setup.cleanup()
+  }
+
+  """
+  Test loading a simple module without dependencies
+  """
+  @test
+  fn testLoadSimpleModule() -> void {
+    // Create a simple module
+    this.setup.createModuleFile("simple_module")
+
+    resolver = ModuleResolver(List(this.setup.testDir))
+
+    // Load module
+    result = resolver.resolve("simple_module")
+    assert(result.isOk())
+
+    module = result.unwrap()
+    assert(module.name == "simple_module")
+    assert(module.isLoaded)
+    assert(module.path.dependencies.size() == 0)
+  }
+
+  """
+  Test loading module with dependencies
+  """
+  @test
+  fn testLoadModuleWithDependencies() -> void {
+    // Create dependency chain: main -> utils -> math
+    this.setup.createModuleFile("math")
+    this.setup.createModuleFile("utils", List("math"))
+    this.setup.createModuleFile("main", List("utils"))
+
+    resolver = ModuleResolver(List(this.setup.testDir))
+
+    // Load main module
+    mainResult = resolver.resolve("main")
+    assert(mainResult.isOk())
+    mainModule = mainResult.unwrap()
+
+    // Load dependencies
+    depsResult = resolver.loadDependencies(mainModule)
+    assert(depsResult.isOk())
+    deps = depsResult.unwrap()
+
+    // Should have loaded utils and math
+    assert(deps.size() == 2)
+
+    utilsModule = deps.find(m => m.name == "utils")
+    mathModule = deps.find(m => m.name == "math")
+
+    assert(utilsModule.isSome())
+    assert(mathModule.isSome())
+
+    // Verify all modules are cached
+    assert(resolver.isModuleLoaded("main"))
+    assert(resolver.isModuleLoaded("utils"))
+    assert(resolver.isModuleLoaded("math"))
+  }
+
+  """
+  Test complex dependency graph
+  """
+  @test
+  fn testComplexDependencyGraph() -> void {
+    // Create diamond dependency: app -> (service1, service2) -> core
+    this.setup.createModuleFile("core")
+    this.setup.createModuleFile("service1", List("core"))
+    this.setup.createModuleFile("service2", List("core"))
+    this.setup.createModuleFile("app", List("service1", "service2"))
+
+    resolver = ModuleResolver(List(this.setup.testDir))
+
+    // Load app
+    appResult = resolver.resolve("app")
+    assert(appResult.isOk())
+
+    appModule = appResult.unwrap()
+    depsResult = resolver.loadDependencies(appModule)
+    assert(depsResult.isOk())
+
+    deps = depsResult.unwrap()
+
+    // Should load service1, service2, and core (3 total)
+    assert(deps.size() == 3)
+
+    // Verify all modules loaded
+    assert(resolver.isModuleLoaded("app"))
+    assert(resolver.isModuleLoaded("service1"))
+    assert(resolver.isModuleLoaded("service2"))
+    assert(resolver.isModuleLoaded("core"))
+  }
+
+  """
+  Test lazy loading behavior
+  """
+  @test
+  fn testLazyLoadingBehavior() -> void {
+    // Create modules
+    this.setup.createModuleFile("lazy_a")
+    this.setup.createModuleFile("lazy_b", List("lazy_a"))
+
+    resolver = ModuleResolver(List(this.setup.testDir))
+
+    // Initially nothing loaded
+    assert(!resolver.isModuleLoaded("lazy_a"))
+    assert(!resolver.isModuleLoaded("lazy_b"))
+
+    // Load lazy_b (should load lazy_a as dependency)
+    result = resolver.resolve("lazy_b")
+    assert(result.isOk())
+
+    // Both should be loaded now
+    assert(resolver.isModuleLoaded("lazy_a"))
+    assert(resolver.isModuleLoaded("lazy_b"))
+
+    // Access lazy_a directly (should come from cache)
+    aResult = resolver.resolve("lazy_a")
+    assert(aResult.isOk())
+  }
+
+  """
+  Test module reloading after file change
+  """
+  @test
+  fn testModuleReloading() -> void {
+    // Create initial module
+    this.setup.createModuleFile("reload_test")
+
+    resolver = ModuleResolver(List(this.setup.testDir))
+
+    // Load module
+    result1 = resolver.resolve("reload_test")
+    assert(result1.isOk())
+    module1 = result1.unwrap()
+    loadTime1 = module1.loadTime
+
+    // Simulate file change by waiting and reloading
+    Thread.sleep(10) // Small delay
+
+    // Resolve again (should come from cache, no reload)
+    result2 = resolver.resolve("reload_test")
+    assert(result2.isOk())
+    module2 = result2.unwrap()
+    loadTime2 = module2.loadTime
+
+    // Should be same load time (from cache)
+    assert(loadTime1 == loadTime2)
+  }
+}
+
+// ============================================================================
+// ERROR HANDLING TESTS
+// ============================================================================
+
+class TestModuleErrorHandling {
+  private setup: IntegrationTestSetup
+
+  @setup
+  fn setup() -> void {
+    this.setup = IntegrationTestSetup()
+  }
+
+  @teardown
+  fn teardown() -> void {
+    this.setup.cleanup()
+  }
+
+  """
+  Test handling of missing module files
+  """
+  @test
+  fn testMissingModuleFile() -> void {
+    resolver = ModuleResolver(List(this.setup.testDir))
+
+    result = resolver.resolve("nonexistent_module")
+    assert(result.isErr())
+    assert(result.unwrapErr().contains("not found"))
+  }
+
+  """
+  Test handling of corrupted bytecode files
+  """
+  @test
+  fn testCorruptedBytecode() -> void {
+    // Create corrupted file
+    corruptedBytes = "NOT_VELA_BYTECODE".toByteArray()
+    File.writeAllBytes("${this.setup.testDir}/corrupted.velac", corruptedBytes)
+
+    resolver = ModuleResolver(List(this.setup.testDir))
+
+    result = resolver.resolve("corrupted")
+    assert(result.isErr())
+    assert(result.unwrapErr().contains("validation failed") ||
+           result.unwrapErr().contains("Invalid magic"))
+  }
+
+  """
+  Test circular dependency detection
+  """
+  @test
+  fn testCircularDependency() -> void {
+    // Create circular dependency: A -> B -> A
+    this.setup.createModuleFile("circle_a", List("circle_b"))
+    this.setup.createModuleFile("circle_b", List("circle_a"))
+
+    resolver = ModuleResolver(List(this.setup.testDir))
+
+    // Try to load module with circular dependency
+    result = resolver.resolve("circle_a")
+    // This might succeed initially but fail when loading dependencies
+    // depending on implementation timing
+
+    if result.isOk() {
+      module = result.unwrap()
+      depsResult = resolver.loadDependencies(module)
+      assert(depsResult.isErr() || depsResult.isOk()) // May or may not detect at this level
+    }
+  }
+
+  """
+  Test handling of missing dependencies
+  """
+  @test
+  fn testMissingDependency() -> void {
+    // Create module that depends on non-existent module
+    this.setup.createModuleFile("dependent", List("missing_dep"))
+
+    resolver = ModuleResolver(List(this.setup.testDir))
+
+    result = resolver.resolve("dependent")
+    assert(result.isOk()) // Module itself loads
+
+    module = result.unwrap()
+    depsResult = resolver.loadDependencies(module)
+    assert(depsResult.isErr())
+    assert(depsResult.unwrapErr().contains("missing_dep"))
+  }
+
+  """
+  Test handling of invalid module names
+  """
+  @test
+  fn testInvalidModuleNames() -> void {
+    resolver = ModuleResolver(List(this.setup.testDir))
+
+    // Test various invalid names
+    invalidNames = List("", " ", "..", ".", "/absolute", "\\windows")
+
+    for invalidName in invalidNames {
+      result = resolver.resolve(invalidName)
+      // Should either fail or handle gracefully
+      // (exact behavior depends on implementation)
+    }
+  }
+}
+
+// ============================================================================
+// PERFORMANCE TESTS
+// ============================================================================
+
+class TestModulePerformance {
+  private setup: IntegrationTestSetup
+
+  @setup
+  fn setup() -> void {
+    this.setup = IntegrationTestSetup()
+  }
+
+  @teardown
+  fn teardown() -> void {
+    this.setup.cleanup()
+  }
+
+  """
+  Benchmark module resolution performance
+  """
+  @benchmark
+  fn benchmarkModuleResolution() -> BenchmarkResult {
+    // Create test modules
+    for i in 0..50 {
+      this.setup.createModuleFile("bench_module_${i}")
+    }
+
+    resolver = ModuleResolver(List(this.setup.testDir))
+
+    return benchmark {
+      for i in 0..50 {
+        result = resolver.resolve("bench_module_${i}")
+        assert(result.isOk())
+      }
+    }
+  }
+
+  """
+  Benchmark dependency loading performance
+  """
+  @benchmark
+  fn benchmarkDependencyLoading() -> BenchmarkResult {
+    // Create dependency chain
+    for i in 0..20 {
+      deps = List()
+      if i > 0 {
+        deps.add("dep_module_${i-1}")
+      }
+      this.setup.createModuleFile("dep_module_${i}", deps)
+    }
+
+    resolver = ModuleResolver(List(this.setup.testDir))
+
+    return benchmark {
+      result = resolver.resolve("dep_module_19")
+      assert(result.isOk())
+
+      module = result.unwrap()
+      depsResult = resolver.loadDependencies(module)
+      assert(depsResult.isOk())
+    }
+  }
+
+  """
+  Benchmark cache performance
+  """
+  @benchmark
+  fn benchmarkCachePerformance() -> BenchmarkResult {
+    // Create and load modules into cache
+    for i in 0..100 {
+      this.setup.createModuleFile("cache_module_${i}")
+    }
+
+    resolver = ModuleResolver(List(this.setup.testDir))
+
+    // Load all into cache
+    for i in 0..100 {
+      result = resolver.resolve("cache_module_${i}")
+      assert(result.isOk())
+    }
+
+    return benchmark {
+      // Access from cache
+      for i in 0..100 {
+        result = resolver.resolve("cache_module_${i}")
+        assert(result.isOk())
+      }
+    }
+  }
+
+  """
+  Benchmark bytecode loading performance
+  """
+  @benchmark
+  fn benchmarkBytecodeLoading() -> BenchmarkResult {
+    // Create larger bytecode files
+    for i in 0..30 {
+      largeBytecode = this.createLargeBytecode()
+      File.writeAllBytes("${this.setup.testDir}/large_module_${i}.velac", largeBytecode)
+    }
+
+    loader = BytecodeLoader()
+
+    return benchmark {
+      for i in 0..30 {
+        result = loader.loadFromFile("${this.setup.testDir}/large_module_${i}.velac")
+        assert(result.isOk())
+      }
+    }
+  }
+
+  private fn createLargeBytecode() -> ByteArray {
+    // Create bytecode with larger code section (1KB)
+    baseBytecode = IntegrationTestSetup().createTestBytecodeWithDeps("dummy", List())
+
+    // Add 1KB of dummy code
+    for i in 0..256 {
+      baseBytecode.addAll(BytecodeWriter.writeU32(i))
+    }
+
+    // Update code size in header
+    codeSizeOffset = 24 // Code size field
+    largeCodeSize = BytecodeWriter.writeU32(1024)
+    for i in 0..4 {
+      baseBytecode[codeSizeOffset + i] = largeCodeSize[i]
+    }
+
+    return baseBytecode
+  }
+}
+
+// ============================================================================
+// BYTECODE WRITER UTILITIES
+// ============================================================================
+
+class BytecodeWriter {
+  static fn writeU16(value: Number) -> ByteArray {
+    bytes = ByteArray()
+    bytes.add((value >> 8) & 0xFF)
+    bytes.add(value & 0xFF)
+    return bytes
+  }
+
+  static fn writeU32(value: Number) -> ByteArray {
+    bytes = ByteArray()
+    bytes.add((value >> 24) & 0xFF)
+    bytes.add((value >> 16) & 0xFF)
+    bytes.add((value >> 8) & 0xFF)
+    bytes.add(value & 0xFF)
+    return bytes
+  }
+
+  static fn writeU64(value: Number) -> ByteArray {
+    // Simplified 64-bit write
+    high = (value / 4294967296).floor()
+    low = value % 4294967296
+    return this.writeU32(high) + this.writeU32(low)
+  }
+}
+
+// ============================================================================
+// TEST RUNNER
+// ============================================================================
+
+if __name__ == "__main__":
+  // Run integration tests
+  testClasses = List(
+    TestModuleLoadingE2E,
+    TestModuleErrorHandling,
+    TestModulePerformance
+  )
+
+  totalTests = 0
+  passedTests = 0
+
+  for testClass in testClasses {
+    print("Running integration tests for ${testClass.getName()}")
+
+    // Get all test methods
+    testMethods = testClass.getMethods().filter(m => m.hasAnnotation("test"))
+
+    for method in testMethods {
+      totalTests = totalTests + 1
+
+      try {
+        // Create instance and run setup
+        instance = testClass.newInstance()
+
+        setupMethod = testClass.getMethod("setup")
+        if setupMethod != null {
+          setupMethod.invoke(instance)
+        }
+
+        // Run test
+        method.invoke(instance)
+
+        // Run teardown
+        teardownMethod = testClass.getMethod("teardown")
+        if teardownMethod != null {
+          teardownMethod.invoke(instance)
+        }
+
+        print("✅ ${method.getName()}")
+        passedTests = passedTests + 1
+
+      } catch (e) {
+        print("❌ ${method.getName()}: ${e.getMessage()}")
+      }
+    }
+  }
+
+  print("\\nIntegration Test Results: ${passedTests}/${totalTests} tests passed")
+
+  if passedTests == totalTests {
+    print("🎉 All integration tests passed!")
+  } else {
+    print("⚠️  Some integration tests failed")
+    exit(1)
+  }

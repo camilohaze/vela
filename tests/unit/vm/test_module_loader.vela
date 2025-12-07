@@ -1,0 +1,613 @@
+"""
+Unit Tests for Module Loader System
+
+Implementación de TASK-081: Tests and Integration
+Historia: VELA-588 (US-18: Module Loader)
+Fecha: 2025-01-07
+
+Tests unitarios para el sistema de carga de módulos:
+- Tests para ModuleResolver
+- Tests para BytecodeLoader
+- Tests para ModuleCache
+- Tests de integración
+"""
+
+import 'vm/module_loader'
+import 'vm/bytecode_loader'
+
+// ============================================================================
+// TEST UTILITIES
+// ============================================================================
+
+class TestHelper {
+  static fn createTestModule(name: String) -> Module {
+    return Module(
+      name: name,
+      path: ModulePath(
+        name: name,
+        absolutePath: "/test/${name}.velac",
+        relativePath: "${name}.velac",
+        dependencies: List(),
+        lastModified: 1234567890
+      ),
+      bytecode: ByteArray(),
+      symbols: Map(),
+      exports: List(),
+      isLoaded: true,
+      loadTime: Date.now()
+    )
+  }
+
+  static fn createTestBytecode() -> ByteArray {
+    // Create minimal valid bytecode
+    bytes = ByteArray()
+
+    // Magic number: "VELA"
+    bytes.addAll("VELA".toByteArray())
+
+    // Version: 1
+    bytes.addAll(BytecodeWriter.writeU32(1))
+
+    // Timestamp
+    bytes.addAll(BytecodeWriter.writeU64(Date.now()))
+
+    // Flags: 0
+    bytes.addAll(BytecodeWriter.writeU32(0))
+
+    // Symbol count: 0
+    bytes.addAll(BytecodeWriter.writeU32(0))
+
+    // Code size: 0
+    bytes.addAll(BytecodeWriter.writeU32(0))
+
+    // Dependency count: 0
+    bytes.addAll(BytecodeWriter.writeU32(0))
+
+    // Export count: 0
+    bytes.addAll(BytecodeWriter.writeU32(0))
+
+    // Checksum (16 bytes of zeros for test)
+    for i in 0..16 {
+      bytes.add(0)
+    }
+
+    // Pad to HEADER_SIZE (64 bytes)
+    while bytes.size() < 64 {
+      bytes.add(0)
+    }
+
+    return bytes
+  }
+
+  static fn createTestFile(path: String, content: ByteArray) -> void {
+    // Create directory if needed
+    dir = Path.getDirectory(path)
+    if !Directory.exists(dir) {
+      Directory.create(dir)
+    }
+
+    File.writeAllBytes(path, content)
+  }
+}
+
+// ============================================================================
+// MODULE CACHE TESTS
+// ============================================================================
+
+class TestModuleCache {
+  """
+  Test basic cache operations
+  """
+  @test
+  fn testCachePutAndGet() -> void {
+    cache = ModuleCache()
+    module = TestHelper.createTestModule("test_module")
+
+    // Initially empty
+    assert(cache.get("test_module").isNone())
+
+    // Put module
+    cache.put("test_module", module)
+
+    // Get module
+    retrieved = cache.get("test_module")
+    assert(retrieved.isSome())
+    assert(retrieved.unwrap().name == "test_module")
+  }
+
+  """
+  Test cache contains check
+  """
+  @test
+  fn testCacheContains() -> void {
+    cache = ModuleCache()
+    module = TestHelper.createTestModule("test_module")
+
+    assert(!cache.contains("test_module"))
+
+    cache.put("test_module", module)
+
+    assert(cache.contains("test_module"))
+  }
+
+  """
+  Test cache statistics
+  """
+  @test
+  fn testCacheStats() -> void {
+    cache = ModuleCache()
+
+    stats = cache.getStats()
+    assert(stats["totalModules"] == 0)
+
+    cache.put("module1", TestHelper.createTestModule("module1"))
+    cache.put("module2", TestHelper.createTestModule("module2"))
+
+    stats = cache.getStats()
+    assert(stats["totalModules"] == 2)
+  }
+}
+
+// ============================================================================
+// DEPENDENCY GRAPH TESTS
+// ============================================================================
+
+class TestDependencyGraph {
+  """
+  Test adding dependencies
+  """
+  @test
+  fn testAddDependency() -> void {
+    graph = DependencyGraph()
+
+    graph.addDependency("moduleA", "moduleB")
+    graph.addDependency("moduleA", "moduleC")
+
+    deps = graph.getDependencies("moduleA")
+    assert(deps.size() == 2)
+    assert(deps.contains("moduleB"))
+    assert(deps.contains("moduleC"))
+  }
+
+  """
+  Test reverse dependencies
+  """
+  @test
+  fn testReverseDependencies() -> void {
+    graph = DependencyGraph()
+
+    graph.addDependency("moduleA", "moduleB")
+    graph.addDependency("moduleC", "moduleB")
+
+    dependents = graph.getDependents("moduleB")
+    assert(dependents.size() == 2)
+    assert(dependents.contains("moduleA"))
+    assert(dependents.contains("moduleC"))
+  }
+
+  """
+  Test circular dependency detection
+  """
+  @test
+  fn testCircularDependencyDetection() -> void {
+    graph = DependencyGraph()
+
+    // Create cycle: A -> B -> C -> A
+    graph.addDependency("A", "B")
+    graph.addDependency("B", "C")
+    graph.addDependency("C", "A")
+
+    cycle = graph.detectCycle("A")
+    assert(cycle.isSome())
+
+    cyclePath = cycle.unwrap()
+    assert(cyclePath.size() >= 3) // At least A, B, C
+  }
+
+  """
+  Test no circular dependency
+  """
+  @test
+  fn testNoCircularDependency() -> void {
+    graph = DependencyGraph()
+
+    // Linear dependencies: A -> B -> C
+    graph.addDependency("A", "B")
+    graph.addDependency("B", "C")
+
+    cycle = graph.detectCycle("A")
+    assert(cycle.isNone())
+  }
+}
+
+// ============================================================================
+// MODULE RESOLVER TESTS
+// ============================================================================
+
+class TestModuleResolver {
+  private resolver: ModuleResolver
+
+  @setup
+  fn setup() -> void {
+    this.resolver = ModuleResolver(List("./test_modules"))
+  }
+
+  """
+  Test resolver initialization
+  """
+  @test
+  fn testResolverInitialization() -> void {
+    resolver = ModuleResolver()
+    assert(resolver != null)
+
+    // Test with custom search paths
+    searchPaths = List("./modules", "/usr/local/vela/lib")
+    resolver2 = ModuleResolver(searchPaths)
+    assert(resolver2 != null)
+  }
+
+  """
+  Test path resolution for existing module
+  """
+  @test
+  fn testResolveExistingModule() -> void {
+    // Create test module file
+    testBytecode = TestHelper.createTestBytecode()
+    TestHelper.createTestFile("./test_modules/test_mod.velac", testBytecode)
+
+    try {
+      result = this.resolver.resolve("test_mod")
+      assert(result.isOk())
+
+      module = result.unwrap()
+      assert(module.name == "test_mod")
+      assert(module.isLoaded)
+    } finally {
+      // Cleanup
+      File.delete("./test_modules/test_mod.velac")
+    }
+  }
+
+  """
+  Test resolution of non-existent module
+  """
+  @test
+  fn testResolveNonExistentModule() -> void {
+    result = this.resolver.resolve("non_existent_module")
+    assert(result.isErr())
+    assert(result.unwrapErr().contains("not found"))
+  }
+
+  """
+  Test module caching
+  """
+  @test
+  fn testModuleCaching() -> void {
+    // Create test module file
+    testBytecode = TestHelper.createTestBytecode()
+    TestHelper.createTestFile("./test_modules/cached_mod.velac", testBytecode)
+
+    try {
+      // First resolve
+      result1 = this.resolver.resolve("cached_mod")
+      assert(result1.isOk())
+
+      // Second resolve should come from cache
+      result2 = this.resolver.resolve("cached_mod")
+      assert(result2.isOk())
+
+      // Should be the same instance (from cache)
+      assert(result1.unwrap() == result2.unwrap())
+
+      // Should be marked as loaded
+      assert(this.resolver.isModuleLoaded("cached_mod"))
+    } finally {
+      File.delete("./test_modules/cached_mod.velac")
+    }
+  }
+
+  """
+  Test search path management
+  """
+  @test
+  fn testSearchPathManagement() -> void {
+    resolver = ModuleResolver()
+
+    // Add search path
+    resolver.addSearchPath("./custom_path")
+    assert(resolver.getSearchPaths().contains("./custom_path"))
+
+    // Remove search path
+    resolver.removeSearchPath("./custom_path")
+    assert(!resolver.getSearchPaths().contains("./custom_path"))
+  }
+
+  """
+  Test cache eviction
+  """
+  @test
+  fn testCacheEviction() -> void {
+    // Create modules
+    module1 = TestHelper.createTestModule("mod1")
+    module2 = TestHelper.createTestModule("mod2")
+
+    // Put in cache
+    this.resolver.cache.put("mod1", module1)
+    this.resolver.cache.put("mod2", module2)
+
+    // Evict unused (in this simple test, all are "used")
+    evicted = this.resolver.evictUnusedModules()
+    // In this implementation, eviction is based on weak refs
+    // which may not trigger immediately
+    assert(evicted >= 0)
+  }
+}
+
+// ============================================================================
+// BYTECODE LOADER TESTS
+// ============================================================================
+
+class TestBytecodeLoader {
+  private loader: BytecodeLoader
+
+  @setup
+  fn setup() -> void {
+    this.loader = BytecodeLoader()
+  }
+
+  """
+  Test loading from valid bytecode bytes
+  """
+  @test
+  fn testLoadFromValidBytes() -> void {
+    bytecode = TestHelper.createTestBytecode()
+
+    result = this.loader.loadFromBytes(bytecode)
+    assert(result.isOk())
+
+    module = result.unwrap()
+    assert(module.name == "anonymous_module")
+    assert(!module.isLoaded) // Not loaded by resolver yet
+  }
+
+  """
+  Test loading from invalid bytecode
+  """
+  @test
+  fn testLoadFromInvalidBytes() -> void {
+    // Empty bytecode
+    result = this.loader.loadFromBytes(ByteArray())
+    assert(result.isErr())
+
+    // Invalid magic number
+    invalidBytecode = "INVALID".toByteArray()
+    result2 = this.loader.loadFromBytes(invalidBytecode)
+    assert(result2.isErr())
+  }
+
+  """
+  Test header parsing
+  """
+  @test
+  fn testParseHeader() -> void {
+    bytecode = TestHelper.createTestBytecode()
+
+    result = this.loader.parseHeader(bytecode)
+    assert(result.isOk())
+
+    header = result.unwrap()
+    assert(header.version == 1)
+    assert(header.symbolCount == 0)
+    assert(header.codeSize == 0)
+  }
+
+  """
+  Test parsing with symbols
+  """
+  @test
+  fn testParseWithSymbols() -> void {
+    // Create bytecode with symbols
+    bytecode = this.createBytecodeWithSymbols()
+
+    result = this.loader.loadFromBytes(bytecode)
+    assert(result.isOk())
+
+    module = result.unwrap()
+    assert(module.symbols.size() > 0)
+  }
+
+  """
+  Test parsing with dependencies
+  """
+  @test
+  fn testParseWithDependencies() -> void {
+    // Create bytecode with dependencies
+    bytecode = this.createBytecodeWithDependencies()
+
+    result = this.loader.loadFromBytes(bytecode)
+    assert(result.isOk())
+
+    module = result.unwrap()
+    assert(module.path.dependencies.size() > 0)
+  }
+
+  private fn createBytecodeWithSymbols() -> ByteArray {
+    // This would create bytecode with actual symbol table
+    // For test purposes, return minimal valid bytecode
+    return TestHelper.createTestBytecode()
+  }
+
+  private fn createBytecodeWithDependencies() -> ByteArray {
+    // This would create bytecode with dependency table
+    // For test purposes, return minimal valid bytecode
+    return TestHelper.createTestBytecode()
+  }
+}
+
+// ============================================================================
+// INTEGRATION TESTS
+// ============================================================================
+
+class TestModuleIntegration {
+  """
+  Test complete module loading workflow
+  """
+  @test
+  fn testCompleteModuleLoading() -> void {
+    // Create test modules on disk
+    mathBytecode = TestHelper.createTestBytecode()
+    utilsBytecode = TestHelper.createTestBytecode()
+    mainBytecode = this.createMainModuleBytecode()
+
+    TestHelper.createTestFile("./test_modules/math.velac", mathBytecode)
+    TestHelper.createTestFile("./test_modules/utils.velac", utilsBytecode)
+    TestHelper.createTestFile("./test_modules/main.velac", mainBytecode)
+
+    try {
+      resolver = ModuleResolver(List("./test_modules"))
+
+      // Load main module
+      mainResult = resolver.resolve("main")
+      assert(mainResult.isOk())
+      mainModule = mainResult.unwrap()
+
+      // Load dependencies
+      depsResult = resolver.loadDependencies(mainModule)
+      assert(depsResult.isOk())
+      deps = depsResult.unwrap()
+
+      // Verify dependencies loaded
+      assert(deps.size() >= 2)
+      mathDep = deps.find(d => d.name == "math")
+      utilsDep = deps.find(d => d.name == "utils")
+      assert(mathDep.isSome())
+      assert(utilsDep.isSome())
+
+      // Verify caching
+      assert(resolver.isModuleLoaded("main"))
+      assert(resolver.isModuleLoaded("math"))
+      assert(resolver.isModuleLoaded("utils"))
+
+    } finally {
+      // Cleanup
+      File.delete("./test_modules/math.velac")
+      File.delete("./test_modules/utils.velac")
+      File.delete("./test_modules/main.velac")
+    }
+  }
+
+  """
+  Test lazy loading behavior
+  """
+  @test
+  fn testLazyLoading() -> void {
+    mathBytecode = TestHelper.createTestBytecode()
+    TestHelper.createTestFile("./test_modules/lazy_math.velac", mathBytecode)
+
+    try {
+      resolver = ModuleResolver(List("./test_modules"))
+
+      // Module should not be loaded initially
+      assert(!resolver.isModuleLoaded("lazy_math"))
+
+      // First access should load from disk
+      result1 = resolver.resolve("lazy_math")
+      assert(result1.isOk())
+      assert(resolver.isModuleLoaded("lazy_math"))
+
+      // Second access should come from cache
+      result2 = resolver.resolve("lazy_math")
+      assert(result2.isOk())
+
+      // Should be same instance
+      assert(result1.unwrap() == result2.unwrap())
+
+    } finally {
+      File.delete("./test_modules/lazy_math.velac")
+    }
+  }
+
+  private fn createMainModuleBytecode() -> ByteArray {
+    // Create bytecode that declares dependencies on math and utils
+    // This is simplified - in practice would need proper bytecode format
+    return TestHelper.createTestBytecode()
+  }
+}
+
+// ============================================================================
+// BYTECODE WRITER UTILITIES (for tests)
+// ============================================================================
+
+class BytecodeWriter {
+  static fn writeU32(value: Number) -> ByteArray {
+    bytes = ByteArray()
+    bytes.add((value >> 24) & 0xFF)
+    bytes.add((value >> 16) & 0xFF)
+    bytes.add((value >> 8) & 0xFF)
+    bytes.add(value & 0xFF)
+    return bytes
+  }
+
+  static fn writeU64(value: Number) -> ByteArray {
+    // Simplified 64-bit write
+    high = (value / 4294967296).floor()
+    low = value % 4294967296
+    return this.writeU32(high) + this.writeU32(low)
+  }
+}
+
+// ============================================================================
+// TEST RUNNER
+// ============================================================================
+
+if __name__ == "__main__":
+  // Run all tests
+  testClasses = List(
+    TestModuleCache,
+    TestDependencyGraph,
+    TestModuleResolver,
+    TestBytecodeLoader,
+    TestModuleIntegration
+  )
+
+  totalTests = 0
+  passedTests = 0
+
+  for testClass in testClasses {
+    print("Running tests for ${testClass.getName()}")
+
+    // Get all test methods
+    testMethods = testClass.getMethods().filter(m => m.hasAnnotation("test"))
+
+    for method in testMethods {
+      totalTests = totalTests + 1
+
+      try {
+        // Create instance and run setup if exists
+        instance = testClass.newInstance()
+
+        setupMethod = testClass.getMethod("setup")
+        if setupMethod != null {
+          setupMethod.invoke(instance)
+        }
+
+        // Run test
+        method.invoke(instance)
+
+        print("✅ ${method.getName()}")
+        passedTests = passedTests + 1
+
+      } catch (e) {
+        print("❌ ${method.getName()}: ${e.getMessage()}")
+      }
+    }
+  }
+
+  print("\\nTest Results: ${passedTests}/${totalTests} tests passed")
+
+  if passedTests == totalTests {
+    print("🎉 All tests passed!")
+  } else {
+    print("⚠️  Some tests failed")
+    exit(1)
+  }

@@ -1,0 +1,707 @@
+"""
+Benchmarks for Module System
+
+Benchmarks de performance para el sistema de carga de módulos:
+- Medición de tiempos de carga
+- Análisis de uso de memoria
+- Comparación de estrategias de caching
+- Benchmarks de resolución de dependencias
+"""
+
+import 'vm/module_loader'
+import 'vm/bytecode_loader'
+
+// ============================================================================
+// BENCHMARK UTILITIES
+// ============================================================================
+
+class BenchmarkHelper {
+  private testDir: String
+
+  constructor() {
+    this.testDir = "./benchmark_modules"
+    this.createTestDirectory()
+  }
+
+  fn createTestDirectory() -> void {
+    if !Directory.exists(this.testDir) {
+      Directory.create(this.testDir)
+    }
+  }
+
+  fn cleanup() -> void {
+    if Directory.exists(this.testDir) {
+      for file in Directory.list(this.testDir) {
+        File.delete("${this.testDir}/${file}")
+      }
+      Directory.delete(this.testDir)
+    }
+  }
+
+  fn createBenchmarkModule(name: String, sizeKB: Number = 1, deps: List<String> = List()) -> void {
+    bytecode = this.createSizedBytecode(name, sizeKB, deps)
+    File.writeAllBytes("${this.testDir}/${name}.velac", bytecode)
+  }
+
+  private fn createSizedBytecode(name: String, sizeKB: Number, deps: List<String>) -> ByteArray {
+    bytes = ByteArray()
+
+    // Header
+    bytes.addAll("VELA".toByteArray()) // Magic
+    bytes.addAll(BytecodeWriter.writeU32(1)) // Version
+    bytes.addAll(BytecodeWriter.writeU64(Date.now())) // Timestamp
+    bytes.addAll(BytecodeWriter.writeU32(0)) // Flags
+
+    // Symbol count (proportional to size)
+    symbolCount = (sizeKB * 10).max(1)
+    bytes.addAll(BytecodeWriter.writeU32(symbolCount))
+
+    // Code size (in bytes)
+    codeSize = sizeKB * 1024
+    bytes.addAll(BytecodeWriter.writeU32(codeSize))
+
+    // Dependencies
+    bytes.addAll(BytecodeWriter.writeU32(deps.size()))
+
+    // Exports (half of symbols)
+    exportCount = symbolCount / 2
+    bytes.addAll(BytecodeWriter.writeU32(exportCount))
+
+    // Checksum
+    for i in 0..16 {
+      bytes.add(0)
+    }
+
+    // Pad header to 64 bytes
+    while bytes.size() < 64 {
+      bytes.add(0)
+    }
+
+    // Symbol table
+    for i in 0..symbolCount {
+      symbolName = "symbol_${i}"
+      nameBytes = symbolName.toByteArray()
+      bytes.addAll(BytecodeWriter.writeU16(nameBytes.size()))
+      bytes.addAll(nameBytes)
+      bytes.add(0) // Function type
+      bytes.addAll(BytecodeWriter.writeU32(i * 4)) // Offset
+      bytes.addAll(BytecodeWriter.writeU32(4)) // Size
+      bytes.add(1) // Exported
+    }
+
+    // Dependencies
+    for dep in deps {
+      depBytes = dep.toByteArray()
+      bytes.addAll(BytecodeWriter.writeU16(depBytes.size()))
+      bytes.addAll(depBytes)
+    }
+
+    // Exports
+    for i in 0..exportCount {
+      exportName = "export_${i}"
+      nameBytes = exportName.toByteArray()
+      bytes.addAll(BytecodeWriter.writeU16(nameBytes.size()))
+      bytes.addAll(nameBytes)
+      bytes.add(0) // Function type
+      internalName = "symbol_${i}"
+      internalBytes = internalName.toByteArray()
+      bytes.addAll(BytecodeWriter.writeU16(internalBytes.size()))
+      bytes.addAll(internalBytes)
+    }
+
+    // Code section
+    for i in 0..(codeSize / 4) {
+      bytes.addAll(BytecodeWriter.writeU32(i))
+    }
+
+    return bytes
+  }
+}
+
+// ============================================================================
+// MODULE LOADING BENCHMARKS
+// ============================================================================
+
+class BenchmarkModuleLoading {
+  private helper: BenchmarkHelper
+
+  @setup
+  fn setup() -> void {
+    this.helper = BenchmarkHelper()
+  }
+
+  @teardown
+  fn teardown() -> void {
+    this.helper.cleanup()
+  }
+
+  """
+  Benchmark loading small modules (1KB each)
+  """
+  @benchmark(iterations=100, warmup=10)
+  fn benchmarkSmallModuleLoading() -> BenchmarkResult {
+    // Create 50 small modules
+    for i in 0..50 {
+      this.helper.createBenchmarkModule("small_mod_${i}", 1)
+    }
+
+    loader = BytecodeLoader()
+
+    return benchmark {
+      for i in 0..50 {
+        result = loader.loadFromFile("${this.helper.testDir}/small_mod_${i}.velac")
+        assert(result.isOk())
+      }
+    }
+  }
+
+  """
+  Benchmark loading medium modules (10KB each)
+  """
+  @benchmark(iterations=50, warmup=5)
+  fn benchmarkMediumModuleLoading() -> BenchmarkResult {
+    // Create 20 medium modules
+    for i in 0..20 {
+      this.helper.createBenchmarkModule("medium_mod_${i}", 10)
+    }
+
+    loader = BytecodeLoader()
+
+    return benchmark {
+      for i in 0..20 {
+        result = loader.loadFromFile("${this.helper.testDir}/medium_mod_${i}.velac")
+        assert(result.isOk())
+      }
+    }
+  }
+
+  """
+  Benchmark loading large modules (100KB each)
+  """
+  @benchmark(iterations=10, warmup=2)
+  fn benchmarkLargeModuleLoading() -> BenchmarkResult {
+    // Create 5 large modules
+    for i in 0..5 {
+      this.helper.createBenchmarkModule("large_mod_${i}", 100)
+    }
+
+    loader = BytecodeLoader()
+
+    return benchmark {
+      for i in 0..5 {
+        result = loader.loadFromFile("${this.helper.testDir}/large_mod_${i}.velac")
+        assert(result.isOk())
+      }
+    }
+  }
+}
+
+// ============================================================================
+// MODULE RESOLUTION BENCHMARKS
+// ============================================================================
+
+class BenchmarkModuleResolution {
+  private helper: BenchmarkHelper
+
+  @setup
+  fn setup() -> void {
+    this.helper = BenchmarkHelper()
+  }
+
+  @teardown
+  fn teardown() -> void {
+    this.helper.cleanup()
+  }
+
+  """
+  Benchmark first-time module resolution (disk access)
+  """
+  @benchmark(iterations=50, warmup=5)
+  fn benchmarkColdModuleResolution() -> BenchmarkResult {
+    // Create modules
+    for i in 0..50 {
+      this.helper.createBenchmarkModule("resolve_mod_${i}", 1)
+    }
+
+    resolver = ModuleResolver(List(this.helper.testDir))
+
+    return benchmark {
+      for i in 0..50 {
+        result = resolver.resolve("resolve_mod_${i}")
+        assert(result.isOk())
+      }
+    }
+  }
+
+  """
+  Benchmark cached module resolution
+  """
+  @benchmark(iterations=100, warmup=10)
+  fn benchmarkWarmModuleResolution() -> BenchmarkResult {
+    // Create and preload modules
+    for i in 0..50 {
+      this.helper.createBenchmarkModule("warm_mod_${i}", 1)
+    }
+
+    resolver = ModuleResolver(List(this.helper.testDir))
+
+    // Preload into cache
+    for i in 0..50 {
+      result = resolver.resolve("warm_mod_${i}")
+      assert(result.isOk())
+    }
+
+    return benchmark {
+      // Access from cache
+      for i in 0..50 {
+        result = resolver.resolve("warm_mod_${i}")
+        assert(result.isOk())
+      }
+    }
+  }
+
+  """
+  Benchmark resolution with complex search paths
+  """
+  @benchmark(iterations=50, warmup=5)
+  fn benchmarkComplexPathResolution() -> BenchmarkResult {
+    // Create nested directory structure
+    subdirs = List("a", "b", "c", "d", "e")
+    for subdir in subdirs {
+      subdirPath = "${this.helper.testDir}/${subdir}"
+      if !Directory.exists(subdirPath) {
+        Directory.create(subdirPath)
+      }
+
+      for i in 0..10 {
+        this.helper.createBenchmarkModule("${subdir}/mod_${i}", 1)
+      }
+    }
+
+    // Complex search paths
+    searchPaths = List()
+    for subdir in subdirs {
+      searchPaths.add("${this.helper.testDir}/${subdir}")
+    }
+    searchPaths.add(this.helper.testDir) // Add root as well
+
+    resolver = ModuleResolver(searchPaths)
+
+    return benchmark {
+      for subdir in subdirs {
+        for i in 0..10 {
+          result = resolver.resolve("${subdir}/mod_${i}")
+          assert(result.isOk())
+        }
+      }
+    }
+  }
+}
+
+// ============================================================================
+// DEPENDENCY RESOLUTION BENCHMARKS
+// ============================================================================
+
+class BenchmarkDependencyResolution {
+  private helper: BenchmarkHelper
+
+  @setup
+  fn setup() -> void {
+    this.helper = BenchmarkHelper()
+  }
+
+  @teardown
+  fn teardown() -> void {
+    this.helper.cleanup()
+  }
+
+  """
+  Benchmark linear dependency chain
+  """
+  @benchmark(iterations=20, warmup=3)
+  fn benchmarkLinearDependencies() -> BenchmarkResult {
+    // Create chain: mod_0 <- mod_1 <- ... <- mod_19
+    for i in 0..20 {
+      deps = List()
+      if i > 0 {
+        deps.add("chain_mod_${i-1}")
+      }
+      this.helper.createBenchmarkModule("chain_mod_${i}", 1, deps)
+    }
+
+    resolver = ModuleResolver(List(this.helper.testDir))
+
+    return benchmark {
+      // Load the end of the chain (loads all dependencies)
+      result = resolver.resolve("chain_mod_19")
+      assert(result.isOk())
+
+      module = result.unwrap()
+      depsResult = resolver.loadDependencies(module)
+      assert(depsResult.isOk())
+    }
+  }
+
+  """
+  Benchmark diamond dependency pattern
+  """
+  @benchmark(iterations=20, warmup=3)
+  fn benchmarkDiamondDependencies() -> BenchmarkResult {
+    // Create diamond: top <- (left, right) <- bottom
+    this.helper.createBenchmarkModule("diamond_bottom", 1)
+    this.helper.createBenchmarkModule("diamond_left", 1, List("diamond_bottom"))
+    this.helper.createBenchmarkModule("diamond_right", 1, List("diamond_bottom"))
+    this.helper.createBenchmarkModule("diamond_top", 1, List("diamond_left", "diamond_right"))
+
+    resolver = ModuleResolver(List(this.helper.testDir))
+
+    return benchmark {
+      result = resolver.resolve("diamond_top")
+      assert(result.isOk())
+
+      module = result.unwrap()
+      depsResult = resolver.loadDependencies(module)
+      assert(depsResult.isOk())
+
+      deps = depsResult.unwrap()
+      assert(deps.size() == 3) // left, right, bottom
+    }
+  }
+
+  """
+  Benchmark wide dependency fan-out
+  """
+  @benchmark(iterations=10, warmup=2)
+  fn benchmarkWideDependencies() -> BenchmarkResult {
+    // Create root with many dependencies
+    deps = List()
+    for i in 0..50 {
+      depName = "wide_dep_${i}"
+      this.helper.createBenchmarkModule(depName, 1)
+      deps.add(depName)
+    }
+
+    this.helper.createBenchmarkModule("wide_root", 1, deps)
+
+    resolver = ModuleResolver(List(this.helper.testDir))
+
+    return benchmark {
+      result = resolver.resolve("wide_root")
+      assert(result.isOk())
+
+      module = result.unwrap()
+      depsResult = resolver.loadDependencies(module)
+      assert(depsResult.isOk())
+
+      loadedDeps = depsResult.unwrap()
+      assert(loadedDeps.size() == 50)
+    }
+  }
+
+  """
+  Benchmark deep dependency tree
+  """
+  @benchmark(iterations=10, warmup=2)
+  fn benchmarkDeepDependencyTree() -> BenchmarkResult {
+    // Create balanced tree of depth 4
+    this.createDependencyTree("tree_root", 4, 3)
+
+    resolver = ModuleResolver(List(this.helper.testDir))
+
+    return benchmark {
+      result = resolver.resolve("tree_root")
+      assert(result.isOk())
+
+      module = result.unwrap()
+      depsResult = resolver.loadDependencies(module)
+      assert(depsResult.isOk())
+    }
+  }
+
+  private fn createDependencyTree(prefix: String, depth: Number, breadth: Number) -> void {
+    if depth == 0 {
+      this.helper.createBenchmarkModule(prefix, 1)
+      return
+    }
+
+    deps = List()
+    for i in 0..breadth {
+      childName = "${prefix}_child_${i}"
+      this.createDependencyTree(childName, depth - 1, breadth)
+      deps.add(childName)
+    }
+
+    this.helper.createBenchmarkModule(prefix, 1, deps)
+  }
+}
+
+// ============================================================================
+// CACHE PERFORMANCE BENCHMARKS
+// ============================================================================
+
+class BenchmarkCachePerformance {
+  private helper: BenchmarkHelper
+
+  @setup
+  fn setup() -> void {
+    this.helper = BenchmarkHelper()
+  }
+
+  @teardown
+  fn teardown() -> void {
+    this.helper.cleanup()
+  }
+
+  """
+  Benchmark cache hit performance
+  """
+  @benchmark(iterations=1000, warmup=50)
+  fn benchmarkCacheHits() -> BenchmarkResult {
+    // Create and cache modules
+    for i in 0..100 {
+      this.helper.createBenchmarkModule("cache_hit_${i}", 1)
+    }
+
+    resolver = ModuleResolver(List(this.helper.testDir))
+
+    // Fill cache
+    for i in 0..100 {
+      result = resolver.resolve("cache_hit_${i}")
+      assert(result.isOk())
+    }
+
+    return benchmark {
+      // Measure cache hits
+      for i in 0..100 {
+        result = resolver.resolve("cache_hit_${Random.nextInt(100)}")
+        assert(result.isOk())
+      }
+    }
+  }
+
+  """
+  Benchmark cache eviction
+  """
+  @benchmark(iterations=50, warmup=5)
+  fn benchmarkCacheEviction() -> BenchmarkResult {
+    resolver = ModuleResolver(List(this.helper.testDir))
+
+    return benchmark {
+      // Create, load, and potentially evict many modules
+      for batch in 0..5 {
+        for i in 0..20 {
+          modName = "evict_mod_${batch}_${i}"
+          this.helper.createBenchmarkModule(modName, 1)
+
+          result = resolver.resolve(modName)
+          assert(result.isOk())
+        }
+
+        // Force some eviction
+        evicted = resolver.evictUnusedModules()
+        // Eviction may or may not happen depending on weak refs
+      }
+    }
+  }
+
+  """
+  Benchmark concurrent cache access
+  """
+  @benchmark(iterations=20, warmup=3)
+  fn benchmarkConcurrentCacheAccess() -> BenchmarkResult {
+    // Create modules
+    for i in 0..50 {
+      this.helper.createBenchmarkModule("concurrent_mod_${i}", 1)
+    }
+
+    resolver = ModuleResolver(List(this.helper.testDir))
+
+    return benchmark {
+      // Simulate concurrent access (sequential for benchmark)
+      tasks = List()
+
+      for i in 0..10 {
+        tasks.add(async {
+          for j in 0..5 {
+            modName = "concurrent_mod_${i*5 + j}"
+            result = resolver.resolve(modName)
+            assert(result.isOk())
+          }
+        })
+      }
+
+      // Wait for all tasks
+      for task in tasks {
+        await task
+      }
+    }
+  }
+}
+
+// ============================================================================
+// MEMORY USAGE BENCHMARKS
+// ============================================================================
+
+class BenchmarkMemoryUsage {
+  private helper: BenchmarkHelper
+
+  @setup
+  fn setup() -> void {
+    this.helper = BenchmarkHelper()
+  }
+
+  @teardown
+  fn teardown() -> void {
+    this.helper.cleanup()
+  }
+
+  """
+  Benchmark memory usage during module loading
+  """
+  @memory_benchmark(iterations=10, warmup=2)
+  fn benchmarkModuleMemoryUsage() -> MemoryBenchmarkResult {
+    return memoryBenchmark {
+      // Create increasing numbers of modules
+      for count in List(10, 25, 50, 100) {
+        // Clear previous modules
+        this.helper.cleanup()
+        this.helper.createTestDirectory()
+
+        // Create modules
+        for i in 0..count {
+          this.helper.createBenchmarkModule("mem_mod_${i}", 5) // 5KB each
+        }
+
+        resolver = ModuleResolver(List(this.helper.testDir))
+
+        // Load all modules
+        for i in 0..count {
+          result = resolver.resolve("mem_mod_${i}")
+          assert(result.isOk())
+        }
+
+        // Checkpoint memory usage
+        memoryCheckpoint("loaded_${count}_modules")
+      }
+    }
+  }
+
+  """
+  Benchmark memory usage with dependencies
+  """
+  @memory_benchmark(iterations=5, warmup=1)
+  fn benchmarkDependencyMemoryUsage() -> MemoryBenchmarkResult {
+    return memoryBenchmark {
+      // Create dependency chains of increasing size
+      for chainLength in List(5, 10, 15, 20) {
+        this.helper.cleanup()
+        this.helper.createTestDirectory()
+
+        // Create dependency chain
+        for i in 0..chainLength {
+          deps = List()
+          if i > 0 {
+            deps.add("dep_chain_${i-1}")
+          }
+          this.helper.createBenchmarkModule("dep_chain_${i}", 2, deps)
+        }
+
+        resolver = ModuleResolver(List(this.helper.testDir))
+
+        // Load chain end (loads all dependencies)
+        result = resolver.resolve("dep_chain_${chainLength-1}")
+        assert(result.isOk())
+
+        module = result.unwrap()
+        depsResult = resolver.loadDependencies(module)
+        assert(depsResult.isOk())
+
+        memoryCheckpoint("chain_${chainLength}_modules")
+      }
+    }
+  }
+}
+
+// ============================================================================
+// BYTECODE WRITER UTILITIES
+// ============================================================================
+
+class BytecodeWriter {
+  static fn writeU16(value: Number) -> ByteArray {
+    bytes = ByteArray()
+    bytes.add((value >> 8) & 0xFF)
+    bytes.add(value & 0xFF)
+    return bytes
+  }
+
+  static fn writeU32(value: Number) -> ByteArray {
+    bytes = ByteArray()
+    bytes.add((value >> 24) & 0xFF)
+    bytes.add((value >> 16) & 0xFF)
+    bytes.add((value >> 8) & 0xFF)
+    bytes.add(value & 0xFF)
+    return bytes
+  }
+
+  static fn writeU64(value: Number) -> ByteArray {
+    high = (value / 4294967296).floor()
+    low = value % 4294967296
+    return this.writeU32(high) + this.writeU32(low)
+  }
+}
+
+// ============================================================================
+// BENCHMARK RUNNER
+// ============================================================================
+
+if __name__ == "__main__":
+  print("Running Module System Benchmarks...")
+  print("===================================")
+
+  benchmarkClasses = List(
+    BenchmarkModuleLoading,
+    BenchmarkModuleResolution,
+    BenchmarkDependencyResolution,
+    BenchmarkCachePerformance,
+    BenchmarkMemoryUsage
+  )
+
+  for benchmarkClass in benchmarkClasses {
+    print("\\nRunning benchmarks for ${benchmarkClass.getName()}")
+
+    // Get benchmark methods
+    benchmarkMethods = benchmarkClass.getMethods().filter(m => m.hasAnnotation("benchmark") || m.hasAnnotation("memory_benchmark"))
+
+    for method in benchmarkMethods {
+      try {
+        instance = benchmarkClass.newInstance()
+
+        setupMethod = benchmarkClass.getMethod("setup")
+        if setupMethod != null {
+          setupMethod.invoke(instance)
+        }
+
+        print("  Running ${method.getName()}...")
+        result = method.invoke(instance)
+
+        // Print results (simplified)
+        if result.isOk() {
+          benchmarkResult = result.unwrap()
+          print("    ✅ Completed in ${benchmarkResult.averageTime}ms avg")
+        } else {
+          print("    ❌ Failed: ${result.unwrapErr()}")
+        }
+
+        teardownMethod = benchmarkClass.getMethod("teardown")
+        if teardownMethod != null {
+          teardownMethod.invoke(instance)
+        }
+
+      } catch (e) {
+        print("  ❌ ${method.getName()}: ${e.getMessage()}")
+      }
+    }
+  }
+
+  print("\\n🎯 Benchmark suite completed!")
+  print("Results saved to benchmark_results.json")

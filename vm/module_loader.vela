@@ -1,0 +1,450 @@
+"""
+Module Resolution System for VelaVM
+
+Implementación de TASK-079: Module Resolution System
+Historia: VELA-588 (US-18: Module Loader)
+Fecha: 2025-01-07
+
+Este módulo implementa el sistema de resolución de módulos que permite:
+- Resolución de rutas absolutas y relativas
+- Detección de dependencias circulares
+- Carga lazy de módulos
+- Integración con ARC memory management
+"""
+
+import 'system:arc'  // ARC memory management
+import 'system:weak'  // Weak references
+import 'system:io'    // File system operations
+
+// ============================================================================
+// DATA STRUCTURES
+// ============================================================================
+
+"""
+Represents a resolved module path with metadata
+"""
+struct ModulePath {
+  name: String
+  absolutePath: String
+  relativePath: String
+  dependencies: List<String>
+  lastModified: Number
+}
+
+"""
+Represents a loaded module in memory
+"""
+struct Module {
+  name: String
+  path: ModulePath
+  bytecode: ByteArray
+  symbols: Map<String, SymbolInfo>
+  exports: List<String>
+  isLoaded: Bool
+  loadTime: Number
+}
+
+"""
+Symbol information for linking
+"""
+struct SymbolInfo {
+  name: String
+  type: SymbolType
+  offset: Number
+  isExported: Bool
+}
+
+"""
+Types of symbols in a module
+"""
+enum SymbolType {
+  Function,
+  Class,
+  Variable,
+  Constant
+}
+
+// ============================================================================
+// MODULE CACHE
+// ============================================================================
+
+"""
+Cache for loaded modules with ARC integration
+"""
+class ModuleCache {
+  private loadedModules: Map<String, Module>
+  private weakRefs: WeakRefTracker
+  private accessTimes: Map<String, Number>
+
+  constructor() {
+    this.loadedModules = Map()
+    this.weakRefs = WeakRefTracker()
+    this.accessTimes = Map()
+  }
+
+  """
+  Get a module from cache if it exists
+  """
+  fn get(name: String) -> Option<Module> {
+    if this.loadedModules.contains(name) {
+      // Update access time for LRU
+      this.accessTimes[name] = Date.now()
+      return Some(this.loadedModules[name])
+    }
+    return None
+  }
+
+  """
+  Store a module in cache
+  """
+  fn put(name: String, module: Module) -> void {
+    this.loadedModules[name] = module
+    this.accessTimes[name] = Date.now()
+
+    // Create weak reference for ARC
+    this.weakRefs.track(module, name)
+  }
+
+  """
+  Check if module is cached
+  """
+  fn contains(name: String) -> Bool {
+    return this.loadedModules.contains(name)
+  }
+
+  """
+  Remove unused modules based on weak references
+  """
+  fn evictUnused() -> Number {
+    evicted = 0
+
+    // Get modules that are only weakly referenced
+    for weakRef in this.weakRefs.getDeadRefs() {
+      if this.loadedModules.contains(weakRef.key) {
+        this.loadedModules.remove(weakRef.key)
+        this.accessTimes.remove(weakRef.key)
+        evicted = evicted + 1
+      }
+    }
+
+    return evicted
+  }
+
+  """
+  Get cache statistics
+  """
+  fn getStats() -> Map<String, Number> {
+    return Map(
+      "totalModules" -> this.loadedModules.size(),
+      "totalAccesses" -> this.accessTimes.size()
+    )
+  }
+}
+
+// ============================================================================
+// DEPENDENCY GRAPH
+// ============================================================================
+
+"""
+Manages dependency relationships between modules
+"""
+class DependencyGraph {
+  private dependencies: Map<String, List<String>>
+  private reverseDeps: Map<String, List<String>>
+
+  constructor() {
+    this.dependencies = Map()
+    this.reverseDeps = Map()
+  }
+
+  """
+  Add a dependency relationship
+  """
+  fn addDependency(module: String, dependsOn: String) -> void {
+    if !this.dependencies.contains(module) {
+      this.dependencies[module] = List()
+    }
+    if !this.dependencies[module].contains(dependsOn) {
+      this.dependencies[module].add(dependsOn)
+    }
+
+    // Add reverse dependency
+    if !this.reverseDeps.contains(dependsOn) {
+      this.reverseDeps[dependsOn] = List()
+    }
+    if !this.reverseDeps[dependsOn].contains(module) {
+      this.reverseDeps[dependsOn].add(module)
+    }
+  }
+
+  """
+  Get direct dependencies of a module
+  """
+  fn getDependencies(module: String) -> List<String> {
+    return this.dependencies.get(module).unwrapOr(List())
+  }
+
+  """
+  Get modules that depend on the given module
+  """
+  fn getDependents(module: String) -> List<String> {
+    return this.reverseDeps.get(module).unwrapOr(List())
+  }
+
+  """
+  Detect circular dependencies using DFS
+  """
+  fn detectCycle(startModule: String) -> Option<List<String>> {
+    visited = Set()
+    recursionStack = Set()
+    path = List()
+
+    return this.dfsCycleDetection(startModule, visited, recursionStack, path)
+  }
+
+  private fn dfsCycleDetection(
+    current: String,
+    visited: Set<String>,
+    recursionStack: Set<String>,
+    path: List<String>
+  ) -> Option<List<String>> {
+    visited.add(current)
+    recursionStack.add(current)
+    path.add(current)
+
+    for dep in this.getDependencies(current) {
+      if !visited.contains(dep) {
+        cycle = this.dfsCycleDetection(dep, visited, recursionStack, path)
+        if cycle.isSome() {
+          return cycle
+        }
+      } else if recursionStack.contains(dep) {
+        // Found cycle
+        cycleStart = path.indexOf(dep)
+        cyclePath = path.slice(cycleStart)
+        cyclePath.add(dep) // Close the cycle
+        return Some(cyclePath)
+      }
+    }
+
+    recursionStack.remove(current)
+    path.removeLast()
+    return None
+  }
+}
+
+// ============================================================================
+// MODULE RESOLVER
+// ============================================================================
+
+"""
+Main module resolution system
+"""
+class ModuleResolver {
+  private cache: ModuleCache
+  private searchPaths: List<String>
+  private dependencyGraph: DependencyGraph
+  private bytecodeLoader: BytecodeLoader
+
+  constructor(searchPaths: List<String> = List("./modules", "./lib")) {
+    this.cache = ModuleCache()
+    this.searchPaths = searchPaths
+    this.dependencyGraph = DependencyGraph()
+    this.bytecodeLoader = BytecodeLoader()
+  }
+
+  """
+  Resolve a module by name, loading it if necessary
+  """
+  fn resolve(moduleName: String) -> Result<Module> {
+    // Check cache first
+    cached = this.cache.get(moduleName)
+    if cached.isSome() {
+      return Ok(cached.unwrap())
+    }
+
+    // Resolve path
+    pathResult = this.resolvePath(moduleName)
+    if pathResult.isErr() {
+      return Err(pathResult.unwrapErr())
+    }
+    modulePath = pathResult.unwrap()
+
+    // Check for circular dependencies before loading
+    cycle = this.dependencyGraph.detectCycle(moduleName)
+    if cycle.isSome() {
+      return Err("Circular dependency detected: ${cycle.unwrap().join(' -> ')}")
+    }
+
+    // Load module
+    loadResult = this.bytecodeLoader.loadFromFile(modulePath.absolutePath)
+    if loadResult.isErr() {
+      return Err("Failed to load module ${moduleName}: ${loadResult.unwrapErr()}")
+    }
+    module = loadResult.unwrap()
+
+    // Set metadata
+    module.path = modulePath
+    module.isLoaded = true
+    module.loadTime = Date.now()
+
+    // Cache the module
+    this.cache.put(moduleName, module)
+
+    return Ok(module)
+  }
+
+  """
+  Load all dependencies of a module recursively
+  """
+  fn loadDependencies(module: Module) -> Result<List<Module>> {
+    loadedDeps = List()
+    toLoad = List.from(module.path.dependencies)
+
+    while toLoad.size() > 0 {
+      depName = toLoad.remove(0)
+
+      // Skip if already loaded
+      if this.cache.contains(depName) {
+        continue
+      }
+
+      // Load dependency
+      depResult = this.resolve(depName)
+      if depResult.isErr() {
+        return Err("Failed to load dependency ${depName}: ${depResult.unwrapErr()}")
+      }
+      depModule = depResult.unwrap()
+
+      // Add to loaded list
+      loadedDeps.add(depModule)
+
+      // Add transitive dependencies
+      for transitiveDep in depModule.path.dependencies {
+        if !toLoad.contains(transitiveDep) && !this.cache.contains(transitiveDep) {
+          toLoad.add(transitiveDep)
+        }
+      }
+
+      // Register dependency relationship
+      this.dependencyGraph.addDependency(module.name, depName)
+    }
+
+    return Ok(loadedDeps)
+  }
+
+  """
+  Resolve a module name to an absolute path
+  """
+  private fn resolvePath(moduleName: String) -> Result<ModulePath> {
+    // Try each search path
+    for searchPath in this.searchPaths {
+      candidatePath = this.buildModulePath(searchPath, moduleName)
+
+      if File.exists(candidatePath) {
+        fileInfo = File.getInfo(candidatePath)
+
+        modulePath = ModulePath(
+          name: moduleName,
+          absolutePath: candidatePath,
+          relativePath: Path.relative(candidatePath),
+          dependencies: List(), // Will be filled by bytecode loader
+          lastModified: fileInfo.lastModified
+        )
+
+        return Ok(modulePath)
+      }
+    }
+
+    return Err("Module '${moduleName}' not found in search paths: ${this.searchPaths.join(', ')}")
+  }
+
+  """
+  Build a candidate module file path
+  """
+  private fn buildModulePath(searchPath: String, moduleName: String) -> String {
+    // Convert module name to file path
+    // e.g., "utils.math" -> "utils/math.velac"
+    filePath = moduleName.replace(".", "/")
+    return "${searchPath}/${filePath}.velac"
+  }
+
+  """
+  Check if a module is already loaded
+  """
+  fn isModuleLoaded(moduleName: String) -> Bool {
+    return this.cache.contains(moduleName)
+  }
+
+  """
+  Get cache statistics
+  """
+  fn getCacheStats() -> Map<String, Number> {
+    return this.cache.getStats()
+  }
+
+  """
+  Evict unused modules from cache
+  """
+  fn evictUnusedModules() -> Number {
+    return this.cache.evictUnused()
+  }
+
+  """
+  Add a search path
+  """
+  fn addSearchPath(path: String) -> void {
+    if !this.searchPaths.contains(path) {
+      this.searchPaths.add(path)
+    }
+  }
+
+  """
+  Remove a search path
+  """
+  fn removeSearchPath(path: String) -> void {
+    this.searchPaths.remove(path)
+  }
+}
+
+// ============================================================================
+// UTILITY FUNCTIONS
+// ============================================================================
+
+"""
+Utility class for path operations
+"""
+class Path {
+  static fn relative(path: String) -> String {
+    // Convert absolute path to relative
+    cwd = Environment.getCurrentDirectory()
+    if path.startsWith(cwd) {
+      return path.slice(cwd.length + 1)
+    }
+    return path
+  }
+
+  static fn absolute(path: String) -> String {
+    if Path.isAbsolute(path) {
+      return path
+    }
+    cwd = Environment.getCurrentDirectory()
+    return "${cwd}/${path}"
+  }
+
+  static fn isAbsolute(path: String) -> Bool {
+    return path.startsWith("/") || path.contains(":\\")  // Unix or Windows
+  }
+}
+
+// ============================================================================
+// EXPORTS
+// ============================================================================
+
+public fn createModuleResolver(searchPaths: List<String> = List()) -> ModuleResolver {
+  return ModuleResolver(searchPaths)
+}
+
+public fn createDefaultResolver() -> ModuleResolver {
+  return ModuleResolver()
+}
