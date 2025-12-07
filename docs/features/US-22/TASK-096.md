@@ -2,7 +2,7 @@
 
 ## 📋 Información General
 - **Historia:** US-22
-- **Estado:** En curso ⏳
+- **Estado:** Completada ✅
 - **Fecha:** 2025-01-07
 
 ## 🎯 Objetivo
@@ -31,10 +31,11 @@ vela create <project-name> [template]
 
 ## ✅ Criterios de Aceptación
 - [x] Comando `vela create` implementado
-- [x] Templates básicos funcionando (web, cli, lib)
+- [x] Templates básicos funcionando (web, cli, lib, api, module)
 - [x] Estructura de proyecto correcta
-- [x] Tests unitarios para el comando
+- [x] Tests unitarios incluidos
 - [x] Documentación generada
+- [x] Proyecto de prueba creado y verificado
 
 ## 🔗 Referencias
 - **Jira:** [TASK-096](https://velalang.atlassian.net/browse/TASK-096)
