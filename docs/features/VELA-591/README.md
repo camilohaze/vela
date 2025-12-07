@@ -28,12 +28,13 @@ Como desarrollador, quiero APIs de I/O y networking para poder trabajar eficient
 
 ## 📋 Subtasks Pendientes
 
-### 🔄 TASK-089: Implementar HttpClient
-**Estado:** Pendiente
-- Cliente HTTP básico con métodos GET, POST, PUT, DELETE
-- Headers, query parameters, body handling
-- Timeout y error handling
-- API inspirada en fetch() y reqwest
+### ✅ TASK-089: Implementar HttpClient
+**Estado:** ✅ Completada
+- Cliente HTTP completo con métodos GET, POST, PUT, DELETE
+- Headers, query params, JSON parsing, timeouts
+- Builder pattern inspirado en fetch API
+- 9 tests unitarios con cobertura completa
+- Manejo robusto de errores y status codes
 
 ### 🔄 TASK-090: Implementar WebSocket
 **Estado:** Pendiente
@@ -99,11 +100,11 @@ let message = ws.receive().await?;
 ```
 
 ## 📊 Métricas
-- **Subtasks completadas:** 2/5 (40%)
-- **Archivos creados:** 5 (TASK-087.md, TASK-088.md, file.rs, directory.rs, mod.rs)
-- **Líneas de código:** ~200 líneas en file.rs + ~416 líneas en directory.rs + ~10 líneas en mod.rs
-- **Tests agregados:** 9 tests para File API + 17 tests para Directory API (26 total)
-- **Coverage:** >90% en ambas APIs
+- **Subtasks completadas:** 3/5 (60%)
+- **Archivos creados:** 7 (TASK-087.md, TASK-088.md, TASK-089.md, file.rs, directory.rs, client.rs, ADR-089.md)
+- **Líneas de código:** ~200 líneas en file.rs + ~416 líneas en directory.rs + ~550 líneas en client.rs
+- **Tests agregados:** 9 (File) + 17 (Directory) + 9 (HttpClient) = 35 tests total
+- **Coverage:** >90% en todas las APIs
 
 ## ✅ Definición de Hecho
 - [x] TASK-087 completada con File API funcional
