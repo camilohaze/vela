@@ -18,21 +18,15 @@ Como desarrollador, quiero APIs de I/O y networking para poder trabajar eficient
 - 9 tests unitarios con cobertura completa
 - Inspirado en Rust std::fs y Node.js fs
 
+### ✅ TASK-088: Implementar Directory API
+**Estado:** ✅ Completada
+- API completa para operaciones de directorios implementada
+- Creación, listado, eliminación, copia recursiva
+- Utilidades de rutas cross-platform (PathUtil)
+- 17 tests unitarios con cobertura completa
+- Inspirado en Rust std::fs y Node.js fs
+
 ## 📋 Subtasks Pendientes
-
-### 🔄 TASK-087: Implementar File API
-**Estado:** Pendiente
-- Lectura/escritura síncrona de archivos
-- Operaciones básicas: read, write, append, copy, move, delete
-- Manejo de errores y encoding
-- API inspirada en Node.js fs y Rust std::fs
-
-### 🔄 TASK-088: Implementar Directory API
-**Estado:** Pendiente
-- Operaciones con directorios: create, list, remove, copy
-- Path manipulation y resolución
-- Iteración recursiva de directorios
-- API inspirada en Node.js fs y Rust std::fs
 
 ### 🔄 TASK-089: Implementar HttpClient
 **Estado:** Pendiente
@@ -105,15 +99,15 @@ let message = ws.receive().await?;
 ```
 
 ## 📊 Métricas
-- **Subtasks completadas:** 1/5 (20%)
-- **Archivos creados:** 3 (TASK-087.md, file.rs, mod.rs)
-- **Líneas de código:** ~200 líneas en file.rs + ~10 líneas en mod.rs
-- **Tests agregados:** 9 tests unitarios para File API
-- **Coverage:** >90% en File API
+- **Subtasks completadas:** 2/5 (40%)
+- **Archivos creados:** 5 (TASK-087.md, TASK-088.md, file.rs, directory.rs, mod.rs)
+- **Líneas de código:** ~200 líneas en file.rs + ~416 líneas en directory.rs + ~10 líneas en mod.rs
+- **Tests agregados:** 9 tests para File API + 17 tests para Directory API (26 total)
+- **Coverage:** >90% en ambas APIs
 
 ## ✅ Definición de Hecho
 - [x] TASK-087 completada con File API funcional
-- [ ] TASK-088: Directory API implementada
+- [x] TASK-088: Directory API implementada
 - [ ] TASK-089: HttpClient implementado
 - [ ] TASK-090: WebSocket implementado
 - [ ] TASK-091: Tests de I/O y networking completados

@@ -7,7 +7,7 @@
 //! - WebSocket client for real-time communication
 
 pub mod file;
-// pub mod directory;  // TODO: TASK-088
+pub mod directory;
 // pub mod http;       // TODO: TASK-089
 // pub mod websocket;  // TODO: TASK-090
 
