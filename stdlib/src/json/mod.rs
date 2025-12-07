@@ -18,3 +18,8 @@ pub fn parse_with_position(input: &str) -> Result<(JsonValue, usize), JsonParseE
     let result = parser.parse()?;
     Ok((result, parser.position()))
 }
+
+/// Convenience function to serialize JsonValue to JSON string
+pub fn to_json(value: &JsonValue) -> String {
+    value.to_json()
+}

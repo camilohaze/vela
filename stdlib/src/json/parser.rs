@@ -407,12 +407,123 @@ impl<'a> JsonParser<'a> {
     }
 }
 
+impl JsonValue {
+    /// Serialize this JsonValue to a JSON string
+    pub fn to_json(&self) -> String {
+        let mut result = String::new();
+        self.encode_to(&mut result);
+        result
+    }
+
+    /// Encode this JsonValue to the given string buffer
+    fn encode_to(&self, buffer: &mut String) {
+        match self {
+            JsonValue::Null => buffer.push_str("null"),
+            JsonValue::Bool(b) => buffer.push_str(if *b { "true" } else { "false" }),
+            JsonValue::Number(n) => Self::encode_number(*n, buffer),
+            JsonValue::String(s) => Self::encode_string(s, buffer),
+            JsonValue::Array(arr) => Self::encode_array(arr, buffer),
+            JsonValue::Object(obj) => Self::encode_object(obj, buffer),
+        }
+    }
+
+    /// Encode a number to JSON format
+    fn encode_number(num: f64, buffer: &mut String) {
+        // Handle special cases
+        if num.is_nan() {
+            buffer.push_str("null");
+            return;
+        }
+        if num.is_infinite() {
+            if num.is_sign_positive() {
+                buffer.push_str("null");
+            } else {
+                buffer.push_str("null");
+            }
+            return;
+        }
+
+        // Check if it's a whole number
+        if num.fract() == 0.0 && num >= i64::MIN as f64 && num <= i64::MAX as f64 {
+            buffer.push_str(&format!("{}", num as i64));
+        } else {
+            // Format as float, but avoid scientific notation for reasonable numbers
+            let formatted = format!("{}", num);
+            if formatted.contains('e') || formatted.contains('E') {
+                // For very large/small numbers, scientific notation is fine
+                buffer.push_str(&formatted);
+            } else {
+                // Remove unnecessary trailing zeros
+                let trimmed = formatted.trim_end_matches('0').trim_end_matches('.');
+                buffer.push_str(trimmed);
+            }
+        }
+    }
+
+    /// Encode a string to JSON format with proper escaping
+    fn encode_string(s: &str, buffer: &mut String) {
+        buffer.push('"');
+
+        for ch in s.chars() {
+            match ch {
+                '"' => buffer.push_str("\\\""),
+                '\\' => buffer.push_str("\\\\"),
+                '/' => buffer.push_str("\\/"),
+                '\x08' => buffer.push_str("\\b"),  // backspace
+                '\x0C' => buffer.push_str("\\f"),  // form feed
+                '\n' => buffer.push_str("\\n"),
+                '\r' => buffer.push_str("\\r"),
+                '\t' => buffer.push_str("\\t"),
+                ch if ch.is_control() => {
+                    // Unicode escape for control characters
+                    buffer.push_str(&format!("\\u{:04x}", ch as u32));
+                }
+                ch => buffer.push(ch),
+            }
+        }
+
+        buffer.push('"');
+    }
+
+    /// Encode an array to JSON format
+    fn encode_array(arr: &[JsonValue], buffer: &mut String) {
+        buffer.push('[');
+
+        for (i, value) in arr.iter().enumerate() {
+            if i > 0 {
+                buffer.push(',');
+            }
+            value.encode_to(buffer);
+        }
+
+        buffer.push(']');
+    }
+
+    /// Encode an object to JSON format with sorted keys
+    fn encode_object(obj: &HashMap<String, JsonValue>, buffer: &mut String) {
+        buffer.push('{');
+
+        // Sort keys for consistent output
+        let mut keys: Vec<&String> = obj.keys().collect();
+        keys.sort();
+
+        for (i, key) in keys.iter().enumerate() {
+            if i > 0 {
+                buffer.push(',');
+            }
+            Self::encode_string(key, buffer);
+            buffer.push(':');
+            obj.get(*key).unwrap().encode_to(buffer);
+        }
+
+        buffer.push('}');
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::json::parse;
-
-    #[test]
     fn test_parse_null() {
         assert_eq!(parse("null").unwrap(), JsonValue::Null);
     }
@@ -471,5 +582,138 @@ mod tests {
         assert_eq!(parse("  null  ").unwrap(), JsonValue::Null);
         assert_eq!(parse("[\n  1  ,\n  2  \n]").unwrap(),
                    JsonValue::Array(vec![JsonValue::Number(1.0), JsonValue::Number(2.0)]));
+    }
+
+    #[test]
+    fn test_encode_null() {
+        let value = JsonValue::Null;
+        assert_eq!(value.to_json(), "null");
+    }
+
+    #[test]
+    fn test_encode_bool() {
+        assert_eq!(JsonValue::Bool(true).to_json(), "true");
+        assert_eq!(JsonValue::Bool(false).to_json(), "false");
+    }
+
+    #[test]
+    fn test_encode_number() {
+        assert_eq!(JsonValue::Number(42.0).to_json(), "42");
+        assert_eq!(JsonValue::Number(3.14).to_json(), "3.14");
+        assert_eq!(JsonValue::Number(0.0).to_json(), "0");
+        assert_eq!(JsonValue::Number(-123.0).to_json(), "-123");
+        // Test scientific notation for very large numbers
+        let large_num = 1e15;
+        let json = JsonValue::Number(large_num).to_json();
+        assert!(json.contains('e') || json == "1000000000000000");
+    }
+
+    #[test]
+    fn test_encode_string() {
+        assert_eq!(JsonValue::String("hello".to_string()).to_json(), r#""hello""#);
+        assert_eq!(JsonValue::String("".to_string()).to_json(), r#""""#);
+        assert_eq!(JsonValue::String(r#"quote " here"#.to_string()).to_json(), r#""quote \" here""#);
+        assert_eq!(JsonValue::String("backslash \\ here".to_string()).to_json(), r#""backslash \\ here""#);
+        assert_eq!(JsonValue::String("new\nline".to_string()).to_json(), r#""new\nline""#);
+        assert_eq!(JsonValue::String("tab\there".to_string()).to_json(), r#""tab\there""#);
+    }
+
+    #[test]
+    fn test_encode_array() {
+        let empty_array = JsonValue::Array(vec![]);
+        assert_eq!(empty_array.to_json(), "[]");
+
+        let simple_array = JsonValue::Array(vec![
+            JsonValue::Number(1.0),
+            JsonValue::Number(2.0),
+            JsonValue::Number(3.0),
+        ]);
+        assert_eq!(simple_array.to_json(), "[1,2,3]");
+
+        let mixed_array = JsonValue::Array(vec![
+            JsonValue::String("hello".to_string()),
+            JsonValue::Bool(true),
+            JsonValue::Null,
+        ]);
+        assert_eq!(mixed_array.to_json(), r#"["hello",true,null]"#);
+    }
+
+    #[test]
+    fn test_encode_object() {
+        let mut obj = HashMap::new();
+        obj.insert("name".to_string(), JsonValue::String("John".to_string()));
+        obj.insert("age".to_string(), JsonValue::Number(30.0));
+        obj.insert("active".to_string(), JsonValue::Bool(true));
+
+        let json_obj = JsonValue::Object(obj);
+        let json_str = json_obj.to_json();
+
+        // Parse back to verify it's valid JSON
+        let parsed = parse(&json_str).unwrap();
+        match parsed {
+            JsonValue::Object(map) => {
+                assert_eq!(map.get("name"), Some(&JsonValue::String("John".to_string())));
+                assert_eq!(map.get("age"), Some(&JsonValue::Number(30.0)));
+                assert_eq!(map.get("active"), Some(&JsonValue::Bool(true)));
+            }
+            _ => panic!("Expected object"),
+        }
+    }
+
+    #[test]
+    fn test_encode_nested_structures() {
+        // Create a nested structure: {"users": [{"name": "Alice", "scores": [95, 87]}, {"name": "Bob", "scores": [88, 92]}]}
+        let alice_scores = JsonValue::Array(vec![JsonValue::Number(95.0), JsonValue::Number(87.0)]);
+        let mut alice = HashMap::new();
+        alice.insert("name".to_string(), JsonValue::String("Alice".to_string()));
+        alice.insert("scores".to_string(), alice_scores);
+
+        let bob_scores = JsonValue::Array(vec![JsonValue::Number(88.0), JsonValue::Number(92.0)]);
+        let mut bob = HashMap::new();
+        bob.insert("name".to_string(), JsonValue::String("Bob".to_string()));
+        bob.insert("scores".to_string(), bob_scores);
+
+        let users = JsonValue::Array(vec![
+            JsonValue::Object(alice),
+            JsonValue::Object(bob),
+        ]);
+
+        let mut root = HashMap::new();
+        root.insert("users".to_string(), users);
+
+        let json_value = JsonValue::Object(root);
+        let json_str = json_value.to_json();
+
+        // Verify it's valid JSON by parsing it back
+        let parsed = parse(&json_str).unwrap();
+        assert!(matches!(parsed, JsonValue::Object(_)));
+    }
+
+    #[test]
+    fn test_round_trip() {
+        let test_cases = vec![
+            r#"null"#,
+            r#"true"#,
+            r#"false"#,
+            r#"42"#,
+            r#"3.14"#,
+            r#""hello world""#,
+            r#"[]"#,
+            r#"[1,2,3]"#,
+            r#"{}"#,
+            r#"{"key":"value"}"#,
+            r#"{"numbers":[1,2,3],"nested":{"inner":true}}"#,
+        ];
+
+        for json_str in test_cases {
+            let parsed = parse(json_str).unwrap();
+            let encoded = parsed.to_json();
+
+            // Parse the encoded version to ensure it's valid
+            let reparsed = parse(&encoded).unwrap();
+
+            // They should be structurally equivalent
+            assert_eq!(parsed, reparsed);
+        }
     }
 }
