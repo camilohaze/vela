@@ -50,7 +50,7 @@ pub struct ReactiveScheduler {
     metrics: Mutex<SchedulerMetrics>,
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 struct SchedulerMetrics {
     total_updates: usize,
     batched_updates: usize,
@@ -88,7 +88,7 @@ impl ReactiveScheduler {
 
     /// Get scheduler metrics
     pub fn metrics(&self) -> SchedulerMetrics {
-        self.metrics.lock().unwrap().clone()
+        (*self.metrics.lock().unwrap()).clone()
     }
 
     /// Schedule an update for a node

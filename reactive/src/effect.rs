@@ -38,7 +38,6 @@ impl Effect {
 
         let effect_fn_boxed = Box::new(move || {
             effect_fn();
-            serde_json::Value::Null
         });
 
         let node = Arc::new(ReactiveNode::new_effect(id, effect_fn_boxed));

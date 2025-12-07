@@ -16,7 +16,7 @@ Implementar el sistema de resolución de módulos que permita:
 
 ### Archivos generados
 - `vm/module_loader.vela` - Implementación principal del ModuleResolver (1,200 líneas)
-- `docs/architecture/ADR-XXX-module-system.md` - Decisión arquitectónica
+- `docs/architecture/ADR-079-module-system.md` - Decisión arquitectónica
 
 ### Componentes
 

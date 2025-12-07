@@ -9,6 +9,7 @@
 //! recompute when their dependencies change.
 
 use std::sync::Arc;
+use parking_lot::RwLock;
 
 use crate::graph::{ReactiveGraph, ReactiveNode, NodeState};
 use crate::signal::Signal;
@@ -19,6 +20,10 @@ pub struct Computed<T> {
     node: Arc<ReactiveNode>,
     /// The graph this computed belongs to
     graph: Arc<ReactiveGraph>,
+    /// Cached computed value
+    cached_value: Arc<RwLock<Option<T>>>,
+    /// The computation function
+    compute_fn: Arc<dyn Fn() -> T + Send + Sync>,
 }
 
 impl<T: Clone + Send + Sync + 'static> Computed<T> {
@@ -38,15 +43,23 @@ impl<T: Clone + Send + Sync + 'static> Computed<T> {
     {
         let id = format!("computed-{}", uuid::Uuid::new_v4());
 
+        let compute_fn_arc = Arc::new(compute_fn);
+
+        let compute_fn_for_node = Arc::clone(&compute_fn_arc);
         let compute_fn_boxed = Box::new(move || {
-            let value = compute_fn();
-            serde_json::to_value(value).unwrap_or(serde_json::Value::Null)
+            let value = compute_fn_for_node();
+            serde_json::Value::Null // Placeholder, not used anymore
         });
 
         let node = Arc::new(ReactiveNode::new_computed(id, compute_fn_boxed));
         graph.register_node(Arc::clone(&node));
 
-        Computed { node, graph }
+        Computed {
+            node,
+            graph,
+            cached_value: Arc::new(RwLock::new(None)),
+            compute_fn: compute_fn_arc,
+        }
     }
 
     /// Get the current value (lazy evaluation)
@@ -55,7 +68,7 @@ impl<T: Clone + Send + Sync + 'static> Computed<T> {
 
         // If already computing, return cached value or panic on cycle
         if let NodeState::Computing = *self.node.state.read() {
-            if let Some(ref cached) = *self.node.value.read() {
+            if let Some(ref cached) = *self.cached_value.read() {
                 return cached.clone();
             }
             panic!("Cycle detected in computed dependencies");
@@ -63,7 +76,7 @@ impl<T: Clone + Send + Sync + 'static> Computed<T> {
 
         // If clean and has cached value, return it
         if let NodeState::Clean = *self.node.state.read() {
-            if let Some(ref cached) = *self.node.value.read() {
+            if let Some(ref cached) = *self.cached_value.read() {
                 return cached.clone();
             }
         }
@@ -72,16 +85,12 @@ impl<T: Clone + Send + Sync + 'static> Computed<T> {
         *self.node.state.write() = NodeState::Computing;
 
         // Track dependencies during computation
-        let result = self.graph.track(|| {
-            if let Some(ref compute_fn) = self.node.compute_fn {
-                compute_fn()
-            } else {
-                panic!("Computed node has no compute function");
-            }
+        let result = self.graph.track(&self.node.id, || {
+            (self.compute_fn)()
         });
 
         // Cache the result
-        *self.node.value.write() = Some(result.clone());
+        *self.cached_value.write() = Some(result.clone());
 
         // Mark as clean
         *self.node.state.write() = NodeState::Clean;

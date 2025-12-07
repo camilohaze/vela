@@ -158,19 +158,19 @@ impl ReactiveGraph {
 
     /// Register a node in the graph
     pub fn register_node(&self, node: Arc<ReactiveNode>) {
-        let mut nodes = self.nodes.write();
+        let mut nodes = self.nodes.write().unwrap();
         nodes.insert(node.id.clone(), Arc::clone(&node));
     }
 
     /// Unregister a node from the graph
     pub fn unregister_node(&self, node_id: &str) {
-        let mut nodes = self.nodes.write();
+        let mut nodes = self.nodes.write().unwrap();
         nodes.remove(node_id);
     }
 
     /// Get a node by ID
     pub fn get_node(&self, node_id: &str) -> Option<Arc<ReactiveNode>> {
-        let nodes = self.nodes.read();
+        let nodes = self.nodes.read().unwrap();
         nodes.get(node_id).cloned()
     }
 
@@ -284,7 +284,7 @@ impl ReactiveGraph {
     /// Dispose all nodes
     pub fn dispose_all(&self) {
         let nodes = {
-            let nodes_read = self.nodes.read();
+            let nodes_read = self.nodes.read().unwrap();
             nodes_read.keys().cloned().collect::<Vec<_>>()
         };
 
@@ -294,13 +294,13 @@ impl ReactiveGraph {
             }
         }
 
-        let mut nodes_write = self.nodes.write();
+        let mut nodes_write = self.nodes.write().unwrap();
         nodes_write.clear();
     }
 
     /// Get debug information
     pub fn debug_info(&self) -> serde_json::Value {
-        let nodes = self.nodes.read();
+        let nodes = self.nodes.read().unwrap();
         let node_count = nodes.len();
 
         let mut nodes_by_type = HashMap::new();

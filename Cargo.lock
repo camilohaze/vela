@@ -2525,6 +2525,8 @@ dependencies = [
  "anyhow",
  "criterion",
  "parking_lot",
+ "serde",
+ "serde_json",
  "thiserror",
  "uuid",
 ]

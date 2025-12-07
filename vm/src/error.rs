@@ -39,6 +39,13 @@ pub enum Error {
     )]
     InvalidConstant { index: usize },
 
+    #[error("Invalid string index: {index}")]
+    #[diagnostic(
+        code(vm::invalid_string),
+        help("String table index is out of bounds.")
+    )]
+    InvalidString { index: usize },
+
     #[error("Invalid local variable index: {index}")]
     #[diagnostic(
         code(vm::invalid_local),
@@ -105,6 +112,13 @@ pub enum Error {
         help("An exception was raised during execution.")
     )]
     RuntimeException { message: String },
+
+    #[error("Import error: cannot import '{module}': {message}")]
+    #[diagnostic(
+        code(vm::import_error),
+        help("Failed to import the specified module.")
+    )]
+    ImportError { module: String, message: String },
 }
 
 impl Error {

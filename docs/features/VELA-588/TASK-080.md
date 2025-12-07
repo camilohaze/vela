@@ -2,7 +2,7 @@
 
 ## 📋 Información General
 - **Historia:** VELA-588 (US-18: Module Loader)
-- **Estado:** Pendiente ⏳
+- **Estado:** En curso ⏳
 - **Fecha:** 2025-01-07
 
 ## 🎯 Objetivo

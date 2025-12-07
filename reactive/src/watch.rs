@@ -21,7 +21,7 @@ pub struct Watch<T> {
     /// Whether watching immediately
     immediate: bool,
     /// Whether currently stopped
-    stopped: std::sync::Mutex<bool>,
+    stopped: Arc<std::sync::Mutex<bool>>,
 }
 
 impl<T> Watch<T>
@@ -47,22 +47,25 @@ where
             signal: Arc::clone(&signal),
             graph: Arc::clone(&graph),
             immediate,
-            stopped: std::sync::Mutex::new(false),
+            stopped: Arc::new(std::sync::Mutex::new(false)),
         };
 
-        // Subscribe to signal changes
+        // Create callback arc first
         let callback_arc = Arc::new(callback);
-        let callback_clone = Arc::clone(&callback_arc);
 
-        signal.subscribe(move |value| {
-            if !*watch.stopped.lock().unwrap() {
-                callback_clone(value);
+        // Subscribe to signal changes
+        let callback_clone = Arc::clone(&callback_arc);
+        let stopped = watch.stopped.clone();
+
+        signal.subscribe(move |old_value, new_value| {
+            if !*stopped.lock().unwrap() {
+                callback_clone(&new_value);
             }
         });
 
         // Run immediately if requested
         if immediate {
-            callback(&signal.get());
+            callback_arc(&signal.get());
         }
 
         watch

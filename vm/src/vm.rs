@@ -52,6 +52,7 @@ assert!(result.is_ok());
 
 use crate::bytecode::{Bytecode, Constant, CodeObject, Instruction, Value};
 use crate::error::{Error, Result};
+use crate::loader::BytecodeLoader;
 use std::collections::HashMap;
 use std::rc::Rc;
 
@@ -299,6 +300,10 @@ pub struct VirtualMachine {
     strings: Vec<String>,
     /// Code objects from bytecode
     code_objects: Vec<Rc<CodeObject>>,
+    /// Loaded modules (module name -> module globals)
+    modules: HashMap<String, HashMap<String, Value>>,
+    /// Bytecode loader for loading .velac files
+    loader: BytecodeLoader,
     /// Max call depth (prevent stack overflow)
     max_call_depth: usize,
 }
@@ -313,6 +318,8 @@ impl VirtualMachine {
             constants: Vec::new(),
             strings: Vec::new(),
             code_objects: Vec::new(),
+            modules: HashMap::new(),
+            loader: BytecodeLoader::new(),
             max_call_depth: 1000,
         }
     }
@@ -344,6 +351,31 @@ impl VirtualMachine {
 
         // Return top of stack or NULL
         Ok(self.stack.pop().unwrap_or(Value::NULL))
+    }
+
+    /// Load a module into the VM
+    pub fn load_module(&mut self, name: String, globals: HashMap<String, Value>) {
+        self.modules.insert(name, globals);
+    }
+
+    /// Get a module by name
+    pub fn get_module(&self, name: &str) -> Option<&HashMap<String, Value>> {
+        self.modules.get(name)
+    }
+
+    /// Check if module is loaded
+    pub fn is_module_loaded(&self, name: &str) -> bool {
+        self.modules.contains_key(name)
+    }
+
+    /// Get all loaded module names
+    pub fn get_loaded_modules(&self) -> Vec<String> {
+        self.modules.keys().cloned().collect()
+    }
+
+    /// Unload a module
+    pub fn unload_module(&mut self, name: &str) {
+        self.modules.remove(name);
     }
 
     /// Run current frame
@@ -556,10 +588,71 @@ impl VirtualMachine {
 
             // Other instructions (placeholders)
             LoadAttr(_) | StoreAttr(_) | LoadSubscript | StoreSubscript | DeleteSubscript
-            | GetIter | ForIter(_) | SetupExcept(_) | PopExcept | Raise | ImportName(_)
-            | ImportFrom(_) | MakeFunction(_) | MakeClosure(_, _) => {
+            | GetIter | ForIter(_) | SetupExcept(_) | PopExcept | Raise
+            | MakeFunction(_) | MakeClosure(_, _) => {
                 // TODO: Implement these instructions
                 self.push(Value::NULL);
+            }
+
+            ImportName(idx) => {
+                // Import module by name
+                let module_name = self.get_string(idx)?.to_string();
+
+                // Try to load module using bytecode loader
+                match self.loader.load_module(&module_name) {
+                    Ok(loaded_module) => {
+                        // Module loaded successfully, create module globals from exports
+                        let mut module_globals = HashMap::new();
+                        for (symbol_name, value_idx) in &loaded_module.exports {
+                            // TODO: Convert bytecode constants to VM values
+                            // For now, just create placeholder values
+                            module_globals.insert(symbol_name.clone(), Value::NULL);
+                        }
+
+                        // Store module globals
+                        self.modules.insert(module_name.to_string(), module_globals);
+
+                        // Push module object (placeholder for now)
+                        self.push(Value::NULL);
+                    }
+                    Err(err) => {
+                        return Err(err);
+                    }
+                }
+            }
+
+            ImportFrom(idx) => {
+                // Import symbol from module (format: "module.symbol")
+                let import_spec = self.get_string(idx)?;
+
+                // Parse module.symbol format
+                if let Some(dot_pos) = import_spec.find('.') {
+                    let module_name = &import_spec[..dot_pos];
+                    let symbol_name = &import_spec[dot_pos + 1..];
+
+                    // Check if module is loaded
+                    if let Some(module_globals) = self.get_module(module_name) {
+                        if let Some(symbol_value) = module_globals.get(symbol_name) {
+                            // Push the symbol value
+                            self.push(symbol_value.clone());
+                        } else {
+                            return Err(Error::ImportError {
+                                module: module_name.to_string(),
+                                message: format!("Symbol '{}' not found in module", symbol_name),
+                            });
+                        }
+                    } else {
+                        return Err(Error::ImportError {
+                            module: module_name.to_string(),
+                            message: "Module not found".to_string(),
+                        });
+                    }
+                } else {
+                    return Err(Error::ImportError {
+                        module: import_spec.to_string(),
+                        message: "Invalid import format, expected 'module.symbol'".to_string(),
+                    });
+                }
             }
 
             Nop => {}
@@ -662,6 +755,14 @@ impl VirtualMachine {
         self.constants
             .get(idx as usize)
             .ok_or(Error::InvalidConstant { index: idx as usize })
+    }
+
+    /// Get string by index
+    fn get_string(&self, idx: u16) -> Result<&str> {
+        self.strings
+            .get(idx as usize)
+            .map(|s| s.as_str())
+            .ok_or(Error::InvalidString { index: idx as usize })
     }
 
     /// Push value to stack
