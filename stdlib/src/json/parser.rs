@@ -248,8 +248,12 @@ impl<'a> JsonParser<'a> {
         let mut result = String::new();
 
         while self.position < self.input.len() {
-            let ch = self.input.as_bytes()[self.position] as char;
-            self.position += 1;
+            // Read the next character properly handling UTF-8
+            let ch = match self.input[self.position..].chars().next() {
+                Some(ch) => ch,
+                None => break, // End of input
+            };
+            self.position += ch.len_utf8();
 
             match ch {
                 '"' => return Ok(result),
@@ -260,8 +264,9 @@ impl<'a> JsonParser<'a> {
                         ));
                     }
 
-                    let escape_ch = self.input.as_bytes()[self.position] as char;
+                    let escape_byte = self.input.as_bytes()[self.position];
                     self.position += 1;
+                    let escape_ch = escape_byte as char;
 
                     match escape_ch {
                         '"' => result.push('"'),
@@ -303,7 +308,7 @@ impl<'a> JsonParser<'a> {
                         }
                     }
                 }
-                ch if ch.is_control() => {
+                ch if (ch as u32) < 32 => {
                     return Err(JsonParseError::InvalidString(
                         format!("Control character: {}", ch as u32)
                     ));
@@ -690,30 +695,249 @@ mod tests {
     }
 
     #[test]
-    fn test_round_trip() {
+    fn test_full_round_trip_complex() {
+        // Test round-trip con estructura compleja anidada
+        let complex_json = r#"
+        {
+            "users": [
+                {
+                    "id": 1,
+                    "name": "Alice",
+                    "profile": {
+                        "age": 25,
+                        "hobbies": ["reading", "coding", "gaming"],
+                        "active": true,
+                        "metadata": {
+                            "registered": "2023-01-15",
+                            "score": 95.7
+                        }
+                    }
+                },
+                {
+                    "id": 2,
+                    "name": "Bob",
+                    "profile": {
+                        "age": 30,
+                        "hobbies": ["sports", "music"],
+                        "active": false,
+                        "metadata": {
+                            "registered": "2023-02-20",
+                            "score": 88.5
+                        }
+                    }
+                }
+            ],
+            "metadata": {
+                "version": "1.0",
+                "timestamp": 1234567890,
+                "config": {
+                    "debug": true,
+                    "max_users": 1000,
+                    "features": ["auth", "profiles", "messaging"]
+                }
+            },
+            "stats": {
+                "total_users": 2,
+                "active_users": 1,
+                "avg_score": 92.1
+            }
+        }"#;
+
+        // Parse
+        let parsed = parse(complex_json).unwrap();
+
+        // Encode
+        let encoded = parsed.to_json();
+
+        // Parse again
+        let reparsed = parse(&encoded).unwrap();
+
+        // Verify structural equivalence
+        assert_eq!(parsed, reparsed);
+
+        // Verify specific values
+        if let JsonValue::Object(root) = reparsed {
+            // Check users array
+            if let Some(JsonValue::Array(users)) = root.get("users") {
+                assert_eq!(users.len(), 2);
+
+                // Check first user
+                if let JsonValue::Object(user1) = &users[0] {
+                    assert_eq!(user1.get("id"), Some(&JsonValue::Number(1.0)));
+                    assert_eq!(user1.get("name"), Some(&JsonValue::String("Alice".to_string())));
+                }
+
+                // Check second user
+                if let JsonValue::Object(user2) = &users[1] {
+                    assert_eq!(user2.get("id"), Some(&JsonValue::Number(2.0)));
+                    assert_eq!(user2.get("name"), Some(&JsonValue::String("Bob".to_string())));
+                }
+            }
+
+            // Check metadata
+            if let Some(JsonValue::Object(metadata)) = root.get("metadata") {
+                assert_eq!(metadata.get("version"), Some(&JsonValue::String("1.0".to_string())));
+                assert_eq!(metadata.get("timestamp"), Some(&JsonValue::Number(1234567890.0)));
+            }
+        }
+    }
+
+    #[test]
+    fn test_unicode_edge_cases() {
         let test_cases = vec![
-            r#"null"#,
-            r#"true"#,
-            r#"false"#,
-            r#"42"#,
-            r#"3.14"#,
-            r#""hello world""#,
-            r#"[]"#,
-            r#"[1,2,3]"#,
-            r#"{}"#,
-            r#"{"key":"value"}"#,
-            r#"{"numbers":[1,2,3],"nested":{"inner":true}}"#,
+            r#""🚀 Rocket emoji""#,
+            r#""Hello 世界 World""#,
+            r#""Тест на русском""#,
+            r#""café résumé naïve""#,
+            r#""Mixed: αβγδε 数学 ∑∏∫ 絵文字 😀🎉""#,
         ];
 
         for json_str in test_cases {
             let parsed = parse(json_str).unwrap();
             let encoded = parsed.to_json();
-
-            // Parse the encoded version to ensure it's valid
             let reparsed = parse(&encoded).unwrap();
-
-            // They should be structurally equivalent
             assert_eq!(parsed, reparsed);
         }
+    }
+
+    #[test]
+    fn test_number_edge_cases() {
+        let test_cases = vec![
+            ("0", 0.0),
+            ("-0", 0.0),
+            ("1", 1.0),
+            ("-1", -1.0),
+            ("3.14159", 3.14159),
+            ("-2.71828", -2.71828),
+            ("1e10", 1e10),
+            ("1.23e-4", 1.23e-4),
+            ("999999999999999", 999999999999999.0), // Large integer
+            ("0.000000000000001", 0.000000000000001), // Small float
+        ];
+
+        for (json_num, expected) in test_cases {
+            let parsed = parse(json_num).unwrap();
+            assert_eq!(parsed, JsonValue::Number(expected));
+
+            let encoded = parsed.to_json();
+            let reparsed = parse(&encoded).unwrap();
+            assert_eq!(parsed, reparsed);
+        }
+    }
+
+    #[test]
+    fn test_malformed_json_comprehensive() {
+        let malformed_cases = vec![
+            ("", "Empty input"),
+            ("{", "Unclosed object"),
+            ("[", "Unclosed array"),
+            (r#""unclosed string"#, "Unclosed string"),
+            ("{,}", "Trailing comma in object"),
+            ("[,]", "Trailing comma in array"),
+            (r#"{"key"}"#, "Missing colon"),
+            ("tru", "Incomplete true"),
+            ("fals", "Incomplete false"),
+            ("nul", "Incomplete null"),
+            ("123abc", "Invalid number"),
+            ("\"\x1F\"", "Unescaped control character"),
+            ("{\"key\": value}", "Unquoted value"),
+            ("[1, 2,]", "Trailing comma"),
+            ("{\"a\": 1,}", "Trailing comma in object"),
+            ("{{}}", "Nested object without key"),
+            (r#""\uXXXX""#, "Invalid unicode escape"),
+            (r#""\uD800""#, "Incomplete surrogate pair"),
+        ];
+
+        for (case, description) in malformed_cases {
+            assert!(parse(case).is_err(), "Should fail for {}: {}", description, case);
+        }
+    }
+
+    #[test]
+    fn test_whitespace_extreme() {
+        let json_with_extreme_whitespace = r#"
+        {
+            "array" : [
+                1 ,
+                2
+                ,
+                3
+            ]
+            ,
+            "object" :
+            {
+                "nested" : "value"
+            }
+        }
+        "#;
+
+        let parsed = parse(json_with_extreme_whitespace).unwrap();
+        let encoded = parsed.to_json();
+
+        // Should parse successfully and produce clean JSON
+        assert!(encoded.contains(r#""array":[1,2,3]"#));
+        assert!(encoded.contains(r#""object":{"nested":"value"}"#));
+    }
+
+    #[test]
+    fn test_string_escaping_comprehensive() {
+        let test_cases = vec![
+            (r#""""#, ""),
+            (r#""simple""#, "simple"),
+            (r#""quote \" here""#, r#"quote " here"#),
+            (r#""backslash \\ here""#, r#"backslash \ here"#),
+            (r#""slash \/ here""#, r#"slash / here"#),
+            (r#""backspace \b here""#, "backspace \x08 here"),
+            (r#""formfeed \f here""#, "formfeed \x0C here"),
+            (r#""newline \n here""#, "newline \n here"),
+            (r#""carriage \r here""#, "carriage \r here"),
+            (r#""tab \t here""#, "tab \t here"),
+            (r#""unicode \u0041""#, "unicode A"),
+            (r#""unicode \u0041""#, "unicode A"),
+        ];
+
+        for (json_str, expected_content) in test_cases {
+            let parsed = parse(json_str).unwrap();
+            if let JsonValue::String(ref content) = parsed {
+                assert_eq!(content, expected_content);
+            } else {
+                panic!("Expected string");
+            }
+
+            // Test round-trip
+            let encoded = parsed.to_json();
+            let reparsed = parse(&encoded).unwrap();
+            assert_eq!(parsed, reparsed);
+        }
+    }
+
+    #[test]
+    fn test_large_structure_performance() {
+        // Create a moderately large structure (not too big for CI)
+        let mut large_array = Vec::new();
+        for i in 0..100 {
+            let mut obj = HashMap::new();
+            obj.insert("id".to_string(), JsonValue::Number(i as f64));
+            obj.insert("name".to_string(), JsonValue::String(format!("item_{}", i)));
+            obj.insert("active".to_string(), JsonValue::Bool(i % 2 == 0));
+            obj.insert("tags".to_string(), JsonValue::Array(vec![
+                JsonValue::String(format!("tag{}", i % 5)),
+                JsonValue::String(format!("category{}", i % 3)),
+            ]));
+            large_array.push(JsonValue::Object(obj));
+        }
+
+        let large_value = JsonValue::Array(large_array);
+
+        // Test encoding/decoding
+        let encoded = large_value.to_json();
+        let reparsed = parse(&encoded).unwrap();
+
+        assert_eq!(large_value, reparsed);
+
+        // Basic size check - adjust expectation
+        assert!(encoded.len() > 1000); // Should be reasonably large
+        assert!(encoded.starts_with('['));
+        assert!(encoded.ends_with(']'));
     }
 }
