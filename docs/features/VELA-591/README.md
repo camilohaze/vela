@@ -36,12 +36,13 @@ Como desarrollador, quiero APIs de I/O y networking para poder trabajar eficient
 - 9 tests unitarios con cobertura completa
 - Manejo robusto de errores y status codes
 
-### 🔄 TASK-090: Implementar WebSocket
-**Estado:** Pendiente
-- Cliente WebSocket para comunicación bidireccional
-- Conexión, envío/recepción de mensajes
-- Manejo de eventos y errores
-- API inspirada en WebSocket API del browser
+### ✅ TASK-090: Implementar WebSocket
+**Estado:** ✅ Completada
+- Cliente WebSocket completo con comunicación bidireccional
+- Mensajes de texto/binarios, eventos de conexión, ping/pong
+- Configuración flexible y manejo robusto de errores
+- 11 tests unitarios con cobertura completa
+- Inspirado en WebSocket browser API
 
 ### 🔄 TASK-091: Tests de I/O y networking
 **Estado:** Pendiente
@@ -100,17 +101,17 @@ let message = ws.receive().await?;
 ```
 
 ## 📊 Métricas
-- **Subtasks completadas:** 3/5 (60%)
-- **Archivos creados:** 7 (TASK-087.md, TASK-088.md, TASK-089.md, file.rs, directory.rs, client.rs, ADR-089.md)
-- **Líneas de código:** ~200 líneas en file.rs + ~416 líneas en directory.rs + ~550 líneas en client.rs
-- **Tests agregados:** 9 (File) + 17 (Directory) + 9 (HttpClient) = 35 tests total
+- **Subtasks completadas:** 4/5 (80%)
+- **Archivos creados:** 9 (TASK-087.md, TASK-088.md, TASK-089.md, TASK-090.md, file.rs, directory.rs, client.rs, websocket.rs, ADR-089.md, ADR-090.md)
+- **Líneas de código:** ~200 (file) + ~416 (directory) + ~550 (http) + ~550 (websocket) = ~1716 líneas
+- **Tests agregados:** 9 (File) + 17 (Directory) + 9 (HttpClient) + 11 (WebSocket) = 46 tests total
 - **Coverage:** >90% en todas las APIs
 
 ## ✅ Definición de Hecho
 - [x] TASK-087 completada con File API funcional
 - [x] TASK-088: Directory API implementada
-- [ ] TASK-089: HttpClient implementado
-- [ ] TASK-090: WebSocket implementado
+- [x] TASK-089: HttpClient implementado
+- [x] TASK-090: WebSocket implementado
 - [ ] TASK-091: Tests de I/O y networking completados
 - [ ] Documentación completa de todas las APIs
 
