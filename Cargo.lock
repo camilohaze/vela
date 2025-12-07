@@ -2457,6 +2457,7 @@ dependencies = [
  "clap",
  "predicates",
  "serde",
+ "tempfile",
  "thiserror",
  "tracing",
  "tracing-subscriber",

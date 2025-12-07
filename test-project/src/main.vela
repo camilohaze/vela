@@ -1,0 +1,35 @@
+/*
+Web Application: test-project
+
+A reactive web application built with Vela.
+*/
+
+import 'system:ui'
+import 'system:reactive'
+
+// Main application component
+@component
+class test-projectApp extends StatefulWidget {
+    state counter: Number = 0
+
+    fn build() -> Widget {
+        return Column(
+            children: [
+                Text("Welcome to test-project!", style: TextStyle(fontSize: 24)),
+                SizedBox(height: 20),
+                Text("Counter: ${this.counter}", style: TextStyle(fontSize: 18)),
+                SizedBox(height: 10),
+                Button(
+                    text: "Increment",
+                    onPressed: () => this.counter = this.counter + 1
+                )
+            ]
+        )
+    }
+}
+
+// Application entry point
+fn main() -> void {
+    app = test-projectApp()
+    runApp(app)
+}
