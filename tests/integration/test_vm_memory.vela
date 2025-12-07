@@ -1,0 +1,551 @@
+"""
+Integration Tests - VelaVM + ARC
+
+Implementación de: VELA-587 TASK-078
+Historia: US-17 - Memory Management Automático
+Fecha: 2025-12-07
+
+Descripción:
+Tests de integración para verificar la correcta interacción entre:
+- VelaVM opcodes y ARCManager
+- Memory management en ejecución de programas
+- Prevención de memory leaks
+- Ciclos de detección periódica
+
+Cobertura objetivo: >= 80%
+"""
+
+import 'module:vm/velavm' show { VelaVM, OpCode }
+import 'module:vm/arc' show { ARCManager }
+import 'module:vm/weak' show { CycleDetector }
+import 'module:vm/heap' show { Heap }
+import 'system:test' show { describe, it, expect, beforeEach, afterEach }
+
+
+# ============================================================================
+# TEST SUITE: VM OPCODES + ARC
+# ============================================================================
+
+describe("VM Opcodes + ARC Integration", () => {
+  vm: VelaVM
+  heap: Heap
+  arc: ARCManager
+  
+  beforeEach(() => {
+    heap = Heap(10 * 1024 * 1024)  # 10 MB
+    arc = ARCManager(heap)
+    heap.setARCManager(arc)
+    vm = VelaVM(heap, arc)
+  })
+  
+  afterEach(() => {
+    vm.destroy()
+    heap.destroy()
+  })
+  
+  it("OP_POP should release value correctly", () => {
+    # Push value to stack
+    value = vm.createString("test")
+    vm.push(value)
+    
+    initialRefCount = value.refCount
+    expect(initialRefCount).toBe(1)
+    
+    # Pop releases the value
+    vm.execute(OpCode.OP_POP)
+    
+    # RefCount should decrement
+    stats = arc.getStats()
+    expect(stats.totalReleases).toBeGreaterThan(0)
+  })
+  
+  it("OP_DUP should retain duplicated value", () => {
+    value = vm.createString("test")
+    vm.push(value)
+    
+    initialRetains = arc.getStats().totalRetains
+    
+    # Duplicate retains the value
+    vm.execute(OpCode.OP_DUP)
+    
+    stats = arc.getStats()
+    expect(stats.totalRetains).toBe(initialRetains + 1)
+    expect(vm.stackTop()).toBe(value)
+  })
+  
+  it("OP_STORE_LOCAL should release old value and retain new", () => {
+    vm.createLocal("x")
+    
+    value1 = vm.createString("old")
+    vm.storeLocal("x", value1)
+    
+    initialRetains = arc.getStats().totalRetains
+    initialReleases = arc.getStats().totalReleases
+    
+    value2 = vm.createString("new")
+    vm.storeLocal("x", value2)
+    
+    stats = arc.getStats()
+    expect(stats.totalRetains).toBe(initialRetains + 1)  # Retain new
+    expect(stats.totalReleases).toBe(initialReleases + 1)  # Release old
+  })
+  
+  it("OP_RETURN should release locals and drain autorelease pool", () => {
+    vm.createLocal("a")
+    vm.createLocal("b")
+    vm.createLocal("c")
+    
+    vm.storeLocal("a", vm.createString("a"))
+    vm.storeLocal("b", vm.createString("b"))
+    vm.storeLocal("c", vm.createString("c"))
+    
+    # Add some autoreleased values
+    arc.autorelease(vm.createString("temp"))
+    
+    initialReleases = arc.getStats().totalReleases
+    
+    # Return releases all locals and drains pool
+    vm.execute(OpCode.OP_RETURN)
+    
+    stats = arc.getStats()
+    expect(stats.totalReleases).toBeGreaterThan(initialReleases)
+  })
+  
+  it("OP_BUILD_LIST should retain all items", () => {
+    item1 = vm.createString("a")
+    item2 = vm.createString("b")
+    item3 = vm.createString("c")
+    
+    vm.push(item1)
+    vm.push(item2)
+    vm.push(item3)
+    
+    initialRetains = arc.getStats().totalRetains
+    
+    # Build list retains all items
+    vm.execute(OpCode.OP_BUILD_LIST, 3)
+    
+    stats = arc.getStats()
+    expect(stats.totalRetains).toBe(initialRetains + 3)
+  })
+  
+  it("OP_BUILD_MAP should retain all values", () => {
+    key1 = vm.createString("name")
+    val1 = vm.createString("Alice")
+    key2 = vm.createString("age")
+    val2 = vm.createNumber(30)
+    
+    vm.push(key1)
+    vm.push(val1)
+    vm.push(key2)
+    vm.push(val2)
+    
+    initialRetains = arc.getStats().totalRetains
+    
+    # Build map retains all values (NOT keys if primitive)
+    vm.execute(OpCode.OP_BUILD_MAP, 2)
+    
+    stats = arc.getStats()
+    expect(stats.totalRetains).toBeGreaterThan(initialRetains)
+  })
+})
+
+
+# ============================================================================
+# TEST SUITE: MEMORY LEAKS DETECTION
+# ============================================================================
+
+describe("Memory Leaks Detection", () => {
+  vm: VelaVM
+  heap: Heap
+  arc: ARCManager
+  
+  beforeEach(() => {
+    heap = Heap(10 * 1024 * 1024)
+    arc = ARCManager(heap)
+    heap.setARCManager(arc)
+    vm = VelaVM(heap, arc)
+  })
+  
+  afterEach(() => {
+    vm.destroy()
+    heap.destroy()
+  })
+  
+  it("should NOT leak memory in long-running program", () => {
+    # Execute loop that creates temporary objects
+    vm.execute("""
+      fn test() -> void {
+        i = 0
+        while i < 1000 {
+          temp = "iteration ${i}"
+          i = i + 1
+        }
+      }
+      
+      test()
+    """)
+    
+    initialLiveObjects = arc.getStats().liveObjectsCount
+    
+    # Run again
+    vm.execute("""
+      fn test() -> void {
+        i = 0
+        while i < 1000 {
+          temp = "iteration ${i}"
+          i = i + 1
+        }
+      }
+      
+      test()
+    """)
+    
+    finalLiveObjects = arc.getStats().liveObjectsCount
+    
+    # Live objects should be stable (no accumulation)
+    expect(finalLiveObjects).toBeLessThanOrEqual(initialLiveObjects + 10)
+  })
+  
+  it("should detect memory leak from unclosed resources", () => {
+    # Simulate unclosed file handles
+    vm.execute("""
+      fn openFile(path: String) -> File {
+        file = File(path)
+        return file
+      }
+      
+      i = 0
+      while i < 100 {
+        openFile("test.txt")  # Not closed!
+        i = i + 1
+      }
+    """)
+    
+    stats = arc.getStats()
+    
+    # Should have 100 live File objects (leak)
+    expect(stats.liveObjectsCount).toBeGreaterThan(90)
+  })
+  
+  it("should NOT leak when using autorelease pool correctly", () => {
+    initialLiveObjects = arc.getStats().liveObjectsCount
+    
+    # Autorelease pool pattern
+    (0..1000).forEach(i => {
+      arc.autoreleasePoolPush()
+      
+      temp = vm.createString("temp ${i}")
+      arc.autorelease(temp)
+      
+      arc.autoreleasePoolPop()  # Drains pool
+    })
+    
+    finalLiveObjects = arc.getStats().liveObjectsCount
+    
+    # No accumulation
+    expect(finalLiveObjects).toBe(initialLiveObjects)
+  })
+})
+
+
+# ============================================================================
+# TEST SUITE: CYCLE DETECTION INTEGRATION
+# ============================================================================
+
+describe("Cycle Detection Integration", () => {
+  vm: VelaVM
+  heap: Heap
+  arc: ARCManager
+  cycleDetector: CycleDetector
+  
+  beforeEach(() => {
+    heap = Heap(10 * 1024 * 1024)
+    arc = ARCManager(heap)
+    heap.setARCManager(arc)
+    cycleDetector = CycleDetector(heap, arc)
+    vm = VelaVM(heap, arc)
+  })
+  
+  afterEach(() => {
+    vm.destroy()
+    heap.destroy()
+  })
+  
+  it("should trigger periodic cycle detection in VM", () => {
+    # Set low threshold for testing
+    cycleDetector.setAllocationThreshold(100)
+    
+    initialChecks = cycleDetector.getStats().totalCycleChecks
+    
+    # Allocate many objects to trigger cycle check
+    (0..150).forEach(i => {
+      vm.createString("object ${i}")
+    })
+    
+    finalChecks = cycleDetector.getStats().totalCycleChecks
+    
+    # At least one cycle check should have been triggered
+    expect(finalChecks).toBeGreaterThan(initialChecks)
+  })
+  
+  it("should detect and free cycles in VM execution", () => {
+    # Create circular reference
+    vm.execute("""
+      class Node {
+        value: Number
+        next: Option<Node>
+        
+        constructor(val: Number) {
+          this.value = val
+          this.next = None
+        }
+      }
+      
+      a = Node(1)
+      b = Node(2)
+      c = Node(3)
+      
+      a.next = Some(b)
+      b.next = Some(c)
+      c.next = Some(a)  # Cycle!
+      
+      # Lose references to a, b, c
+      a = None
+      b = None
+      c = None
+    """)
+    
+    initialLiveObjects = arc.getStats().liveObjectsCount
+    
+    # Trigger cycle detection
+    freedCount = cycleDetector.detectCycles()
+    
+    finalLiveObjects = arc.getStats().liveObjectsCount
+    
+    # Cycle should have been detected and freed
+    expect(freedCount).toBe(3)
+    expect(finalLiveObjects).toBe(initialLiveObjects - 3)
+  })
+  
+  it("should handle mixed reachable and unreachable cycles", () => {
+    vm.execute("""
+      class Node {
+        value: Number
+        next: Option<Node>
+        
+        constructor(val: Number) {
+          this.value = val
+          this.next = None
+        }
+      }
+      
+      # Reachable cycle (root reference exists)
+      reachableA = Node(1)
+      reachableB = Node(2)
+      reachableA.next = Some(reachableB)
+      reachableB.next = Some(reachableA)
+      
+      # Unreachable cycle (no root reference)
+      a = Node(3)
+      b = Node(4)
+      c = Node(5)
+      a.next = Some(b)
+      b.next = Some(c)
+      c.next = Some(a)
+      a = None
+      b = None
+      c = None
+    """)
+    
+    # Trigger cycle detection
+    freedCount = cycleDetector.detectCycles()
+    
+    # Only unreachable cycle should be freed
+    expect(freedCount).toBe(3)
+    
+    # Reachable cycle still alive
+    stats = arc.getStats()
+    expect(stats.liveObjectsCount).toBeGreaterThan(2)
+  })
+})
+
+
+# ============================================================================
+# TEST SUITE: PERFORMANCE UNDER LOAD
+# ============================================================================
+
+describe("Performance Under Load", () => {
+  vm: VelaVM
+  heap: Heap
+  arc: ARCManager
+  
+  beforeEach(() => {
+    heap = Heap(100 * 1024 * 1024)  # 100 MB
+    arc = ARCManager(heap)
+    heap.setARCManager(arc)
+    vm = VelaVM(heap, arc)
+  })
+  
+  afterEach(() => {
+    vm.destroy()
+    heap.destroy()
+  })
+  
+  it("should handle high allocation rate without performance degradation", () => {
+    startTime = Time.now()
+    
+    # Allocate 100,000 objects
+    (0..100_000).forEach(i => {
+      vm.createString("object ${i}")
+    })
+    
+    elapsedMs = Time.now() - startTime
+    
+    # Should complete in < 2 seconds
+    expect(elapsedMs).toBeLessThan(2000)
+  })
+  
+  it("should maintain stable memory usage over time", () => {
+    initialMemory = arc.getStats().memoryUsage
+    
+    # Run 100 iterations of allocate-and-release
+    (0..100).forEach(iteration => {
+      # Allocate
+      objects = (0..1000).map(i => vm.createString("obj ${i}"))
+      
+      # Use autorelease pool
+      objects.forEach(obj => arc.autorelease(obj))
+      arc.drainAutoreleasePool()
+    })
+    
+    finalMemory = arc.getStats().memoryUsage
+    
+    # Memory should not grow significantly
+    growthPercent = ((finalMemory - initialMemory) / initialMemory) * 100
+    expect(growthPercent).toBeLessThan(10)  # < 10% growth
+  })
+  
+  it("should handle deep call stacks without memory issues", () => {
+    vm.execute("""
+      fn recursive(n: Number) -> Number {
+        if n <= 0 {
+          return 0
+        }
+        temp = "iteration ${n}"
+        return n + recursive(n - 1)
+      }
+      
+      result = recursive(1000)
+    """)
+    
+    # Should complete without stack overflow or memory leak
+    stats = arc.getStats()
+    expect(stats.liveObjectsCount).toBeLessThan(100)
+  })
+})
+
+
+# ============================================================================
+# TEST SUITE: ERROR RECOVERY
+# ============================================================================
+
+describe("Error Recovery", () => {
+  vm: VelaVM
+  heap: Heap
+  arc: ARCManager
+  
+  beforeEach(() => {
+    heap = Heap(10 * 1024 * 1024)
+    arc = ARCManager(heap)
+    heap.setARCManager(arc)
+    vm = VelaVM(heap, arc)
+  })
+  
+  afterEach(() => {
+    vm.destroy()
+    heap.destroy()
+  })
+  
+  it("should recover from out-of-memory gracefully", () => {
+    smallHeap = Heap(1024)  # Only 1 KB
+    arc = ARCManager(smallHeap)
+    smallHeap.setARCManager(arc)
+    vm = VelaVM(smallHeap, arc)
+    
+    # Try to allocate too much
+    expect(() => {
+      (0..1000).forEach(i => {
+        vm.createString("large string ${i} " * 100)
+      })
+    }).toThrow("Out of memory")
+    
+    # VM should still be functional
+    smallValue = vm.createNumber(42)
+    expect(smallValue).not.toBe(None)
+  })
+  
+  it("should cleanup properly after exception in user code", () => {
+    initialLiveObjects = arc.getStats().liveObjectsCount
+    
+    try {
+      vm.execute("""
+        fn throwError() -> void {
+          temp1 = "allocated before error"
+          temp2 = "allocated before error"
+          throw Error("test error")
+          temp3 = "never allocated"
+        }
+        
+        throwError()
+      """)
+    } catch (e) {
+      # Exception caught
+    }
+    
+    # Cleanup should have happened
+    arc.drainAutoreleasePool()
+    
+    finalLiveObjects = arc.getStats().liveObjectsCount
+    
+    # Should not have leaked temporary objects
+    expect(finalLiveObjects).toBe(initialLiveObjects)
+  })
+})
+
+
+# ============================================================================
+# RUN ALL TESTS
+# ============================================================================
+
+fn main() -> void {
+  print("Running VelaVM + ARC Integration Tests...")
+  print("=" * 60)
+  
+  testResults = [
+    runTestSuite("VM Opcodes + ARC Integration"),
+    runTestSuite("Memory Leaks Detection"),
+    runTestSuite("Cycle Detection Integration"),
+    runTestSuite("Performance Under Load"),
+    runTestSuite("Error Recovery")
+  ]
+  
+  # Summary
+  totalTests = testResults.map(r => r.total).reduce((a, b) => a + b, 0)
+  passedTests = testResults.map(r => r.passed).reduce((a, b) => a + b, 0)
+  failedTests = totalTests - passedTests
+  
+  print("")
+  print("=" * 60)
+  print("TEST SUMMARY")
+  print("=" * 60)
+  print("Total: ${totalTests}")
+  print("Passed: ${passedTests} ✅")
+  print("Failed: ${failedTests} ❌")
+  print("Success Rate: ${(passedTests / totalTests * 100).toFixed(2)}%")
+  
+  if failedTests == 0 {
+    print("")
+    print("🎉 ALL INTEGRATION TESTS PASSED!")
+  }
+}

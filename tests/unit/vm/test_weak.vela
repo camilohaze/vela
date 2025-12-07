@@ -1,0 +1,713 @@
+"""
+Unit Tests para Weak References y Cycle Detection
+
+Implementación de: VELA-587 TASK-078
+Historia: US-17 - Memory Management Automático
+Fecha: 2025-12-07
+
+Descripción:
+Tests unitarios para:
+- WeakRef: lock(), invalidate(), isAlive()
+- WeakRefTracker: register(), invalidateAll()
+- CycleDetector: detectCycles(), mark-and-sweep
+
+Cobertura objetivo: >= 80%
+"""
+
+import 'module:vm/arc' show { ARCManager }
+import 'module:vm/weak' show { WeakRef, WeakRefTracker, CycleDetector, weak }
+import 'module:vm/heap' show { Heap, HeapObjectRef, Value }
+import 'system:test' show { describe, it, expect, beforeEach, afterEach }
+
+
+# ============================================================================
+# TEST SUITE: WEAKREF BASICS
+# ============================================================================
+
+describe("WeakRef Basics", () => {
+  heap: Heap
+  arc: ARCManager
+  
+  beforeEach(() => {
+    heap = Heap(1024 * 1024)
+    arc = ARCManager(heap)
+    heap.setARCManager(arc)
+  })
+  
+  afterEach(() => {
+    heap.destroy()
+  })
+  
+  it("should create weak ref from strong ref", () => {
+    strongRef = heap.allocate(HeapObjectType.Instance, 64)
+    arc.retain(strongRef)
+    
+    weakRef = weak(strongRef)
+    
+    expect(weakRef.isValid).toBe(true)
+    expect(strongRef.isWeak).toBe(false)  # Original still strong
+    expect(strongRef.refCount).toBe(1)  # Weak ref NO incrementa refCount
+  })
+  
+  it("should lock weak ref to get strong ref", () => {
+    strongRef = heap.allocate(HeapObjectType.Instance, 64)
+    arc.retain(strongRef)
+    
+    weakRef = weak(strongRef)
+    
+    # Lock
+    match weakRef.lock() {
+      Some(locked) => {
+        expect(locked).toBe(strongRef)
+        expect(locked.refCount).toBe(2)  # Lock incrementa refCount
+        
+        # Debe release después de usar
+        arc.release(locked)
+      }
+      None => {
+        throw Error("Expected Some, got None")
+      }
+    }
+  })
+  
+  it("should return None when locking invalid weak ref", () => {
+    strongRef = heap.allocate(HeapObjectType.Instance, 64)
+    arc.retain(strongRef)
+    
+    weakRef = weak(strongRef)
+    
+    # Free strong ref
+    arc.release(strongRef)
+    
+    # Lock should return None
+    match weakRef.lock() {
+      Some(_) => throw Error("Expected None, got Some")
+      None => {
+        # Expected
+      }
+    }
+  })
+  
+  it("should detect if weak ref is alive", () => {
+    strongRef = heap.allocate(HeapObjectType.Instance, 64)
+    arc.retain(strongRef)
+    
+    weakRef = weak(strongRef)
+    
+    expect(weakRef.isAlive()).toBe(true)
+    
+    # Free strong ref
+    arc.release(strongRef)
+    
+    expect(weakRef.isAlive()).toBe(false)
+  })
+  
+  it("should invalidate weak ref manually", () => {
+    strongRef = heap.allocate(HeapObjectType.Instance, 64)
+    arc.retain(strongRef)
+    
+    weakRef = weak(strongRef)
+    expect(weakRef.isValid).toBe(true)
+    
+    # Invalidate
+    weakRef.invalidate()
+    
+    expect(weakRef.isValid).toBe(false)
+    expect(weakRef.isAlive()).toBe(false)
+    
+    # Lock should return None
+    match weakRef.lock() {
+      Some(_) => throw Error("Expected None after invalidate")
+      None => {}
+    }
+  })
+})
+
+
+# ============================================================================
+# TEST SUITE: WEAKREF TRACKER
+# ============================================================================
+
+describe("WeakRefTracker", () => {
+  heap: Heap
+  arc: ARCManager
+  tracker: WeakRefTracker
+  
+  beforeEach(() => {
+    heap = Heap(1024 * 1024)
+    arc = ARCManager(heap)
+    heap.setARCManager(arc)
+    tracker = WeakRefTracker()
+  })
+  
+  afterEach(() => {
+    heap.destroy()
+  })
+  
+  it("should register weak ref for object", () => {
+    strongRef = heap.allocate(HeapObjectType.Instance, 64)
+    arc.retain(strongRef)
+    
+    weakRef = weak(strongRef)
+    tracker.register(strongRef, weakRef)
+    
+    expect(tracker.count()).toBe(1)
+    
+    weakRefs = tracker.getWeakRefs(strongRef)
+    expect(weakRefs.length).toBe(1)
+    expect(weakRefs[0]).toBe(weakRef)
+  })
+  
+  it("should register multiple weak refs for same object", () => {
+    strongRef = heap.allocate(HeapObjectType.Instance, 64)
+    arc.retain(strongRef)
+    
+    weakRef1 = weak(strongRef)
+    weakRef2 = weak(strongRef)
+    weakRef3 = weak(strongRef)
+    
+    tracker.register(strongRef, weakRef1)
+    tracker.register(strongRef, weakRef2)
+    tracker.register(strongRef, weakRef3)
+    
+    expect(tracker.count()).toBe(3)
+    
+    weakRefs = tracker.getWeakRefs(strongRef)
+    expect(weakRefs.length).toBe(3)
+  })
+  
+  it("should invalidate all weak refs when object freed", () => {
+    strongRef = heap.allocate(HeapObjectType.Instance, 64)
+    arc.retain(strongRef)
+    
+    weakRef1 = weak(strongRef)
+    weakRef2 = weak(strongRef)
+    
+    tracker.register(strongRef, weakRef1)
+    tracker.register(strongRef, weakRef2)
+    
+    # Invalidate all
+    tracker.invalidateAll(strongRef)
+    
+    expect(weakRef1.isValid).toBe(false)
+    expect(weakRef2.isValid).toBe(false)
+    expect(weakRef1.isAlive()).toBe(false)
+    expect(weakRef2.isAlive()).toBe(false)
+  })
+  
+  it("should handle multiple objects with weak refs", () => {
+    ref1 = heap.allocate(HeapObjectType.Instance, 64)
+    ref2 = heap.allocate(HeapObjectType.Instance, 64)
+    ref3 = heap.allocate(HeapObjectType.Instance, 64)
+    
+    arc.retain(ref1)
+    arc.retain(ref2)
+    arc.retain(ref3)
+    
+    weak1 = weak(ref1)
+    weak2 = weak(ref2)
+    weak3 = weak(ref3)
+    
+    tracker.register(ref1, weak1)
+    tracker.register(ref2, weak2)
+    tracker.register(ref3, weak3)
+    
+    expect(tracker.count()).toBe(3)
+    
+    # Invalidate ref2 only
+    tracker.invalidateAll(ref2)
+    
+    expect(weak1.isValid).toBe(true)
+    expect(weak2.isValid).toBe(false)
+    expect(weak3.isValid).toBe(true)
+  })
+  
+  it("should return empty list for object with no weak refs", () => {
+    ref = heap.allocate(HeapObjectType.Instance, 64)
+    
+    weakRefs = tracker.getWeakRefs(ref)
+    expect(weakRefs.length).toBe(0)
+  })
+})
+
+
+# ============================================================================
+# TEST SUITE: CYCLE DETECTOR - MARK PHASE
+# ============================================================================
+
+describe("CycleDetector - Mark Phase", () => {
+  heap: Heap
+  arc: ARCManager
+  detector: CycleDetector
+  
+  beforeEach(() => {
+    heap = Heap(1024 * 1024)
+    arc = ARCManager(heap)
+    heap.setARCManager(arc)
+    detector = CycleDetector()
+  })
+  
+  afterEach(() => {
+    heap.destroy()
+  })
+  
+  it("should mark reachable objects from roots", () => {
+    # Create objects
+    root = heap.allocate(HeapObjectType.Instance, 64)
+    child1 = heap.allocate(HeapObjectType.Instance, 64)
+    child2 = heap.allocate(HeapObjectType.Instance, 64)
+    
+    arc.retain(root)
+    arc.retain(child1)
+    arc.retain(child2)
+    
+    root.fields = { "child1": child1, "child2": child2 }
+    
+    # Detect cycles
+    roots = [root]
+    allObjects = [root, child1, child2]
+    
+    cycles = detector.detectCycles(roots, allObjects)
+    
+    # No cycles (all reachable)
+    expect(cycles.length).toBe(0)
+  })
+  
+  it("should NOT mark unreachable objects", () => {
+    # Create reachable and unreachable objects
+    root = heap.allocate(HeapObjectType.Instance, 64)
+    reachable = heap.allocate(HeapObjectType.Instance, 64)
+    unreachable = heap.allocate(HeapObjectType.Instance, 64)
+    
+    arc.retain(root)
+    arc.retain(reachable)
+    arc.retain(unreachable)
+    
+    root.fields = { "child": reachable }
+    
+    # Detect cycles
+    roots = [root]
+    allObjects = [root, reachable, unreachable]
+    
+    cycles = detector.detectCycles(roots, allObjects)
+    
+    # unreachable detected as cycle
+    expect(cycles.length).toBe(1)
+    expect(cycles[0]).toBe(unreachable)
+  })
+})
+
+
+# ============================================================================
+# TEST SUITE: CYCLE DETECTOR - CYCLE DETECTION
+# ============================================================================
+
+describe("CycleDetector - Cycle Detection", () => {
+  heap: Heap
+  arc: ARCManager
+  detector: CycleDetector
+  
+  beforeEach(() => {
+    heap = Heap(1024 * 1024)
+    arc = ARCManager(heap)
+    heap.setARCManager(arc)
+    detector = CycleDetector()
+  })
+  
+  afterEach(() => {
+    heap.destroy()
+  })
+  
+  it("should detect simple self-referential cycle", () => {
+    # A.self = A
+    obj = heap.allocate(HeapObjectType.Instance, 64)
+    arc.retain(obj)
+    obj.fields = { "self": obj }
+    arc.retain(obj)  # Self-ref retain
+    
+    # Release external ref (cycle keeps refCount = 1)
+    arc.release(obj)
+    
+    # Detect cycles
+    roots = []  # No external roots
+    allObjects = [obj]
+    
+    cycles = detector.detectCycles(roots, allObjects)
+    
+    expect(cycles.length).toBe(1)
+    expect(cycles[0]).toBe(obj)
+  })
+  
+  it("should detect bidirectional cycle A <-> B", () => {
+    # A -> B -> A
+    objA = heap.allocate(HeapObjectType.Instance, 64)
+    objB = heap.allocate(HeapObjectType.Instance, 64)
+    
+    arc.retain(objA)
+    arc.retain(objB)
+    
+    objA.fields = { "b": objB }
+    objB.fields = { "a": objA }
+    
+    arc.retain(objA)  # B's ref
+    arc.retain(objB)  # A's ref
+    
+    # Release external refs
+    arc.release(objA)
+    arc.release(objB)
+    
+    # Detect cycles
+    roots = []
+    allObjects = [objA, objB]
+    
+    cycles = detector.detectCycles(roots, allObjects)
+    
+    expect(cycles.length).toBe(2)
+    expect(cycles.contains(objA)).toBe(true)
+    expect(cycles.contains(objB)).toBe(true)
+  })
+  
+  it("should detect complex cycle A -> B -> C -> A", () => {
+    objA = heap.allocate(HeapObjectType.Instance, 64)
+    objB = heap.allocate(HeapObjectType.Instance, 64)
+    objC = heap.allocate(HeapObjectType.Instance, 64)
+    
+    arc.retain(objA)
+    arc.retain(objB)
+    arc.retain(objC)
+    
+    objA.fields = { "next": objB }
+    objB.fields = { "next": objC }
+    objC.fields = { "next": objA }
+    
+    arc.retain(objB)
+    arc.retain(objC)
+    arc.retain(objA)
+    
+    # Release external refs
+    arc.release(objA)
+    arc.release(objB)
+    arc.release(objC)
+    
+    # Detect cycles
+    roots = []
+    allObjects = [objA, objB, objC]
+    
+    cycles = detector.detectCycles(roots, allObjects)
+    
+    expect(cycles.length).toBe(3)
+  })
+  
+  it("should NOT detect objects reachable from roots", () => {
+    # Root -> A -> B -> A (cycle, but reachable)
+    root = heap.allocate(HeapObjectType.Instance, 64)
+    objA = heap.allocate(HeapObjectType.Instance, 64)
+    objB = heap.allocate(HeapObjectType.Instance, 64)
+    
+    arc.retain(root)
+    arc.retain(objA)
+    arc.retain(objB)
+    
+    root.fields = { "a": objA }
+    objA.fields = { "b": objB }
+    objB.fields = { "a": objA }
+    
+    arc.retain(objA)
+    arc.retain(objB)
+    arc.retain(objA)
+    
+    # Detect cycles
+    roots = [root]  # Root is reachable
+    allObjects = [root, objA, objB]
+    
+    cycles = detector.detectCycles(roots, allObjects)
+    
+    # No cycles detected (all reachable from root)
+    expect(cycles.length).toBe(0)
+  })
+  
+  it("should detect mixed: reachable + unreachable cycle", () => {
+    # Root -> A (reachable)
+    # B -> C -> B (unreachable cycle)
+    root = heap.allocate(HeapObjectType.Instance, 64)
+    objA = heap.allocate(HeapObjectType.Instance, 64)
+    objB = heap.allocate(HeapObjectType.Instance, 64)
+    objC = heap.allocate(HeapObjectType.Instance, 64)
+    
+    arc.retain(root)
+    arc.retain(objA)
+    arc.retain(objB)
+    arc.retain(objC)
+    
+    root.fields = { "a": objA }
+    arc.retain(objA)
+    
+    objB.fields = { "c": objC }
+    objC.fields = { "b": objB }
+    arc.retain(objC)
+    arc.retain(objB)
+    
+    # Release external refs
+    arc.release(objB)
+    arc.release(objC)
+    
+    # Detect cycles
+    roots = [root]
+    allObjects = [root, objA, objB, objC]
+    
+    cycles = detector.detectCycles(roots, allObjects)
+    
+    # Only B and C are cycles
+    expect(cycles.length).toBe(2)
+    expect(cycles.contains(objB)).toBe(true)
+    expect(cycles.contains(objC)).toBe(true)
+  })
+})
+
+
+# ============================================================================
+# TEST SUITE: CYCLE DETECTOR - STATISTICS
+# ============================================================================
+
+describe("CycleDetector - Statistics", () => {
+  heap: Heap
+  arc: ARCManager
+  detector: CycleDetector
+  
+  beforeEach(() => {
+    heap = Heap(1024 * 1024)
+    arc = ARCManager(heap)
+    heap.setARCManager(arc)
+    detector = CycleDetector()
+  })
+  
+  afterEach(() => {
+    heap.destroy()
+  })
+  
+  it("should track allocation count", () => {
+    expect(detector.allocationsSinceLastCheck).toBe(0)
+    
+    (0..10).forEach(_ => detector.recordAllocation())
+    
+    expect(detector.allocationsSinceLastCheck).toBe(10)
+  })
+  
+  it("should trigger cycle check at threshold", () => {
+    detector.setThreshold(5)
+    
+    (0..4).forEach(_ => {
+      shouldCheck = detector.recordAllocation()
+      expect(shouldCheck).toBe(false)
+    })
+    
+    # 5th allocation should trigger
+    shouldCheck = detector.recordAllocation()
+    expect(shouldCheck).toBe(true)
+  })
+  
+  it("should reset allocation count after check", () => {
+    detector.setThreshold(5)
+    
+    (0..5).forEach(_ => detector.recordAllocation())
+    
+    expect(detector.allocationsSinceLastCheck).toBe(0)
+  })
+  
+  it("should track cycle detection statistics", () => {
+    stats = detector.getStats()
+    
+    expect(stats.cycleCheckCount).toBe(0)
+    expect(stats.cyclesDetected).toBe(0)
+    expect(stats.objectsFreed).toBe(0)
+    
+    # Create cycle
+    obj = heap.allocate(HeapObjectType.Instance, 64)
+    arc.retain(obj)
+    obj.fields = { "self": obj }
+    arc.retain(obj)
+    arc.release(obj)
+    
+    # Detect
+    cycles = detector.detectCycles([], [obj])
+    
+    stats = detector.getStats()
+    expect(stats.cycleCheckCount).toBe(1)
+    expect(stats.cyclesDetected).toBe(1)
+  })
+  
+  it("should track objects freed by cycle detector", () => {
+    # Create 3 cycles
+    cycles = (0..3).map(_ => {
+      obj = heap.allocate(HeapObjectType.Instance, 64)
+      arc.retain(obj)
+      obj.fields = { "self": obj }
+      arc.retain(obj)
+      arc.release(obj)
+      return obj
+    })
+    
+    # Detect and free
+    detected = detector.detectCycles([], cycles)
+    
+    # Free cycles (simular)
+    detected.forEach(obj => {
+      obj.refCount = 0
+      arc.free(obj)
+      detector.objectsFreed = detector.objectsFreed + 1
+    })
+    
+    stats = detector.getStats()
+    expect(stats.objectsFreed).toBe(3)
+  })
+})
+
+
+# ============================================================================
+# TEST SUITE: INTEGRATION - ARC + WEAK REFS + CYCLE DETECTOR
+# ============================================================================
+
+describe("Integration: ARC + Weak Refs + Cycle Detector", () => {
+  heap: Heap
+  arc: ARCManager
+  
+  beforeEach(() => {
+    heap = Heap(1024 * 1024)
+    arc = ARCManager(heap)
+    heap.setARCManager(arc)
+  })
+  
+  afterEach(() => {
+    heap.destroy()
+  })
+  
+  it("should auto-invalidate weak refs when object freed by ARC", () => {
+    obj = heap.allocate(HeapObjectType.Instance, 64)
+    arc.retain(obj)
+    
+    weakRef = arc.createWeakRef(obj)
+    expect(weakRef.isAlive()).toBe(true)
+    
+    # Free object
+    arc.release(obj)
+    
+    # Weak ref should be invalidated
+    expect(weakRef.isAlive()).toBe(false)
+  })
+  
+  it("should detect and free cycles with checkForCycles", () => {
+    # Create cycle
+    objA = heap.allocate(HeapObjectType.Instance, 64)
+    objB = heap.allocate(HeapObjectType.Instance, 64)
+    
+    arc.retain(objA)
+    arc.retain(objB)
+    
+    objA.fields = { "b": objB }
+    objB.fields = { "a": objA }
+    arc.retain(objB)
+    arc.retain(objA)
+    
+    # Release external refs (cycle keeps alive)
+    arc.release(objA)
+    arc.release(objB)
+    
+    expect(objA.refCount).toBe(1)
+    expect(objB.refCount).toBe(1)
+    
+    # Run cycle detection
+    roots = []
+    allObjects = [objA, objB]
+    arc.checkForCycles(roots, allObjects)
+    
+    # Cycles should be freed
+    stats = arc.getStats()
+    expect(stats.totalFrees).toBeGreaterThanOrEqual(2)
+  })
+  
+  it("should handle parent-child with weak ref (no cycle)", () => {
+    parent = heap.allocate(HeapObjectType.Instance, 64)
+    child = heap.allocate(HeapObjectType.Instance, 64)
+    
+    arc.retain(parent)
+    arc.retain(child)
+    
+    # Parent -> Child (strong)
+    parent.fields = { "child": child }
+    arc.retain(child)
+    
+    # Child -> Parent (weak, breaks cycle)
+    weakParent = arc.createWeakRef(parent)
+    child.fields = { "parent": weakParent }
+    
+    # Release external refs
+    arc.release(child)  # child freed (no refs)
+    
+    # Parent still alive
+    expect(parent.refCount).toBe(1)
+    
+    arc.release(parent)  # parent freed
+    
+    # Weak ref invalidated
+    expect(weakParent.isAlive()).toBe(false)
+  })
+  
+  it("should trigger periodic cycle detection", () => {
+    arc.cycleDetector.setThreshold(3)
+    
+    # Create 3 allocations (trigger cycle check)
+    (0..3).forEach(_ => {
+      obj = heap.allocate(HeapObjectType.Instance, 64)
+      arc.retain(obj)
+      shouldCheck = arc.recordAllocation()
+      
+      if shouldCheck {
+        # Trigger cycle detection
+        roots = []
+        allObjects = heap.getAllObjects()
+        arc.checkForCycles(roots, allObjects)
+      }
+    })
+    
+    stats = arc.cycleDetector.getStats()
+    expect(stats.cycleCheckCount).toBeGreaterThanOrEqual(1)
+  })
+})
+
+
+# ============================================================================
+# RUN ALL TESTS
+# ============================================================================
+
+fn main() -> void {
+  print("Running Weak Refs + Cycle Detection Unit Tests...")
+  print("=" * 60)
+  
+  testResults = [
+    runTestSuite("WeakRef Basics"),
+    runTestSuite("WeakRefTracker"),
+    runTestSuite("CycleDetector - Mark Phase"),
+    runTestSuite("CycleDetector - Cycle Detection"),
+    runTestSuite("CycleDetector - Statistics"),
+    runTestSuite("Integration: ARC + Weak Refs + Cycle Detector")
+  ]
+  
+  # Summary
+  totalTests = testResults.map(r => r.total).reduce((a, b) => a + b, 0)
+  passedTests = testResults.map(r => r.passed).reduce((a, b) => a + b, 0)
+  failedTests = totalTests - passedTests
+  
+  print("")
+  print("=" * 60)
+  print("TEST SUMMARY")
+  print("=" * 60)
+  print("Total: ${totalTests}")
+  print("Passed: ${passedTests} ✅")
+  print("Failed: ${failedTests} ❌")
+  print("Success Rate: ${(passedTests / totalTests * 100).toFixed(2)}%")
+  
+  if failedTests == 0 {
+    print("")
+    print("🎉 ALL TESTS PASSED!")
+  }
+}

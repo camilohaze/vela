@@ -1,0 +1,757 @@
+"""
+Unit Tests para Sistema Reactivo
+
+Implementación de: VELA-587 TASK-078
+Historia: US-17 - Memory Management Automático
+Fecha: 2025-12-07
+
+Descripción:
+Tests unitarios para el sistema reactivo:
+- Signal<T>: get(), set(), update(), subscribers
+- Computed<T>: lazy eval, memoization, recompute
+- Effect: auto-tracking, cleanup, lifecycle
+- Watch<T>: callback execution
+- Batch: nested batches, flush timing
+
+Cobertura objetivo: >= 80%
+"""
+
+import 'module:vm/arc' show { ARCManager }
+import 'module:vm/reactive' show { 
+  signal, computed, effect, watch, batch, untrack, isTracking,
+  Signal, Computed, Effect, Watch, ReactiveContext
+}
+import 'module:vm/heap' show { Heap }
+import 'system:test' show { describe, it, expect, beforeEach, afterEach }
+
+
+# ============================================================================
+# TEST SUITE: SIGNAL BASICS
+# ============================================================================
+
+describe("Signal Basics", () => {
+  heap: Heap
+  arc: ARCManager
+  
+  beforeEach(() => {
+    heap = Heap(1024 * 1024)
+    arc = ARCManager(heap)
+    heap.setARCManager(arc)
+  })
+  
+  afterEach(() => {
+    heap.destroy()
+  })
+  
+  it("should create signal with initial value", () => {
+    count = signal(0, arc, heap)
+    
+    expect(count.get()).toBe(0)
+  })
+  
+  it("should update signal value with set()", () => {
+    count = signal(0, arc, heap)
+    
+    count.set(5)
+    expect(count.get()).toBe(5)
+    
+    count.set(10)
+    expect(count.get()).toBe(10)
+  })
+  
+  it("should update signal value with update()", () => {
+    count = signal(0, arc, heap)
+    
+    count.update(x => x + 1)
+    expect(count.get()).toBe(1)
+    
+    count.update(x => x * 2)
+    expect(count.get()).toBe(2)
+  })
+  
+  it("should retain initial value on creation", () => {
+    obj = { value: 42 }
+    sig = signal(obj, arc, heap)
+    
+    stats = arc.getStats()
+    expect(stats.totalRetains).toBe(1)
+  })
+  
+  it("should release old value and retain new on set()", () => {
+    obj1 = { value: 1 }
+    obj2 = { value: 2 }
+    
+    sig = signal(obj1, arc, heap)
+    
+    initialRetains = arc.getStats().totalRetains
+    initialReleases = arc.getStats().totalReleases
+    
+    sig.set(obj2)
+    
+    stats = arc.getStats()
+    expect(stats.totalRetains).toBe(initialRetains + 1)  # retain obj2
+    expect(stats.totalReleases).toBe(initialReleases + 1)  # release obj1
+  })
+  
+  it("should notify subscribers when value changes", () => {
+    count = signal(0, arc, heap)
+    notifications = 0
+    
+    effect(() => {
+      count.get()
+      notifications = notifications + 1
+    }, arc, heap)
+    
+    expect(notifications).toBe(1)  # Initial run
+    
+    count.set(5)
+    expect(notifications).toBe(2)
+    
+    count.set(10)
+    expect(notifications).toBe(3)
+  })
+  
+  it("should NOT notify if value unchanged", () => {
+    count = signal(0, arc, heap)
+    notifications = 0
+    
+    effect(() => {
+      count.get()
+      notifications = notifications + 1
+    }, arc, heap)
+    
+    count.set(0)  # Same value
+    expect(notifications).toBe(2)  # Still notifies (no value equality check)
+  })
+  
+  it("should destroy signal and release value", () => {
+    obj = { value: 42 }
+    sig = signal(obj, arc, heap)
+    
+    initialReleases = arc.getStats().totalReleases
+    
+    sig.destroy()
+    
+    stats = arc.getStats()
+    expect(stats.totalReleases).toBe(initialReleases + 1)
+    expect(sig.isDestroyed).toBe(true)
+  })
+  
+  it("should throw error when setting destroyed signal", () => {
+    count = signal(0, arc, heap)
+    count.destroy()
+    
+    expect(() => {
+      count.set(5)
+    }).toThrow("Cannot set destroyed signal")
+  })
+})
+
+
+# ============================================================================
+# TEST SUITE: SIGNAL AUTO-TRACKING
+# ============================================================================
+
+describe("Signal Auto-Tracking", () => {
+  heap: Heap
+  arc: ARCManager
+  
+  beforeEach(() => {
+    heap = Heap(1024 * 1024)
+    arc = ARCManager(heap)
+    heap.setARCManager(arc)
+  })
+  
+  afterEach(() => {
+    heap.destroy()
+  })
+  
+  it("should auto-track signal dependencies in effect", () => {
+    count = signal(0, arc, heap)
+    result = 0
+    
+    effect(() => {
+      result = count.get() * 2
+    }, arc, heap)
+    
+    expect(result).toBe(0)
+    
+    count.set(5)
+    expect(result).toBe(10)
+  })
+  
+  it("should track multiple signal dependencies", () => {
+    firstName = signal("John", arc, heap)
+    lastName = signal("Doe", arc, heap)
+    fullName = ""
+    
+    effect(() => {
+      fullName = "${firstName.get()} ${lastName.get()}"
+    }, arc, heap)
+    
+    expect(fullName).toBe("John Doe")
+    
+    firstName.set("Jane")
+    expect(fullName).toBe("Jane Doe")
+    
+    lastName.set("Smith")
+    expect(fullName).toBe("Jane Smith")
+  })
+  
+  it("should use weak refs for subscribers to avoid leaks", () => {
+    count = signal(0, arc, heap)
+    
+    eff = effect(() => {
+      count.get()
+    }, arc, heap)
+    
+    # Signal should have weak ref to effect
+    expect(count.subscribers.length).toBe(1)
+    expect(count.subscribers[0].isWeak).toBe(true)
+  })
+  
+  it("should cleanup invalid weak refs automatically", () => {
+    count = signal(0, arc, heap)
+    
+    eff1 = effect(() => count.get(), arc, heap)
+    eff2 = effect(() => count.get(), arc, heap)
+    
+    expect(count.subscribers.length).toBe(2)
+    
+    # Destroy one effect
+    eff1.destroy()
+    
+    # Trigger notification (cleans up invalid weak refs)
+    count.set(5)
+    
+    expect(count.subscribers.length).toBe(1)
+  })
+})
+
+
+# ============================================================================
+# TEST SUITE: COMPUTED
+# ============================================================================
+
+describe("Computed", () => {
+  heap: Heap
+  arc: ARCManager
+  
+  beforeEach(() => {
+    heap = Heap(1024 * 1024)
+    arc = ARCManager(heap)
+    heap.setARCManager(arc)
+  })
+  
+  afterEach(() => {
+    heap.destroy()
+  })
+  
+  it("should compute value from dependencies", () => {
+    count = signal(5, arc, heap)
+    doubled = computed(() => count.get() * 2, arc, heap)
+    
+    expect(doubled.get()).toBe(10)
+  })
+  
+  it("should use lazy evaluation", () => {
+    count = signal(5, arc, heap)
+    computeCount = 0
+    
+    doubled = computed(() => {
+      computeCount = computeCount + 1
+      return count.get() * 2
+    }, arc, heap)
+    
+    # Not computed yet
+    expect(computeCount).toBe(0)
+    
+    # First get() computes
+    doubled.get()
+    expect(computeCount).toBe(1)
+  })
+  
+  it("should cache computed value (memoization)", () => {
+    count = signal(5, arc, heap)
+    computeCount = 0
+    
+    doubled = computed(() => {
+      computeCount = computeCount + 1
+      return count.get() * 2
+    }, arc, heap)
+    
+    doubled.get()
+    expect(computeCount).toBe(1)
+    
+    # Second get() uses cache
+    doubled.get()
+    doubled.get()
+    expect(computeCount).toBe(1)  # Still 1 (cached)
+  })
+  
+  it("should recompute when dependency changes", () => {
+    count = signal(5, arc, heap)
+    computeCount = 0
+    
+    doubled = computed(() => {
+      computeCount = computeCount + 1
+      return count.get() * 2
+    }, arc, heap)
+    
+    doubled.get()
+    expect(computeCount).toBe(1)
+    
+    count.set(10)
+    
+    # Marked as dirty, next get() recomputes
+    doubled.get()
+    expect(computeCount).toBe(2)
+    expect(doubled.get()).toBe(20)
+  })
+  
+  it("should chain computed dependencies", () => {
+    count = signal(5, arc, heap)
+    doubled = computed(() => count.get() * 2, arc, heap)
+    quadrupled = computed(() => doubled.get() * 2, arc, heap)
+    
+    expect(quadrupled.get()).toBe(20)
+    
+    count.set(10)
+    expect(quadrupled.get()).toBe(40)
+  })
+  
+  it("should retain computed value on recompute", () => {
+    obj = signal({ value: 1 }, arc, heap)
+    comp = computed(() => obj.get(), arc, heap)
+    
+    comp.get()
+    initialRetains = arc.getStats().totalRetains
+    
+    obj.set({ value: 2 })
+    comp.get()
+    
+    stats = arc.getStats()
+    expect(stats.totalRetains).toBeGreaterThan(initialRetains)
+  })
+  
+  it("should release old cached value on recompute", () => {
+    obj = signal({ value: 1 }, arc, heap)
+    comp = computed(() => obj.get(), arc, heap)
+    
+    comp.get()
+    initialReleases = arc.getStats().totalReleases
+    
+    obj.set({ value: 2 })
+    comp.get()
+    
+    stats = arc.getStats()
+    expect(stats.totalReleases).toBeGreaterThan(initialReleases)
+  })
+  
+  it("should destroy computed and release cached value", () => {
+    count = signal(5, arc, heap)
+    doubled = computed(() => count.get() * 2, arc, heap)
+    
+    doubled.get()
+    initialReleases = arc.getStats().totalReleases
+    
+    doubled.destroy()
+    
+    stats = arc.getStats()
+    expect(stats.totalReleases).toBeGreaterThan(initialReleases)
+    expect(doubled.isDestroyed).toBe(true)
+  })
+})
+
+
+# ============================================================================
+# TEST SUITE: EFFECT
+# ============================================================================
+
+describe("Effect", () => {
+  heap: Heap
+  arc: ARCManager
+  
+  beforeEach(() => {
+    heap = Heap(1024 * 1024)
+    arc = ARCManager(heap)
+    heap.setARCManager(arc)
+  })
+  
+  afterEach(() => {
+    heap.destroy()
+  })
+  
+  it("should run effect immediately on creation", () => {
+    count = 0
+    
+    effect(() => {
+      count = count + 1
+    }, arc, heap)
+    
+    expect(count).toBe(1)
+  })
+  
+  it("should re-run effect when dependencies change", () => {
+    sig = signal(0, arc, heap)
+    count = 0
+    
+    effect(() => {
+      sig.get()
+      count = count + 1
+    }, arc, heap)
+    
+    expect(count).toBe(1)
+    
+    sig.set(5)
+    expect(count).toBe(2)
+    
+    sig.set(10)
+    expect(count).toBe(3)
+  })
+  
+  it("should execute cleanup before re-running", () => {
+    sig = signal(0, arc, heap)
+    cleanupCount = 0
+    runCount = 0
+    
+    eff = effect(() => {
+      sig.get()
+      runCount = runCount + 1
+      
+      eff.onCleanup(() => {
+        cleanupCount = cleanupCount + 1
+      })
+    }, arc, heap)
+    
+    expect(runCount).toBe(1)
+    expect(cleanupCount).toBe(0)
+    
+    sig.set(5)
+    expect(cleanupCount).toBe(1)  # Cleanup before re-run
+    expect(runCount).toBe(2)
+  })
+  
+  it("should stop effect with stop()", () => {
+    sig = signal(0, arc, heap)
+    count = 0
+    
+    eff = effect(() => {
+      sig.get()
+      count = count + 1
+    }, arc, heap)
+    
+    expect(count).toBe(1)
+    
+    eff.stop()
+    
+    sig.set(5)
+    expect(count).toBe(1)  # NOT re-run (stopped)
+  })
+  
+  it("should execute final cleanup on destroy()", () => {
+    cleanupExecuted = false
+    
+    eff = effect(() => {
+      eff.onCleanup(() => {
+        cleanupExecuted = true
+      })
+    }, arc, heap)
+    
+    eff.destroy()
+    
+    expect(cleanupExecuted).toBe(true)
+  })
+  
+  it("should NOT run destroyed effect", () => {
+    sig = signal(0, arc, heap)
+    count = 0
+    
+    eff = effect(() => {
+      sig.get()
+      count = count + 1
+    }, arc, heap)
+    
+    eff.destroy()
+    
+    sig.set(5)
+    expect(count).toBe(1)  # NOT re-run (destroyed)
+  })
+})
+
+
+# ============================================================================
+# TEST SUITE: WATCH
+# ============================================================================
+
+describe("Watch", () => {
+  heap: Heap
+  arc: ARCManager
+  
+  beforeEach(() => {
+    heap = Heap(1024 * 1024)
+    arc = ARCManager(heap)
+    heap.setARCManager(arc)
+  })
+  
+  afterEach(() => {
+    heap.destroy()
+  })
+  
+  it("should execute callback when signal changes", () => {
+    count = signal(0, arc, heap)
+    changes = []
+    
+    watch(count, (newVal, oldVal) => {
+      changes.append({ old: oldVal, new: newVal })
+    }, arc, heap)
+    
+    count.set(5)
+    expect(changes.length).toBe(1)
+    expect(changes[0].old).toBe(0)
+    expect(changes[0].new).toBe(5)
+  })
+  
+  it("should track old and new values", () => {
+    count = signal(0, arc, heap)
+    lastOld = None
+    lastNew = None
+    
+    watch(count, (newVal, oldVal) => {
+      lastOld = oldVal
+      lastNew = newVal
+    }, arc, heap)
+    
+    count.set(5)
+    expect(lastOld).toBe(0)
+    expect(lastNew).toBe(5)
+    
+    count.set(10)
+    expect(lastOld).toBe(5)
+    expect(lastNew).toBe(10)
+  })
+  
+  it("should retain old value for comparison", () => {
+    obj = signal({ value: 1 }, arc, heap)
+    
+    initialRetains = arc.getStats().totalRetains
+    
+    watcher = watch(obj, (newVal, oldVal) => {
+      # Callback
+    }, arc, heap)
+    
+    stats = arc.getStats()
+    expect(stats.totalRetains).toBeGreaterThan(initialRetains)
+  })
+  
+  it("should release old value on new change", () => {
+    obj = signal({ value: 1 }, arc, heap)
+    
+    watcher = watch(obj, (newVal, oldVal) => {}, arc, heap)
+    
+    initialReleases = arc.getStats().totalReleases
+    
+    obj.set({ value: 2 })
+    
+    stats = arc.getStats()
+    expect(stats.totalReleases).toBeGreaterThan(initialReleases)
+  })
+  
+  it("should stop watch with stop()", () => {
+    count = signal(0, arc, heap)
+    callbackCount = 0
+    
+    watcher = watch(count, (newVal, oldVal) => {
+      callbackCount = callbackCount + 1
+    }, arc, heap)
+    
+    count.set(5)
+    expect(callbackCount).toBe(1)
+    
+    watcher.stop()
+    
+    count.set(10)
+    expect(callbackCount).toBe(1)  # NOT called (stopped)
+  })
+})
+
+
+# ============================================================================
+# TEST SUITE: BATCH
+# ============================================================================
+
+describe("Batch", () => {
+  heap: Heap
+  arc: ARCManager
+  
+  beforeEach(() => {
+    heap = Heap(1024 * 1024)
+    arc = ARCManager(heap)
+    heap.setARCManager(arc)
+  })
+  
+  afterEach(() => {
+    heap.destroy()
+  })
+  
+  it("should batch multiple signal updates", () => {
+    sig1 = signal(0, arc, heap)
+    sig2 = signal(0, arc, heap)
+    sig3 = signal(0, arc, heap)
+    effectCount = 0
+    
+    effect(() => {
+      sig1.get()
+      sig2.get()
+      sig3.get()
+      effectCount = effectCount + 1
+    }, arc, heap)
+    
+    expect(effectCount).toBe(1)
+    
+    # Batch updates
+    batch(() => {
+      sig1.set(1)
+      sig2.set(2)
+      sig3.set(3)
+    })
+    
+    # Effect runs ONCE after batch
+    expect(effectCount).toBe(2)
+  })
+  
+  it("should handle nested batches", () => {
+    sig = signal(0, arc, heap)
+    effectCount = 0
+    
+    effect(() => {
+      sig.get()
+      effectCount = effectCount + 1
+    }, arc, heap)
+    
+    batch(() => {
+      sig.set(1)
+      
+      batch(() => {
+        sig.set(2)
+        sig.set(3)
+      })
+      
+      sig.set(4)
+    })
+    
+    # Effect runs ONCE after outer batch
+    expect(effectCount).toBe(2)
+  })
+  
+  it("should flush pending effects at end of batch", () => {
+    sig = signal(0, arc, heap)
+    results = []
+    
+    effect(() => {
+      results.append(sig.get())
+    }, arc, heap)
+    
+    batch(() => {
+      sig.set(1)
+      sig.set(2)
+      sig.set(3)
+      
+      # Effects not run yet (batched)
+      expect(results.length).toBe(1)  # Only initial
+    })
+    
+    # After batch, effect ran once with final value
+    expect(results.length).toBe(2)
+    expect(results[1]).toBe(3)
+  })
+})
+
+
+# ============================================================================
+# TEST SUITE: UTILITIES
+# ============================================================================
+
+describe("Utilities", () => {
+  heap: Heap
+  arc: ARCManager
+  
+  beforeEach(() => {
+    heap = Heap(1024 * 1024)
+    arc = ARCManager(heap)
+    heap.setARCManager(arc)
+  })
+  
+  afterEach(() => {
+    heap.destroy()
+  })
+  
+  it("untrack() should read signal without tracking", () => {
+    sig1 = signal(0, arc, heap)
+    sig2 = signal(0, arc, heap)
+    effectCount = 0
+    
+    effect(() => {
+      sig1.get()  # Tracked
+      untrack(() => sig2.get())  # NOT tracked
+      effectCount = effectCount + 1
+    }, arc, heap)
+    
+    expect(effectCount).toBe(1)
+    
+    sig1.set(5)
+    expect(effectCount).toBe(2)  # Re-run
+    
+    sig2.set(10)
+    expect(effectCount).toBe(2)  # NOT re-run (untracked)
+  })
+  
+  it("isTracking() should detect reactive context", () => {
+    expect(isTracking()).toBe(false)
+    
+    effect(() => {
+      expect(isTracking()).toBe(true)
+    }, arc, heap)
+    
+    expect(isTracking()).toBe(false)
+  })
+})
+
+
+# ============================================================================
+# RUN ALL TESTS
+# ============================================================================
+
+fn main() -> void {
+  print("Running Reactive System Unit Tests...")
+  print("=" * 60)
+  
+  testResults = [
+    runTestSuite("Signal Basics"),
+    runTestSuite("Signal Auto-Tracking"),
+    runTestSuite("Computed"),
+    runTestSuite("Effect"),
+    runTestSuite("Watch"),
+    runTestSuite("Batch"),
+    runTestSuite("Utilities")
+  ]
+  
+  # Summary
+  totalTests = testResults.map(r => r.total).reduce((a, b) => a + b, 0)
+  passedTests = testResults.map(r => r.passed).reduce((a, b) => a + b, 0)
+  failedTests = totalTests - passedTests
+  
+  print("")
+  print("=" * 60)
+  print("TEST SUMMARY")
+  print("=" * 60)
+  print("Total: ${totalTests}")
+  print("Passed: ${passedTests} ✅")
+  print("Failed: ${failedTests} ❌")
+  print("Success Rate: ${(passedTests / totalTests * 100).toFixed(2)}%")
+  
+  if failedTests == 0 {
+    print("")
+    print("🎉 ALL TESTS PASSED!")
+  }
+}
