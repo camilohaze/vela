@@ -2461,6 +2461,7 @@ dependencies = [
  "thiserror",
  "tracing",
  "tracing-subscriber",
+ "vela-compiler",
  "vela-vm",
 ]
 

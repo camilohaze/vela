@@ -60,38 +60,58 @@ impl Compiler {
     /// Compile source code from a string
     pub fn compile_string(&mut self, source: &str, file_name: &str) -> CompileResult<Vec<u8>> {
         let source_path = Path::new(file_name);
+        println!("🚀 Starting compile_string for file: {}", file_name);
 
         // Phase 1: Lexical Analysis
+        println!("🔤 Phase 1: Starting lexical analysis...");
         let mut lexer = Lexer::new(source, source_path);
+        println!("🔤 Lexer created, calling tokenize...");
         let lex_result = lexer.tokenize()?;
+        println!("🔤 Tokenize completed, {} tokens, {} errors", lex_result.tokens.len(), lex_result.errors.len());
         self.diagnostics.extend_from_lexer(&lex_result.errors);
+        println!("✅ Phase 1: Lexical analysis complete");
 
         // Phase 2: Parsing
+        println!("🔧 Phase 2: Starting parsing...");
         let mut parser = Parser::new(lex_result.tokens);
+        println!("🔧 Parser created, calling parse...");
         let ast = parser.parse()?;
+        println!("✅ Phase 2: Parsing complete");
 
         // Phase 3: Semantic Analysis
+        println!("🔍 Phase 3: Starting semantic analysis...");
         let mut analyzer = SemanticAnalyzer::new();
+        println!("🔍 Analyzer created, calling analyze...");
         analyzer.analyze(&ast)?;
+        println!("✅ Phase 3: Semantic analysis complete");
 
         // Phase 4: Code Generation
+        println!("⚙️ Phase 4: Starting code generation...");
         let mut codegen = CodeGenerator::new();
+        println!("⚙️ Codegen created, calling generate_program...");
         let bytecode = codegen.generate_program(&ast)?;
+        println!("✅ Phase 4: Code generation complete");
 
-        Ok(bytecode.to_bytes().map_err(|e| CompileError::Io {
+        println!("📦 Serializing bytecode...");
+        let result = bytecode.to_bytes().map_err(|e| CompileError::Io {
             path: std::path::PathBuf::from("bytecode"),
             error: format!("Failed to serialize bytecode: {}", e),
-        })?)
+        })?;
+        println!("✅ Bytecode serialization complete");
+
+        Ok(result)
     }
 
     /// Compile a source file
     pub fn compile_file<P: AsRef<Path>>(&mut self, path: P) -> CompileResult<Vec<u8>> {
         let path = path.as_ref();
+        println!("📁 Reading file: {}", path.display());
         let source = std::fs::read_to_string(path)
             .map_err(|e| CompileError::Io {
                 path: path.to_path_buf(),
                 error: e.to_string(),
             })?;
+        println!("📄 File read successfully, {} bytes", source.len());
 
         self.compile_string(&source, &path.to_string_lossy())
     }

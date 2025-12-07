@@ -5,7 +5,7 @@ Implementación completa del lexer que tokeniza código fuente Vela
 en una secuencia de tokens con información de posición.
 */
 
-use crate::error::CompileResult;
+use crate::error::{CompileResult, CompileError, LexicalError, SourceLocation};
 use std::path::Path;
 
 /// Tipos de tokens reconocidos por el lexer
@@ -104,14 +104,40 @@ impl Lexer {
 
     /// Ejecuta el proceso completo de tokenización
     pub fn tokenize(&mut self) -> CompileResult<LexResult> {
+        println!("🔤 Starting tokenize loop, source length: {}", self.source.len());
+        let mut iteration_count = 0;
+        let max_iterations = self.source.len() * 2; // Safety limit
+
         while !self.is_at_end() {
+            iteration_count += 1;
+            if iteration_count > max_iterations {
+                println!("🚨 INFINITE LOOP DETECTED! Iteration: {}, current: {}, source.len(): {}", iteration_count, self.current, self.source.len());
+                return Err(CompileError::Lexical(LexicalError {
+                    message: "Infinite loop detected in lexer".to_string(),
+                    location: SourceLocation {
+                        line: self.line,
+                        column: self.column,
+                        offset: self.current,
+                    },
+                }));
+            }
+
+            if iteration_count % 100 == 0 {
+                println!("🔄 Tokenize iteration: {}, current: {}, remaining: {}", iteration_count, self.current, self.source.len() - self.current);
+            }
+
             self.start = self.current;
+            println!("🔤 Processing char at position {}: '{}' (ascii: {})", self.current, self.peek(), self.peek() as u8);
+
             if let Err(e) = self.scan_token() {
+                println!("❌ Lex error: {:?}", e);
                 self.errors.push(e);
                 // Error recovery: skip invalid character and continue
                 self.advance();
             }
         }
+
+        println!("✅ Tokenize loop completed, {} iterations, {} tokens generated", iteration_count, self.tokens.len());
 
         // Add EOF token
         let eof_pos = crate::ast::Position { line: self.line, column: self.column };
@@ -130,6 +156,8 @@ impl Lexer {
     /// Escanea un token individual
     fn scan_token(&mut self) -> Result<(), LexError> {
         let c = self.advance();
+        println!("🔤 scan_token processing char: '{}' (ascii: {})", c, c as u8);
+
         match c {
             '(' => self.add_token(TokenKind::LeftParen),
             ')' => self.add_token(TokenKind::RightParen),
@@ -230,20 +258,36 @@ impl Lexer {
 
     /// Maneja comentarios multi-línea
     fn multi_line_comment(&mut self) -> Result<(), LexError> {
+        println!("🔤 Starting multi-line comment processing");
+        let mut iterations = 0;
         while !self.is_at_end() {
-            if self.peek() == '*' && self.peek_next() == '/' {
+            iterations += 1;
+            if iterations > 1000 {
+                println!("🚨 Multi-line comment processing too many iterations: {}", iterations);
+                return Err(LexError::UnexpectedCharacter('*', self.current_pos()));
+            }
+
+            let current_char = self.peek();
+            let next_char = self.peek_next();
+            println!("🔤 Multi-line comment iteration {}: current='{}' ({}), next='{}' ({})", iterations, current_char, current_char as u8, next_char, next_char as u8);
+
+            if current_char == '*' && next_char == '/' {
                 // Found end of comment
+                println!("🔤 Found end of multi-line comment");
                 self.advance(); // consume *
                 self.advance(); // consume /
+                println!("🔤 Multi-line comment ended successfully");
                 return Ok(());
             }
-            if self.peek() == '\n' {
+            if current_char == '\n' {
                 self.newline();
+                self.advance(); // Consume the newline character
             } else {
                 self.advance();
             }
         }
 
+        println!("🚨 Multi-line comment never closed, reached end of file");
         // If we reach here, comment was never closed
         Err(LexError::UnexpectedCharacter('*', self.current_pos()))
     }
@@ -495,8 +539,8 @@ impl Lexer {
         if self.is_at_end() {
             '\0' // Return null character if at end
         } else {
-            let c = self.source.as_bytes()[self.current] as char;
-            self.current += 1;
+            let c = self.peek();
+            self.current += c.len_utf8();
             self.column += 1;
             c
         }
@@ -504,11 +548,10 @@ impl Lexer {
 
     /// Verifica si el siguiente carácter coincide
     fn match_char(&mut self, expected: char) -> bool {
-        if self.is_at_end() || self.source.as_bytes()[self.current] as char != expected {
+        if self.is_at_end() || self.peek() != expected {
             false
         } else {
-            self.current += 1;
-            self.column += 1;
+            self.advance();
             true
         }
     }
@@ -518,16 +561,18 @@ impl Lexer {
         if self.is_at_end() {
             '\0'
         } else {
-            self.source.as_bytes()[self.current] as char
+            self.source[self.current..].chars().next().unwrap_or('\0')
         }
     }
 
     /// Mira dos caracteres adelante
     fn peek_next(&self) -> char {
-        if self.current + 1 >= self.source.len() {
+        if self.is_at_end() {
             '\0'
         } else {
-            self.source.as_bytes()[self.current + 1] as char
+            let mut chars = self.source[self.current..].chars();
+            chars.next(); // skip current
+            chars.next().unwrap_or('\0')
         }
     }
 

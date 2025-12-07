@@ -21,6 +21,8 @@ pub struct CodeGenerator {
     bytecode: Bytecode,
     /// Tabla de símbolos para variables y funciones (nombre -> índice en constantes/strings)
     symbol_table: HashMap<String, u16>,
+    /// Funciones built-in disponibles
+    builtin_functions: HashMap<String, u16>,
     /// Índice del code object actual
     current_code_object: usize,
 }
@@ -32,9 +34,15 @@ impl CodeGenerator {
         // Crear el code object principal
         bytecode.code_objects.push(CodeObject::new(0, 0)); // name=0, filename=0
 
+        // Inicializar funciones built-in
+        let mut builtin_functions = HashMap::new();
+        let println_str = bytecode.add_string("println".to_string());
+        builtin_functions.insert("println".to_string(), println_str);
+
         Self {
             bytecode,
             symbol_table: HashMap::new(),
+            builtin_functions,
             current_code_object: 0,
         }
     }
@@ -296,9 +304,15 @@ impl CodeGenerator {
 
     /// Generar código para identificador
     fn generate_identifier(&mut self, ident: &Identifier) -> CompileResult<()> {
+        // Primero buscar en variables locales
         if let Some(&index) = self.symbol_table.get(&ident.name) {
             self.emit_instruction(Instruction::LoadLocal(index));
-        } else {
+        }
+        // Luego buscar en funciones built-in
+        else if let Some(&index) = self.builtin_functions.get(&ident.name) {
+            self.emit_instruction(Instruction::LoadConst(index));
+        }
+        else {
             return Err(CompileError::Codegen(CodegenError {
                 message: format!("Undefined variable: {}", ident.name),
                 location: None,

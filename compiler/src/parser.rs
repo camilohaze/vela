@@ -77,12 +77,15 @@ impl Parser {
 
     /// Parsea una declaración.
     fn parse_declaration(&mut self) -> CompileResult<Declaration> {
+        println!("🔧 parse_declaration called, current token: {:?}", self.current_token());
+        
         let is_public = self.check(TokenKind::Public);
         if is_public {
             self.advance();
         }
 
         if self.check(TokenKind::Fn) {
+            println!("🔧 Found fn token, parsing function declaration");
             self.parse_function_declaration(is_public)
         } else if self.check(TokenKind::Struct) {
             self.parse_struct_declaration(is_public)
@@ -95,16 +98,20 @@ impl Parser {
             let var_decl = self.parse_variable_declaration()?;
             Ok(Declaration::Variable(var_decl))
         } else {
+            println!("🔧 No valid declaration token found, current token: {:?}", self.current_token());
             Err(CompileError::Parse(self.error("Expected declaration")))
         }
     }
 
     /// Parsea una declaración de función.
     fn parse_function_declaration(&mut self, is_public: bool) -> CompileResult<Declaration> {
+        println!("🔧 parse_function_declaration called");
         let start_pos = self.current_token().range.start.clone();
 
         self.consume(TokenKind::Fn)?;
+        println!("🔧 consumed fn token");
         let name = self.consume_identifier()?;
+        println!("🔧 consumed function name: {:?}", name);
         let generic_params = self.parse_generic_parameters()?;
         self.consume(TokenKind::LeftParen)?;
         let parameters = self.parse_parameters()?;
@@ -430,6 +437,9 @@ impl Parser {
             Ok(Statement::Return(self.parse_return_statement()?))
         } else if self.check(TokenKind::State) {
             Ok(Statement::Variable(self.parse_variable_declaration()?))
+        } else if matches!(self.current_token().kind, TokenKind::Identifier(_)) && self.current + 1 < self.tokens.len() && self.tokens[self.current + 1].kind == TokenKind::Colon {
+            // Variable declaration without 'state' keyword
+            Ok(Statement::Variable(self.parse_variable_declaration()?))
         } else {
             Ok(Statement::Expression(self.parse_expression_statement()?))
         }
@@ -496,8 +506,12 @@ impl Parser {
     /// Parsea una declaración de variable.
     fn parse_variable_declaration(&mut self) -> CompileResult<VariableDeclaration> {
         let start_pos = self.current_token().range.start.clone();
-        let is_state = self.check(TokenKind::State);
-        self.advance(); // consume var or state
+        let is_state = if self.check(TokenKind::State) {
+            self.advance(); // consume 'state'
+            true
+        } else {
+            false
+        };
 
         let name = self.consume_identifier()?;
         let type_annotation = if self.check(TokenKind::Colon) {
@@ -537,9 +551,12 @@ impl Parser {
 
     /// Parsea expresión con precedence climbing.
     fn parse_precedence(&mut self, precedence: Precedence) -> CompileResult<Expression> {
+        println!("🔧 parse_precedence called with precedence: {:?}", precedence);
         let mut left = self.parse_unary()?;
+        println!("🔧 parse_precedence: parsed left expression: {:?}", left);
 
         while let Some(op_precedence) = self.get_precedence(self.current_token_kind()) {
+            println!("🔧 parse_precedence: found operator {:?} with precedence {:?}", self.current_token_kind(), op_precedence);
             if op_precedence <= precedence {
                 break;
             }
@@ -556,6 +573,7 @@ impl Parser {
 
     /// Parsea expresión unaria.
     fn parse_unary(&mut self) -> CompileResult<Expression> {
+        println!("🔧 parse_unary called, current token: {:?}", self.current_token_kind());
         if self.check(TokenKind::Not) || self.check(TokenKind::Minus) {
             let start_pos = self.current_token().range.start.clone();
             let operator = self.current_token_kind();
@@ -605,9 +623,37 @@ impl Parser {
             TokenKind::Identifier(name) => {
                 let name = name.clone();
                 self.advance();
-                let end_pos = self.previous_token().range.end.clone();
-                let range = Range::new(start_pos, end_pos);
-                Ok(Expression::Identifier(Identifier::new(range, name)))
+                
+                // Check if this is a function call
+                if self.check(TokenKind::LeftParen) {
+                    println!("🔧 parse_primary: found function call for '{}'", name);
+                    self.advance(); // consume '('
+                    let mut arguments = Vec::new();
+                    
+                    // Parse arguments
+                    if !self.check(TokenKind::RightParen) {
+                        loop {
+                            println!("🔧 parse_primary: parsing argument");
+                            arguments.push(self.parse_expression()?);
+                            if !self.check(TokenKind::Comma) {
+                                break;
+                            }
+                            self.advance(); // consume ','
+                        }
+                    }
+                    
+                    self.consume(TokenKind::RightParen)?;
+                    
+                    let end_pos = self.previous_token().range.end.clone();
+                    let range = Range::new(start_pos.clone(), end_pos);
+                    let callee = Expression::Identifier(Identifier::new(Range::new(start_pos.clone(), start_pos), name));
+                    
+                    Ok(Expression::Call(CallExpression::new(range, callee, arguments)))
+                } else {
+                    let end_pos = self.previous_token().range.end.clone();
+                    let range = Range::new(start_pos, end_pos);
+                    Ok(Expression::Identifier(Identifier::new(range, name)))
+                }
             }
             TokenKind::LeftParen => {
                 self.advance();
@@ -626,6 +672,7 @@ impl Parser {
             Expression::Identifier(ident) => ident.node.range.start.clone(),
             Expression::Binary(bin) => bin.node.range.start.clone(),
             Expression::Unary(un) => un.node.range.start.clone(),
+            Expression::Call(call) => call.node.range.start.clone(),
             _ => self.tokens[self.current - 1].range.start.clone(),
         };
 
@@ -634,6 +681,7 @@ impl Parser {
             Expression::Identifier(ident) => ident.node.range.end.clone(),
             Expression::Binary(bin) => bin.node.range.end.clone(),
             Expression::Unary(un) => un.node.range.end.clone(),
+            Expression::Call(call) => call.node.range.end.clone(),
             _ => self.previous_token().range.end.clone(),
         };
 

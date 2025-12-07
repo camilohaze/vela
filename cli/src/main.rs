@@ -36,7 +36,7 @@ enum Commands {
     /// Compile Vela source files
     Build {
         /// Input source files
-        #[arg(short, long, value_name = "FILE")]
+        #[arg(value_name = "FILES")]
         input: Vec<PathBuf>,
 
         /// Output file
@@ -106,6 +106,7 @@ enum DevCommands {
 }
 
 #[derive(Clone, clap::ValueEnum)]
+#[derive(Debug)]
 enum OptLevel {
     None,
     Basic,
@@ -807,9 +808,116 @@ This project is licensed under the MIT License.
     Ok(())
 }
 
-fn handle_build(_input: Vec<PathBuf>, _output: Option<PathBuf>, _opt_level: OptLevel) -> Result<()> {
+fn handle_build(input: Vec<PathBuf>, output: Option<PathBuf>, opt_level: OptLevel) -> Result<()> {
+    use std::fs;
+    use std::time::Instant;
+    use vela_compiler::{Compiler, config::{Config, OptimizationLevel}};
+
+    if input.is_empty() {
+        anyhow::bail!("No input files specified. Usage: vela build <input-files...>");
+    }
+
     println!("Building Vela project...");
-    // TODO: Implement build command
+    let start = Instant::now();
+
+    // Convert CLI OptLevel to Compiler OptimizationLevel
+    let compiler_opt_level = match opt_level {
+        OptLevel::None => OptimizationLevel::None,
+        OptLevel::Basic => OptimizationLevel::Basic,
+        OptLevel::Aggressive => OptimizationLevel::Aggressive,
+        OptLevel::Maximum => OptimizationLevel::Maximum,
+    };
+
+    // Create compiler config
+    let config = Config {
+        optimization: compiler_opt_level,
+        ..Config::default()
+    };
+
+    let mut compiler = Compiler::new(config);
+    println!("✅ Compiler created successfully");
+
+    // Determine output file name
+    let output_file = match output {
+        Some(path) => {
+            // Ensure it has .velac extension
+            if path.extension().map_or(true, |ext| ext != "velac") {
+                path.with_extension("velac")
+            } else {
+                path
+            }
+        }
+        None => {
+            // Use first input file name with .velac extension
+            if let Some(first_input) = input.first() {
+                first_input.with_extension("velac")
+            } else {
+                PathBuf::from("output.velac")
+            }
+        }
+    };
+
+    // For now, compile only the first file
+    // TODO: Support multiple files and linking
+    let first_input = &input[0];
+
+    if !first_input.exists() {
+        anyhow::bail!("Input file not found: {}", first_input.display());
+    }
+
+    // Compile the file
+    println!("Compiling {} -> {}...", first_input.display(), output_file.display());
+    println!("🔧 Starting compilation...");
+    let bytecode = compiler.compile_file(first_input);
+    println!("🔧 Compilation result received");
+
+    let bytecode = match bytecode {
+        Ok(bytecode) => {
+            println!("✅ Compilation successful");
+            bytecode
+        }
+        Err(e) => {
+            println!("❌ Compilation failed with error: {}", e);
+            // Show any additional diagnostics
+            let diagnostics = compiler.diagnostics();
+            if diagnostics.has_errors() {
+                eprintln!("\nCompilation errors:");
+                for error in diagnostics.errors() {
+                    eprintln!("  {} at {}", error.message, error.location);
+                }
+            }
+            anyhow::bail!("Compilation failed");
+        }
+    };
+
+    // Check for compilation errors (additional check)
+    if compiler.has_errors() {
+        let diagnostics = compiler.diagnostics();
+        eprintln!("❌ Compilation errors:");
+        for error in diagnostics.errors() {
+            eprintln!("  {} at {}", error.message, error.location);
+        }
+        for warning in diagnostics.warnings() {
+            eprintln!("  ⚠️  {} at {}", warning.message, warning.location);
+        }
+        anyhow::bail!("Compilation failed with {} errors", diagnostics.errors().count());
+    }
+
+    // Write bytecode to output file
+    fs::write(&output_file, &bytecode)
+        .with_context(|| format!("Failed to write output file: {}", output_file.display()))?;
+
+    let elapsed = start.elapsed();
+    println!("✅ Build completed successfully!");
+    println!("📦 Output: {} ({:.2} KB)", output_file.display(), bytecode.len() as f64 / 1024.0);
+    println!("⏱️  Build time: {:.3}ms", elapsed.as_secs_f64() * 1000.0);
+
+    // Show additional files if multiple inputs (not yet supported)
+    if input.len() > 1 {
+        println!("⚠️  Note: Multiple input files specified, but only {} was compiled", first_input.display());
+        println!("   Multiple file compilation will be supported in a future version.");
+    }
+
     Ok(())
 }
 
