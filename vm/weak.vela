@@ -1,0 +1,436 @@
+"""
+Weak References para VelaVM
+
+Implementación de referencias débiles (weak references) para romper ciclos
+de referencia en el sistema ARC.
+
+Implementación de: TASK-076
+Historia: US-17 - Memory Management Automático
+Epic: EPIC-06: Compiler Backend
+Fecha: 2025-12-07
+
+Referencias:
+- ADR-075: docs/architecture/ADR-075-automatic-reference-counting.md
+- Swift weak references: https://docs.swift.org/swift-book/LanguageGuide/AutomaticReferenceCounting.html
+- Objective-C __weak: https://developer.apple.com/library/archive/documentation/Cocoa/Conceptual/MemoryMgmt/
+"""
+
+import 'module:vm/heap' show {
+  HeapObjectRef, HeapObject
+}
+
+
+# ============================================================================
+# WEAK REFERENCE TYPE
+# ============================================================================
+
+"""
+WeakRef: Referencia débil a HeapObject.
+
+Una weak reference NO incrementa el refCount del objeto, permitiendo
+que el objeto sea liberado cuando solo quedan weak refs apuntando a él.
+
+Características:
+- isWeak = true en el HeapObjectRef
+- refCount no se incrementa en retain()
+- refCount no se decrementa en release()
+- lock() convierte temporalmente weak→strong (retorna Option<HeapObjectRef>)
+- Se invalida automáticamente cuando el objeto es liberado
+
+Uso típico:
+```vela
+# Crear weak ref para romper cycle
+parent.child = child       # Strong ref
+child.parent = weak(parent)  # Weak ref (no afecta refCount)
+
+# Al liberar parent, child.parent se invalida automáticamente
+match child.parent.lock() {
+  Some(parent) => print("Parent still alive")
+  None => print("Parent was freed")
+}
+```
+"""
+public class WeakRef {
+  # Referencia interna (puede ser None si el objeto fue liberado)
+  ref: Option<HeapObjectRef>
+  
+  # Flag de validez (false si el objeto fue freed)
+  isValid: Bool
+  
+  constructor(ref: HeapObjectRef) {
+    this.ref = Some(ref)
+    this.isValid = true
+    
+    # Marcar ref como weak
+    ref.isWeak = true
+    ref.refCount = 0  # Weak refs no afectan refCount
+  }
+  
+  """
+  lock: Convierte weak→strong temporalmente.
+  
+  Retorna Some(ref) si el objeto todavía está vivo (refCount > 0),
+  o None si el objeto ya fue liberado.
+  
+  IMPORTANTE: El ref retornado es strong (refCount se incrementa),
+  por lo que DEBE ser released cuando ya no se necesite.
+  """
+  public fn lock() -> Option<HeapObjectRef> {
+    if !this.isValid {
+      return None
+    }
+    
+    match this.ref {
+      Some(ref) => {
+        # Verificar si el objeto todavía está vivo
+        # En ARC, un objeto con refCount > 0 está vivo
+        if ref.refCount > 0 {
+          # IMPORTANTE: Convertir weak→strong temporalmente
+          # (incrementar refCount para que el caller lo posea)
+          ref.refCount = ref.refCount + 1
+          return Some(ref)
+        } else {
+          # Objeto ya fue liberado, invalidar weak ref
+          this.invalidate()
+          return None
+        }
+      }
+      None => return None
+    }
+  }
+  
+  """
+  invalidate: Marca esta weak ref como inválida.
+  
+  Llamado automáticamente por ARCManager.free() cuando el objeto
+  es liberado.
+  """
+  public fn invalidate() -> void {
+    this.isValid = false
+    this.ref = None
+  }
+  
+  """
+  isAlive: Verifica si el objeto referenciado todavía existe.
+  """
+  public fn isAlive() -> Bool {
+    if !this.isValid {
+      return false
+    }
+    
+    match this.ref {
+      Some(ref) => return ref.refCount > 0
+      None => return false
+    }
+  }
+  
+  override fn toString() -> String {
+    if this.isAlive() {
+      return "<WeakRef (alive)>"
+    } else {
+      return "<WeakRef (freed)>"
+    }
+  }
+}
+
+
+# ============================================================================
+# WEAK REFERENCE TRACKING
+# ============================================================================
+
+"""
+WeakRefTracker: Rastrea todas las weak refs para invalidarlas cuando
+el objeto strong es liberado.
+
+Mantiene un Map: HeapObjectRef → List<WeakRef>
+"""
+public class WeakRefTracker {
+  # Map de objeto → lista de weak refs que apuntan a él
+  weakRefs: Map<HeapObjectRef, List<WeakRef>> = {}
+  
+  """
+  register: Registra una weak ref para un objeto.
+  """
+  public fn register(ref: HeapObjectRef, weakRef: WeakRef) -> void {
+    match this.weakRefs.get(ref) {
+      Some(list) => {
+        list.append(weakRef)
+      }
+      None => {
+        this.weakRefs.set(ref, [weakRef])
+      }
+    }
+  }
+  
+  """
+  invalidateAll: Invalida todas las weak refs de un objeto.
+  
+  Llamado por ARCManager.free() antes de deallocate().
+  """
+  public fn invalidateAll(ref: HeapObjectRef) -> void {
+    match this.weakRefs.get(ref) {
+      Some(list) => {
+        list.forEach(weakRef => {
+          weakRef.invalidate()
+        })
+        this.weakRefs.remove(ref)
+      }
+      None => { /* No weak refs para este objeto */ }
+    }
+  }
+  
+  """
+  getWeakRefs: Retorna las weak refs de un objeto.
+  """
+  public fn getWeakRefs(ref: HeapObjectRef) -> List<WeakRef> {
+    match this.weakRefs.get(ref) {
+      Some(list) => return list
+      None => return []
+    }
+  }
+  
+  """
+  count: Retorna el número total de weak refs registradas.
+  """
+  public fn count() -> Number {
+    total: Number = 0
+    this.weakRefs.values().forEach(list => {
+      total = total + list.length()
+    })
+    return total
+  }
+  
+  override fn toString() -> String {
+    return "WeakRefTracker { ${this.count()} weak refs }"
+  }
+}
+
+
+# ============================================================================
+# CYCLE DETECTOR
+# ============================================================================
+
+"""
+CycleDetector: Detecta ciclos de referencia usando mark-and-sweep.
+
+Algoritmo:
+1. Mark phase: Marca todos los objetos alcanzables desde roots (strong refs)
+2. Sweep phase: Encuentra objetos con refCount > 0 pero NO marcados
+3. Esos objetos forman un ciclo (unreachable pero refCount > 0)
+4. Libera los objetos del ciclo manualmente
+
+Trigger: Se ejecuta periódicamente cada N allocations (threshold).
+"""
+public class CycleDetector {
+  # Threshold para trigger (cada N allocations)
+  threshold: Number = 1000
+  
+  # Contador de allocations desde último check
+  allocationsSinceLastCheck: Number = 0
+  
+  # Estadísticas
+  cycleCheckCount: Number = 0
+  cyclesDetected: Number = 0
+  objectsFreed: Number = 0
+  
+  """
+  recordAllocation: Incrementa contador y checkea si debe trigger.
+  """
+  public fn recordAllocation() -> Bool {
+    this.allocationsSinceLastCheck = this.allocationsSinceLastCheck + 1
+    
+    if this.allocationsSinceLastCheck >= this.threshold {
+      this.allocationsSinceLastCheck = 0
+      return true  # Trigger cycle detection
+    }
+    
+    return false
+  }
+  
+  """
+  detectCycles: Ejecuta cycle detection.
+  
+  @param roots - Lista de valores root (stack, globals, etc.)
+  @param allObjects - Lista de todos los objetos en heap
+  @returns Lista de objetos que forman cycles
+  """
+  public fn detectCycles(
+    roots: List<Value>,
+    allObjects: List<HeapObjectRef>
+  ) -> List<HeapObjectRef> {
+    this.cycleCheckCount = this.cycleCheckCount + 1
+    
+    # 1. Mark phase: Marcar todos los objetos alcanzables desde roots
+    marked: Set<HeapObjectRef> = Set()
+    
+    roots.forEach(root => {
+      this._markValue(root, marked)
+    })
+    
+    # 2. Sweep phase: Encontrar objetos NO marcados pero con refCount > 0
+    cycles: List<HeapObjectRef> = []
+    
+    allObjects.forEach(obj => {
+      if !marked.contains(obj) && obj.refCount > 0 {
+        # Objeto unreachable pero con refCount > 0 → ciclo
+        cycles.append(obj)
+      }
+    })
+    
+    if cycles.length() > 0 {
+      this.cyclesDetected = this.cyclesDetected + 1
+      this.objectsFreed = this.objectsFreed + cycles.length()
+    }
+    
+    return cycles
+  }
+  
+  """
+  _markValue: Marca recursivamente un valor y sus children.
+  """
+  fn _markValue(value: Value, marked: Set<HeapObjectRef>) -> void {
+    match value {
+      Value.HeapObject(ref) => {
+        # Si ya fue marcado, skip
+        if marked.contains(ref) {
+          return
+        }
+        
+        # Marcar este objeto
+        marked.add(ref)
+        
+        # Marcar children recursivamente
+        this._markChildren(ref, marked)
+      }
+      
+      Value.List(list) => {
+        # Marcar items de la lista
+        list.items.forEach(item => {
+          this._markValue(item, marked)
+        })
+      }
+      
+      Value.Map(map) => {
+        # Marcar values del map
+        map.entries.values().forEach(v => {
+          this._markValue(v, marked)
+        })
+      }
+      
+      Value.Closure(ref) => {
+        if !marked.contains(ref) {
+          marked.add(ref)
+          this._markChildren(ref, marked)
+        }
+      }
+      
+      _ => { /* Primitivos no necesitan mark */ }
+    }
+  }
+  
+  """
+  _markChildren: Marca recursivamente los children de un HeapObject.
+  """
+  fn _markChildren(ref: HeapObjectRef, marked: Set<HeapObjectRef>) -> void {
+    match ref.object {
+      HeapObject.Closure(closure) => {
+        # Marcar upvalues
+        closure.upvalues.forEach(upvalue => {
+          closedValue = upvalue.closed
+          match closedValue {
+            Some(value) => this._markValue(value, marked)
+            None => {}
+          }
+        })
+      }
+      
+      HeapObject.Instance(instance) => {
+        # Marcar fields
+        instance.fields.values().forEach(fieldValue => {
+          this._markValue(fieldValue, marked)
+        })
+      }
+      
+      HeapObject.List(list) => {
+        # Marcar items
+        list.items.forEach(item => {
+          this._markValue(item, marked)
+        })
+      }
+      
+      HeapObject.Map(map) => {
+        # Marcar entries
+        map.entries.values().forEach(value => {
+          this._markValue(value, marked)
+        })
+      }
+      
+      HeapObject.BoundMethod(method) => {
+        # Marcar receiver y method
+        # TODO: Implementar cuando BoundMethod tenga refs
+      }
+      
+      HeapObject.Class(cls) => {
+        # Marcar methods
+        cls.methods.values().forEach(methodRef => {
+          if !marked.contains(methodRef) {
+            marked.add(methodRef)
+            this._markChildren(methodRef, marked)
+          }
+        })
+      }
+      
+      _ => { /* Otros tipos no tienen children */ }
+    }
+  }
+  
+  """
+  getStats: Retorna estadísticas de cycle detection.
+  """
+  public fn getStats() -> Map<String, Number> {
+    return {
+      "checks": this.cycleCheckCount,
+      "cyclesDetected": this.cyclesDetected,
+      "objectsFreed": this.objectsFreed,
+      "threshold": this.threshold
+    }
+  }
+  
+  """
+  setThreshold: Configura el threshold de allocations.
+  """
+  public fn setThreshold(threshold: Number) -> void {
+    this.threshold = threshold
+  }
+  
+  override fn toString() -> String {
+    return "CycleDetector {
+      checks: ${this.cycleCheckCount},
+      cycles: ${this.cyclesDetected},
+      freed: ${this.objectsFreed}
+    }"
+  }
+}
+
+
+# ============================================================================
+# HELPER FUNCTIONS
+# ============================================================================
+
+"""
+weak: Crea una weak reference a un HeapObjectRef.
+"""
+public fn weak(ref: HeapObjectRef) -> WeakRef {
+  return WeakRef(ref)
+}
+
+
+# ============================================================================
+# MODULE EXPORTS
+# ============================================================================
+
+# Exports:
+# - WeakRef (weak reference type)
+# - WeakRefTracker (tracker para invalidar weak refs)
+# - CycleDetector (cycle detection con mark-and-sweep)
+# - weak() (helper para crear weak refs)

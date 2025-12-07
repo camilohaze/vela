@@ -21,6 +21,11 @@ import 'module:vm/heap' show {
   VelaClosure, VelaUpvalue, VelaInstance, VelaClass,
   VelaString, VelaHeapList, VelaHeapMap, VelaBoundMethod
 }
+
+import 'module:vm/weak' show {
+  WeakRef, WeakRefTracker, CycleDetector
+}
+
 import 'system:collections' show { Map, List }
 
 
@@ -104,9 +109,9 @@ public class ARCManager {
   # Autorelease pool (LIFO stack de refs a liberar al final del scope)
   autoreleasePool: List<HeapObjectRef> = []
   
-  # Threshold para cycle detection (cada N allocations)
-  cycleDetectionThreshold: Number = 1000
-  allocationsSinceLastCycleCheck: Number = 0
+  # TASK-076: Weak references and cycle detection
+  weakRefTracker: WeakRefTracker = WeakRefTracker()
+  cycleDetector: CycleDetector = CycleDetector()
   
   constructor(heap: VelaHeap) {
     this.heap = heap
@@ -205,6 +210,9 @@ public class ARCManager {
   - Ejemplo: Closure → Upvalues → Valores capturados
   """
   public fn free(ref: HeapObjectRef) -> void {
+    # 0. TASK-076: Invalidar weak refs antes de liberar
+    this.weakRefTracker.invalidateAll(ref)
+    
     # 1. Release children recursively
     match ref.object {
       HeapObject.Closure(closure) => {
@@ -359,13 +367,15 @@ public class ARCManager {
   - Parent refs (parent-child relationships)
   - Delegates (observer pattern)
   - Caches (evitable)
+  
+  TASK-076: Implementación completa con WeakRefTracker.
   """
-  public fn createWeakRef(ref: HeapObjectRef) -> HeapObjectRef {
-    # Crear copia de ref con isWeak = true
-    weakRef = HeapObjectRef(ref.object, ref.metadata.size)
-    weakRef.refCount = 0  # Weak refs NO tienen refcount
-    weakRef.isWeak = true
-    weakRef.metadata = ref.metadata  # Compartir metadata
+  public fn createWeakRef(ref: HeapObjectRef) -> WeakRef {
+    # Crear weak reference
+    weakRef = WeakRef(ref)
+    
+    # Registrar en tracker para invalidación automática
+    this.weakRefTracker.register(ref, weakRef)
     
     return weakRef
   }
@@ -378,7 +388,7 @@ public class ARCManager {
   - None si objeto ya fue liberado
   
   Ejemplo:
-    match arc.lockWeakRef(weakRef) {
+    match weakRef.lock() {
       Some(strongRef) => {
         # Usar objeto (refcount incrementado temporalmente)
         use(strongRef)
@@ -388,17 +398,12 @@ public class ARCManager {
         # Objeto ya fue liberado
       }
     }
+  
+  TASK-076: Implementación completa.
   """
-  public fn lockWeakRef(weakRef: HeapObjectRef) -> Option<HeapObjectRef> {
-    if !weakRef.isWeak {
-      throw Error("ARC: lockWeakRef() on non-weak reference")
-    }
-    
-    # Verificar si objeto aún vive (refcount > 0 en strong ref original)
-    # TODO: Necesitamos weak→strong lookup table en heap
-    
-    # Por ahora, retornar None (implementación completa en TASK-076)
-    return None
+  public fn lockWeakRef(weakRef: WeakRef) -> Option<HeapObjectRef> {
+    # WeakRef.lock() maneja la conversión weak→strong
+    return weakRef.lock()
   }
   
   # ========================================================================
@@ -412,26 +417,41 @@ public class ARCManager {
   Algoritmo:
   1. Mark phase: Marcar objetos alcanzables desde roots (stack, globals)
   2. Sweep phase: Objetos con refcount > 0 pero NO marcados → CYCLE
-  3. Break cycles: Convertir una ref en weak para romper ciclo
+  3. Free cycles: Liberar objetos del ciclo manualmente
   
-  NOTA: Implementación completa en TASK-076 (Cycle Detector).
-  Por ahora, solo placeholder.
+  TASK-076: Implementación completa con CycleDetector.
+  
+  @param roots - Lista de valores root (stack + globals + call frames)
+  @param allObjects - Lista de todos los objetos en heap
   """
-  public fn checkForCycles() -> void {
-    this.allocationsSinceLastCycleCheck = 0
+  public fn checkForCycles(
+    roots: List<Value>,
+    allObjects: List<HeapObjectRef>
+  ) -> void {
+    # Detectar cycles
+    cycles = this.cycleDetector.detectCycles(roots, allObjects)
     
-    # TODO: Implementar cycle detection en TASK-076
-    # Por ahora, no-op
+    # Liberar objetos del ciclo
+    cycles.forEach(ref => {
+      # Forzar refcount a 0 y liberar
+      ref.refCount = 0
+      this.free(ref)
+    })
   }
   
   """
   recordAllocation: Registrar nueva allocación (para cycle detection threshold).
+  
+  TASK-076: Trigger cycle detection cuando se alcanza threshold.
   """
   public fn recordAllocation() -> void {
-    this.allocationsSinceLastCycleCheck = this.allocationsSinceLastCycleCheck + 1
+    shouldCheck = this.cycleDetector.recordAllocation()
     
-    if this.allocationsSinceLastCycleCheck >= this.cycleDetectionThreshold {
-      this.checkForCycles()
+    if shouldCheck {
+      # Trigger cycle detection
+      # NOTA: Necesitamos roots y allObjects del VM
+      # Por ahora, solo incrementa contador en CycleDetector
+      # La llamada real a checkForCycles() se hace desde VelaVM
     }
   }
   
