@@ -1,0 +1,1365 @@
+"""
+VelaVM Core Interpreter
+
+Stack-based virtual machine para ejecutar bytecode Vela.
+Implementa fetch-decode-execute cycle con soporte completo para todas las instrucciones.
+
+Implementación de: TASK-071
+Historia: US-16 - VelaVM Bytecode Interpreter
+Epic: EPIC-06: Compiler Backend
+Fecha: 2025-12-07
+
+Referencias:
+- ADR-069: docs/architecture/ADR-069-bytecode-instruction-set.md
+- Opcodes: vm/opcodes.vela
+- Documentación: docs/features/US-16/TASK-071.md
+"""
+
+import 'module:vm/opcodes' show {
+  # Magic & Version
+  MAGIC_NUMBER, VERSION_MAJOR, VERSION_MINOR,
+  
+  # Constant types
+  CONST_TYPE_NONE, CONST_TYPE_BOOL, CONST_TYPE_NUMBER,
+  CONST_TYPE_FLOAT, CONST_TYPE_STRING, CONST_TYPE_FUNCTION,
+  
+  # All opcodes (120 opcodes)
+  OP_NOP, OP_POP, OP_DUP, OP_DUP2, OP_SWAP, OP_ROT3,
+  OP_CONST_NONE, OP_CONST_TRUE, OP_CONST_FALSE,
+  OP_CONST_0, OP_CONST_1, OP_CONST_NEG1,
+  OP_LOAD_CONST, OP_LOAD_CONST_SMALL,
+  OP_ADD, OP_SUB, OP_MUL, OP_DIV, OP_IDIV, OP_MOD, OP_POW,
+  OP_NEG, OP_ABS, OP_INC, OP_DEC,
+  OP_BIT_AND, OP_BIT_OR, OP_BIT_XOR, OP_BIT_NOT,
+  OP_SHL, OP_SHR, OP_USHR,
+  OP_EQ, OP_NE, OP_LT, OP_LE, OP_GT, OP_GE,
+  OP_IS_NONE, OP_IS_NOT_NONE, OP_IS_TYPE,
+  OP_LOGIC_AND, OP_LOGIC_OR, OP_LOGIC_NOT,
+  OP_JUMP, OP_JUMP_IF_TRUE, OP_JUMP_IF_FALSE,
+  OP_JUMP_IF_NONE, OP_JUMP_FORWARD, OP_LOOP,
+  OP_LOAD_LOCAL, OP_STORE_LOCAL, OP_LOAD_GLOBAL, OP_STORE_GLOBAL,
+  OP_LOAD_UPVALUE, OP_STORE_UPVALUE, OP_LOAD_FAST, OP_STORE_FAST,
+  OP_CALL, OP_CALL_METHOD, OP_RETURN, OP_RETURN_NONE,
+  OP_MAKE_CLOSURE, OP_CLOSE_UPVALUE, OP_LOAD_CLOSURE,
+  OP_TAIL_CALL, OP_CALL_BUILTIN, OP_CALL_ASYNC, OP_AWAIT,
+  OP_NEW_OBJECT, OP_GET_ATTR, OP_SET_ATTR, OP_GET_METHOD,
+  OP_LOAD_THIS, OP_LOAD_SUPER, OP_DELETE_ATTR, OP_HAS_ATTR,
+  OP_BUILD_LIST, OP_BUILD_MAP, OP_BUILD_SET, OP_BUILD_TUPLE,
+  OP_LIST_APPEND, OP_MAP_INSERT, OP_GET_ITEM, OP_SET_ITEM,
+  OP_DELETE_ITEM, OP_GET_SLICE, OP_CONTAINS, OP_LIST_EXTEND,
+  OP_BUILD_STRING, OP_FORMAT_STRING, OP_STRING_CONCAT,
+  OP_STRING_REPEAT, OP_STRING_SLICE,
+  OP_CAST, OP_INSTANCEOF, OP_TYPEOF,
+  OP_AS_NUMBER, OP_AS_STRING, OP_AS_BOOL,
+  OP_MAKE_CLOSURE, OP_LOAD_CLOSURE, OP_CLOSE_UPVALUE,
+  OP_MAKE_GENERATOR, OP_YIELD, OP_YIELD_FROM,
+  OP_THROW, OP_TRY_BEGIN, OP_TRY_END, OP_CATCH, OP_FINALLY, OP_RERAISE,
+  OP_SIGNAL_CREATE, OP_SIGNAL_READ, OP_SIGNAL_WRITE,
+  OP_COMPUTED_CREATE, OP_EFFECT_CREATE, OP_WATCH_CREATE,
+  OP_BATCH_UPDATE_BEGIN, OP_BATCH_UPDATE_END,
+  OP_ACTOR_SPAWN, OP_ACTOR_SEND, OP_ACTOR_RECEIVE,
+  OP_ACTOR_SELF, OP_ACTOR_LINK, OP_ACTOR_MONITOR,
+  OP_DEBUG_LINE, OP_HALT,
+  
+  # Utilities
+  getOpcodeName, getOpcodeSize
+}
+
+import 'module:vm/heap' show {
+  VelaHeap, VelaGC, HeapObjectRef, HeapObject,
+  VelaClosure, VelaUpvalue, VelaClass, VelaInstance,
+  VelaBoundMethod, VelaString, VelaHeapList, VelaHeapMap
+}
+
+import 'module:vm/exceptions' show {
+  VelaException, StackTraceEntry, ExceptionHandler, ExceptionFrame,
+  AsyncContext, AsyncFrame, StackUnwinder,
+  createException,
+  EXCEPTION_ERROR, EXCEPTION_TYPE_ERROR, EXCEPTION_RUNTIME_ERROR,
+  EXCEPTION_DIVISION_BY_ZERO, EXCEPTION_INDEX_OUT_OF_BOUNDS
+}
+
+
+# ============================================================================
+# VALUE REPRESENTATION
+public enum Value {
+  None,
+  Bool(Bool),
+  Number(Number),
+  Float(Float),
+  String(String),
+  Object(VelaObject),      # Stack-allocated objects (legacy)
+  Function(VelaFunction),  # Function objects
+  Closure(HeapObjectRef),  # Heap-allocated closure
+  List(VelaList),
+  Map(VelaMap),
+  Signal(VelaSignal),      # Reactive signal
+  Actor(VelaActor),        # Actor reference
+  HeapObject(HeapObjectRef), # Generic heap object reference
+  Exception(VelaException) # Exception object
+} Object(VelaObject),      # Heap-allocated objects
+  Function(VelaFunction),  # Function objects
+  List(VelaList),
+  Map(VelaMap),
+  Signal(VelaSignal),      # Reactive signal
+  Actor(VelaActor)         # Actor reference
+}
+
+"""
+Helpers para Value
+"""
+public fn valueToString(value: Value) -> String {
+  match value {
+    Value.None => "None"
+    Value.Bool(b) => b.toString()
+    Value.Number(n) => n.toString()
+    Value.Float(f) => f.toString()
+    Value.Function(fn) => "<function ${fn.name}>"
+    Value.Closure(ref) => {
+      match ref.object {
+        HeapObject.Closure(closure) => closure.toString()
+        _ => "<closure>"
+      }
+    }
+    Value.List(list) => list.toString()
+    Value.Map(map) => map.toString()
+    Value.Signal(sig) => "<signal>"
+    Value.Actor(actor) => "<actor ${actor.id}>"
+    Value.HeapObject(ref) => "<heap object>"
+    Value.Exception(ex) => ex.toString()
+  }
+}   Value.Actor(actor) => "<actor ${actor.id}>"
+  }
+}
+
+public fn valueIsTruthy(value: Value) -> Bool {
+  match value {
+    Value.None => false
+    Value.Bool(b) => b
+    Value.Number(n) => n != 0
+    Value.Float(f) => f != 0.0
+    Value.String(s) => s.length() > 0
+    _ => true
+  }
+}
+
+
+# ============================================================================
+# VELA OBJECTS
+# ============================================================================
+
+"""
+VelaObject: Heap-allocated object con atributos.
+"""
+public class VelaObject {
+  public className: String
+  public attributes: Map<String, Value> = {}
+  
+  constructor(className: String) {
+    this.className = className
+  }
+  
+  public fn getAttribute(name: String) -> Option<Value> {
+    return this.attributes.get(name)
+  }
+  
+  public fn setAttribute(name: String, value: Value) -> void {
+    this.attributes.set(name, value)
+  }
+  
+  public fn hasAttribute(name: String) -> Bool {
+    return this.attributes.contains(name)
+  }
+  
+  public fn deleteAttribute(name: String) -> void {
+    this.attributes.remove(name)
+  }
+  
+  override fn toString() -> String {
+    return "<${this.className} object>"
+  }
+}
+
+"""
+VelaFunction: Function object con bytecode y metadata.
+"""
+public class VelaFunction {
+  public name: String
+  public arity: Number          # Número de parámetros
+  public codeOffset: Number     # Offset en bytecode
+  public upvalueCount: Number = 0
+  public isNative: Bool = false
+  public nativeImpl: Option<Function> = None
+  
+  constructor(name: String, arity: Number, codeOffset: Number) {
+    this.name = name
+    this.arity = arity
+    this.codeOffset = codeOffset
+  }
+  
+  override fn toString() -> String {
+    return "<fn ${this.name}/${this.arity}>"
+  }
+}
+
+"""
+VelaList: Lista mutable.
+"""
+public class VelaList {
+  public items: List<Value> = []
+  
+  public fn append(value: Value) -> void {
+    this.items.append(value)
+  }
+  
+  public fn get(index: Number) -> Option<Value> {
+    if index < 0 || index >= this.items.length() {
+      return None
+    }
+    return Some(this.items[index])
+  }
+  
+  public fn set(index: Number, value: Value) -> void {
+    this.items[index] = value
+  }
+  
+  public fn length() -> Number {
+    return this.items.length()
+  }
+  
+  override fn toString() -> String {
+    elements = this.items.map(v => valueToString(v)).join(", ")
+    return "[${elements}]"
+  }
+}
+
+"""
+VelaMap: Map mutable.
+"""
+public class VelaMap {
+  public entries: Map<String, Value> = {}
+  
+  public fn set(key: String, value: Value) -> void {
+    this.entries.set(key, value)
+  }
+  
+  public fn get(key: String) -> Option<Value> {
+    return this.entries.get(key)
+  }
+  
+  public fn contains(key: String) -> Bool {
+    return this.entries.contains(key)
+  }
+  
+  override fn toString() -> String {
+    pairs = this.entries.map((k, v) => "${k}: ${valueToString(v)}").join(", ")
+    return "{${pairs}}"
+  }
+}
+
+"""
+VelaSignal: Reactive signal (simplified).
+"""
+public class VelaSignal {
+  public value: Value
+  public subscribers: List<Function> = []
+  
+  constructor(initialValue: Value) {
+    this.value = initialValue
+  }
+  
+  public fn read() -> Value {
+    # TODO: Track dependency en reactive context
+    return this.value
+  }
+  
+  public fn write(newValue: Value) -> void {
+    this.value = newValue
+    # Notify subscribers
+    this.subscribers.forEach(fn => fn(newValue))
+  }
+}
+
+"""
+VelaActor: Actor reference (simplified).
+"""
+public class VelaActor {
+  public id: Number
+  public mailbox: List<Value> = []
+  
+  constructor(id: Number) {
+    this.id = id
+  }
+  
+  public fn send(message: Value) -> void {
+    this.mailbox.append(message)
+  }
+  
+  public fn receive() -> Option<Value> {
+    if this.mailbox.length() > 0 {
+      return Some(this.mailbox.removeAt(0))
+    }
+    return None
+  }
+}
+
+
+# ============================================================================
+# CALL FRAME
+# ============================================================================
+
+"""
+CallFrame: Representa un frame en el call stack.
+"""
+public class CallFrame {
+  public function: VelaFunction
+  public ip: Number                    # Instruction pointer
+  public slots: List<Value>            # Locals + temporaries
+  public slotsOffset: Number           # Offset en value stack
+  public closure: Option<VelaClosure> = None  # Closure si esta función es closure
+  public exceptionFrame: Option<ExceptionFrame> = None  # Exception handlers
+  public asyncFrame: Option<AsyncFrame> = None  # Async context
+  
+  constructor(
+    function: VelaFunction,
+    slotsOffset: Number
+  ) {
+    this.function = function
+    this.ip = function.codeOffset
+    this.slots = []
+    this.slotsOffset = slotsOffset
+  }
+  
+  """
+  Lee el siguiente byte del bytecode.
+  """
+  public fn readByte(bytecode: List<Number>) -> Number {
+    byte = bytecode[this.ip]
+    this.ip = this.ip + 1
+    return byte
+  }
+  
+  """
+  Lee un u16 (big-endian).
+  """
+  public fn readU16(bytecode: List<Number>) -> Number {
+    high = this.readByte(bytecode)
+    low = this.readByte(bytecode)
+    return (high << 8) | low
+  }
+  
+  """
+  Lee un i16 (signed, two's complement).
+  """
+  public fn readI16(bytecode: List<Number>) -> Number {
+    value = this.readU16(bytecode)
+    # Convert to signed
+    if value >= 0x8000 {
+      return value - 0x10000
+    }
+    return value
+  }
+}
+
+
+# ============================================================================
+public class VelaVM {
+  # Bytecode y constant pool
+  bytecode: List<Number> = []
+  constants: List<Value> = []
+  globals: Map<String, Value> = {}
+  
+  # Stacks
+  valueStack: List<Value> = []
+  callStack: List<CallFrame> = []
+  
+  # Heap & GC
+  heap: VelaHeap = VelaHeap()
+  gc: VelaGC
+  
+  # Exception handling
+  unwinder: StackUnwinder = StackUnwinder()
+  currentException: Option<VelaException> = None
+  
+  # Estado
+  currentFrame: Option<CallFrame> = None
+  halted: Bool = false
+  
+  # Estadísticas (para profiling)
+  instructionCount: Number = 0
+  
+  constructor() {
+    this.gc = VelaGC(this.heap)
+  } []
+  
+  # Estado
+  currentFrame: Option<CallFrame> = None
+  halted: Bool = false
+  
+  # Estadísticas (para profiling)
+  instructionCount: Number = 0
+  
+  """
+  Carga bytecode desde bytes.
+  """
+  public fn loadBytecode(bytes: List<Number>) -> Result<void, String> {
+    offset: Number = 0
+    
+    # 1. Verificar magic number
+    if bytes.length() < 4 {
+      return Err("Invalid bytecode: too short")
+    }
+    
+    magic = (bytes[0] << 24) | (bytes[1] << 16) | (bytes[2] << 8) | bytes[3]
+    if magic != MAGIC_NUMBER {
+      return Err("Invalid bytecode: bad magic number")
+    }
+    offset = 4
+    
+    # 2. Verificar version
+    majorVer = bytes[offset]
+    minorVer = bytes[offset + 1]
+    offset = offset + 2
+    
+    if majorVer != VERSION_MAJOR || minorVer != VERSION_MINOR {
+      return Err("Incompatible bytecode version: ${majorVer}.${minorVer}")
+    }
+    
+    # 3. Leer constant pool
+    poolSize = (bytes[offset] << 8) | bytes[offset + 1]
+    offset = offset + 2
+    
+    result = this._loadConstantPool(bytes, offset, poolSize)
+    match result {
+      Ok((newOffset, _)) => offset = newOffset
+      Err(e) => return Err(e)
+    }
+    
+    # 4. Leer code size
+    codeSize = (bytes[offset] << 24) | (bytes[offset + 1] << 16) |
+               (bytes[offset + 2] << 8) | bytes[offset + 3]
+    offset = offset + 4
+    
+    # 5. Leer bytecode
+    this.bytecode = bytes.slice(offset, offset + codeSize)
+    
+    return Ok(None)
+  }
+  
+  """
+  Carga constant pool desde bytes.
+  """
+  fn _loadConstantPool(
+    bytes: List<Number>,
+    offset: Number,
+    count: Number
+  ) -> Result<(Number, void), String> {
+    currentOffset = offset
+    
+    (0..count).forEach(_ => {
+      # Leer type tag
+      typeTag = bytes[currentOffset]
+      currentOffset = currentOffset + 1
+      
+      # Leer value según tipo
+      match typeTag {
+        CONST_TYPE_NONE => {
+          this.constants.append(Value.None)
+        }
+        
+        CONST_TYPE_BOOL => {
+          value = bytes[currentOffset] != 0
+          currentOffset = currentOffset + 1
+          this.constants.append(Value.Bool(value))
+        }
+        
+        CONST_TYPE_NUMBER => {
+          # Leer i64 (8 bytes, big-endian)
+          value: Number = 0
+          (0..8).forEach(i => {
+            value = (value << 8) | bytes[currentOffset + i]
+          })
+          currentOffset = currentOffset + 8
+          this.constants.append(Value.Number(value))
+        }
+        
+        CONST_TYPE_FLOAT => {
+          # Leer f64 (8 bytes, IEEE 754)
+          bits: Number = 0
+          (0..8).forEach(i => {
+            bits = (bits << 8) | bytes[currentOffset + i]
+          })
+          currentOffset = currentOffset + 8
+          value = Float.fromIEEE754Bits(bits)
+          this.constants.append(Value.Float(value))
+        }
+        
+        CONST_TYPE_STRING => {
+          # Leer length (u16)
+          length = (bytes[currentOffset] << 8) | bytes[currentOffset + 1]
+          currentOffset = currentOffset + 2
+          
+          # Leer UTF-8 bytes
+          utf8Bytes = bytes.slice(currentOffset, currentOffset + length)
+          currentOffset = currentOffset + length
+          
+          str = String.fromUTF8Bytes(utf8Bytes)
+          this.constants.append(Value.String(str))
+        }
+        
+        CONST_TYPE_FUNCTION => {
+          # Leer function metadata
+          codeOffset = (bytes[currentOffset] << 24) |
+                      (bytes[currentOffset + 1] << 16) |
+                      (bytes[currentOffset + 2] << 8) |
+                      bytes[currentOffset + 3]
+          currentOffset = currentOffset + 4
+          
+          arity = bytes[currentOffset]
+          currentOffset = currentOffset + 1
+          
+          fn = VelaFunction("anonymous", arity, codeOffset)
+          this.constants.append(Value.Function(fn))
+        }
+        
+        _ => {
+          return Err("Unknown constant type: ${typeTag}")
+        }
+      }
+    })
+    
+    return Ok((currentOffset, None))
+  }
+  
+  """
+  Ejecuta el bytecode cargado.
+  """
+  public fn run() -> Result<Value, String> {
+    # Crear main frame (entry point en offset 0)
+    mainFn = VelaFunction("main", 0, 0)
+    this._pushFrame(mainFn)
+    
+    # Main interpreter loop
+    while !this.halted {
+      result = this._executeInstruction()
+      
+      match result {
+        Ok(_) => { /* continue */ }
+        Err(e) => return Err(e)
+      }
+      
+      this.instructionCount = this.instructionCount + 1
+    }
+    
+    # Retornar valor final del stack (o None)
+    if this.valueStack.length() > 0 {
+      return Ok(this.valueStack[this.valueStack.length() - 1])
+    }
+    
+    return Ok(Value.None)
+  }
+  
+  """
+  Ejecuta una instrucción (fetch-decode-execute).
+  """
+  fn _executeInstruction() -> Result<void, String> {
+    if let Some(frame) = this.currentFrame {
+      # Fetch
+      opcode = frame.readByte(this.bytecode)
+      
+      # Decode & Execute
+      match opcode {
+        # Stack Operations
+        OP_NOP => { /* no-op */ }
+        
+        OP_POP => {
+          this._pop()
+        }
+        
+        OP_DUP => {
+          value = this._peek(0)
+          this._push(value)
+        }
+        
+        OP_DUP2 => {
+          a = this._peek(1)
+          b = this._peek(0)
+          this._push(a)
+          this._push(b)
+        }
+        
+        OP_SWAP => {
+          b = this._pop()
+          a = this._pop()
+          this._push(b)
+          this._push(a)
+        }
+        
+        OP_ROT3 => {
+          c = this._pop()
+          b = this._pop()
+          a = this._pop()
+          this._push(c)
+          this._push(a)
+          this._push(b)
+        }
+        
+        # Constants
+        OP_CONST_NONE => this._push(Value.None)
+        OP_CONST_TRUE => this._push(Value.Bool(true))
+        OP_CONST_FALSE => this._push(Value.Bool(false))
+        OP_CONST_0 => this._push(Value.Number(0))
+        OP_CONST_1 => this._push(Value.Number(1))
+        OP_CONST_NEG1 => this._push(Value.Number(-1))
+        
+        OP_LOAD_CONST => {
+          idx = frame.readU16(this.bytecode)
+          this._push(this.constants[idx])
+        }
+        
+        OP_LOAD_CONST_SMALL => {
+          value = frame.readByte(this.bytecode)
+          # Convert from u8 to signed i8
+          signed = value >= 128 ? (value - 256) : value
+          this._push(Value.Number(signed))
+        }
+        
+        # Arithmetic
+        OP_ADD => this._binaryOp((a, b) => a + b)
+        OP_SUB => this._binaryOp((a, b) => a - b)
+        OP_MUL => this._binaryOp((a, b) => a * b)
+        OP_DIV => this._binaryOp((a, b) => a / b)
+        OP_IDIV => this._binaryOp((a, b) => a // b)
+        OP_MOD => this._binaryOp((a, b) => a % b)
+        OP_POW => this._binaryOp((a, b) => a ** b)
+        
+        OP_NEG => {
+          value = this._popNumber()
+          this._push(Value.Number(-value))
+        }
+        
+        OP_ABS => {
+          value = this._popNumber()
+          this._push(Value.Number(value.abs()))
+        }
+        
+        OP_INC => {
+          value = this._popNumber()
+          this._push(Value.Number(value + 1))
+        }
+        
+        OP_DEC => {
+          value = this._popNumber()
+          this._push(Value.Number(value - 1))
+        }
+        
+        # Bitwise
+        OP_BIT_AND => this._binaryOp((a, b) => a & b)
+        OP_BIT_OR => this._binaryOp((a, b) => a | b)
+        OP_BIT_XOR => this._binaryOp((a, b) => a ^ b)
+        OP_BIT_NOT => {
+          value = this._popNumber()
+          this._push(Value.Number(~value))
+        }
+        OP_SHL => this._binaryOp((a, b) => a << b)
+        OP_SHR => this._binaryOp((a, b) => a >> b)
+        OP_USHR => this._binaryOp((a, b) => a >>> b)
+        
+        # Comparison
+        OP_EQ => this._compareOp((a, b) => a == b)
+        OP_NE => this._compareOp((a, b) => a != b)
+        OP_LT => this._compareOp((a, b) => a < b)
+        OP_LE => this._compareOp((a, b) => a <= b)
+        OP_GT => this._compareOp((a, b) => a > b)
+        OP_GE => this._compareOp((a, b) => a >= b)
+        
+        OP_IS_NONE => {
+          value = this._pop()
+          result = match value {
+            Value.None => true
+            _ => false
+          }
+          this._push(Value.Bool(result))
+        }
+        
+        OP_IS_NOT_NONE => {
+          value = this._pop()
+          result = match value {
+            Value.None => false
+            _ => true
+          }
+          this._push(Value.Bool(result))
+        }
+        
+        # Logical
+        OP_LOGIC_NOT => {
+          value = this._pop()
+          this._push(Value.Bool(!valueIsTruthy(value)))
+        }
+        
+        # Control Flow
+        OP_JUMP => {
+          offset = frame.readI16(this.bytecode)
+          frame.ip = frame.ip + offset
+        }
+        
+        OP_JUMP_IF_TRUE => {
+          offset = frame.readI16(this.bytecode)
+          value = this._peek(0)
+          if valueIsTruthy(value) {
+            frame.ip = frame.ip + offset
+          }
+        }
+        
+        OP_JUMP_IF_FALSE => {
+          offset = frame.readI16(this.bytecode)
+          value = this._peek(0)
+          if !valueIsTruthy(value) {
+            frame.ip = frame.ip + offset
+          }
+        }
+        
+        OP_JUMP_IF_NONE => {
+          offset = frame.readI16(this.bytecode)
+          value = this._peek(0)
+          match value {
+            Value.None => frame.ip = frame.ip + offset
+            _ => { /* no jump */ }
+          }
+        }
+        
+        OP_JUMP_FORWARD => {
+          offset = frame.readByte(this.bytecode)
+          frame.ip = frame.ip + offset
+        }
+        
+        OP_LOOP => {
+          offset = frame.readI16(this.bytecode)
+          frame.ip = frame.ip + offset
+        }
+        
+        # Variables
+        OP_LOAD_LOCAL | OP_LOAD_FAST => {
+          idx = frame.readByte(this.bytecode)
+          value = frame.slots[idx]
+          this._push(value)
+        }
+        
+        OP_STORE_LOCAL | OP_STORE_FAST => {
+          idx = frame.readByte(this.bytecode)
+          value = this._peek(0)
+          
+          # Extend slots if needed
+          while frame.slots.length() <= idx {
+            frame.slots.append(Value.None)
+          }
+          
+          frame.slots[idx] = value
+        }
+        
+        OP_LOAD_GLOBAL => {
+          idx = frame.readU16(this.bytecode)
+          name = this._getConstantString(idx)
+          
+          match this.globals.get(name) {
+            Some(value) => this._push(value)
+            None => return Err("Undefined global: ${name}")
+          }
+        }
+        
+        OP_STORE_GLOBAL => {
+        OP_CALL => {
+          argc = frame.readByte(this.bytecode)
+          
+          # Pop callee
+          callee = this._pop()
+          
+          match callee {
+            Value.Function(fn) => {
+              if fn.arity != argc {
+                return Err("Expected ${fn.arity} args, got ${argc}")
+              }
+              
+              # Create new frame
+              this._pushFrame(fn)
+              
+              # Pop arguments and store as locals
+              args = (0..argc).map(_ => this._pop()).reverse()
+              args.forEach((arg, idx) => {
+                this.currentFrame.unwrap().slots.append(arg)
+              })
+            }
+            
+            Value.Closure(ref) => {
+              # Call closure
+              match ref.object {
+                HeapObject.Closure(closure) => {
+        OP_RETURN => {
+          returnValue = this._pop()
+          
+          # Close upvalues cuando función retorna
+          if let Some(frame) = this.currentFrame {
+            this.heap.closeUpvalues(frame.slotsOffset, this.valueStack)
+          }
+          
+          # Pop frame
+          this._popFrame()
+          
+          # Push return value
+          if let Some(_) = this.currentFrame {
+            this._push(returnValue)
+          }
+        }           this.currentFrame.unwrap().slots.append(arg)
+                  })
+                  
+                  # Store closure for upvalue access
+                  this.currentFrame.unwrap().closure = Some(closure)
+        OP_RETURN_NONE => {
+          # Close upvalues cuando función retorna
+          if let Some(frame) = this.currentFrame {
+            this.heap.closeUpvalues(frame.slotsOffset, this.valueStack)
+          }
+          
+          this._popFrame()
+          
+          if let Some(_) = this.currentFrame {
+            this._push(Value.None)
+          }
+        }
+        
+        # Closures
+        OP_MAKE_CLOSURE => {
+          # Pop function
+          funcValue = this._pop()
+          
+          match funcValue {
+            Value.Function(fn) => {
+              # Create closure
+              closure = VelaClosure(fn)
+              
+              # Capture upvalues
+              (0..fn.upvalueCount).forEach(_ => {
+                isLocal = frame.readByte(this.bytecode) == 1
+                index = frame.readByte(this.bytecode)
+                
+                upvalue: VelaUpvalue
+                
+                if isLocal {
+                  # Capture local variable
+                  stackSlot = frame.slotsOffset + index
+                  upvalue = this.heap.captureUpvalue(stackSlot, this.valueStack)
+                } else {
+                  # Capture upvalue from enclosing closure
+                  if let Some(enclosingClosure) = frame.closure {
+                    upvalue = enclosingClosure.upvalues[index]
+                  } else {
+                    return Err("No enclosing closure")
+                  }
+                }
+                
+                closure.upvalues.append(upvalue)
+              })
+              
+              # Allocate closure en heap
+              ref = this.heap.allocateClosure(closure)
+              this._push(Value.Closure(ref))
+            }
+            
+            _ => return Err("Expected function for closure")
+          }
+        }
+        
+        OP_LOAD_UPVALUE => {
+          idx = frame.readByte(this.bytecode)
+          
+          if let Some(closure) = frame.closure {
+            if idx < closure.upvalues.length() {
+              upvalue = closure.upvalues[idx]
+              value = upvalue.read(this.valueStack)
+              this._push(value)
+            } else {
+              return Err("Invalid upvalue index: ${idx}")
+            }
+          } else {
+            return Err("No closure in current frame")
+          }
+        }
+        
+        OP_STORE_UPVALUE => {
+          idx = frame.readByte(this.bytecode)
+          value = this._peek(0)
+          
+          if let Some(closure) = frame.closure {
+            if idx < closure.upvalues.length() {
+              upvalue = closure.upvalues[idx]
+              upvalue.write(this.valueStack, value)
+            } else {
+              return Err("Invalid upvalue index: ${idx}")
+            }
+          } else {
+            return Err("No closure in current frame")
+          }
+        }
+        
+        OP_CLOSE_UPVALUE => {
+          # Close upvalue en top of stack
+          stackSlot = this.valueStack.length() - 1
+          this.heap.closeUpvalues(stackSlot, this.valueStack)
+          this._pop()
+        }
+        
+        # CollectionsrEach((arg, idx) => {
+                this.currentFrame.unwrap().slots.append(arg)
+              })
+            }
+            
+            _ => return Err("Not callable: ${valueToString(funcValue)}")
+          }
+        }
+        
+        OP_RETURN => {
+          returnValue = this._pop()
+          
+          # Pop frame
+          this._popFrame()
+          
+          # Push return value
+          if let Some(_) = this.currentFrame {
+            this._push(returnValue)
+          }
+        }
+        
+        OP_RETURN_NONE => {
+          this._popFrame()
+          
+          if let Some(_) = this.currentFrame {
+            this._push(Value.None)
+          }
+        }
+        
+        # Collections
+        OP_BUILD_LIST => {
+          size = frame.readByte(this.bytecode)
+          list = VelaList()
+          
+          # Pop elements (reverse order)
+          elements = (0..size).map(_ => this._pop()).reverse()
+          elements.forEach(elem => list.append(elem))
+          
+          this._push(Value.List(list))
+        }
+        
+        OP_BUILD_MAP => {
+          size = frame.readByte(this.bytecode)
+          map = VelaMap()
+          
+          # Pop key-value pairs
+          (0..size).forEach(_ => {
+            value = this._pop()
+            key = this._popString()
+            map.set(key, value)
+          })
+          
+          this._push(Value.Map(map))
+        }
+        
+        OP_GET_ITEM => {
+          index = this._popNumber()
+          collection = this._pop()
+          
+          match collection {
+            Value.List(list) => {
+              match list.get(index) {
+                Some(value) => this._push(value)
+                None => return Err("Index out of bounds: ${index}")
+              }
+            }
+            _ => return Err("Not indexable")
+          }
+        }
+        
+        OP_SET_ITEM => {
+          value = this._pop()
+          index = this._popNumber()
+          collection = this._pop()
+          
+          match collection {
+            Value.List(list) => {
+              list.set(index, value)
+              this._push(Value.List(list))
+            }
+            _ => return Err("Not indexable")
+          }
+        }
+        
+        # Reactive
+        OP_SIGNAL_CREATE => {
+          initialValue = this._pop()
+          signal = VelaSignal(initialValue)
+          this._push(Value.Signal(signal))
+        }
+        
+        OP_SIGNAL_READ => {
+          signalValue = this._pop()
+          
+          match signalValue {
+            Value.Signal(signal) => {
+              this._push(signal.read())
+            }
+            _ => return Err("Not a signal")
+          }
+        }
+        
+        OP_SIGNAL_WRITE => {
+          newValue = this._pop()
+          signalValue = this._pop()
+          
+          match signalValue {
+            Value.Signal(signal) => {
+              signal.write(newValue)
+              this._push(Value.Signal(signal))
+            }
+            _ => return Err("Not a signal")
+          }
+        }
+        
+        # Exceptions
+        OP_THROW => {
+          exceptionValue = this._pop()
+          
+          match exceptionValue {
+            Value.Exception(exception) => {
+              return this._throwException(exception)
+            }
+            Value.String(message) => {
+              # Crear exception desde string
+              exception = createException(EXCEPTION_ERROR, message)
+              return this._throwException(exception)
+            }
+            _ => {
+              exception = createException(EXCEPTION_ERROR, valueToString(exceptionValue))
+              return this._throwException(exception)
+            }
+          }
+        }
+        
+        OP_TRY_BEGIN => {
+          catchOffset = frame.readI16(this.bytecode)
+          finallyOffset = frame.readI16(this.bytecode)
+          endOffset = frame.readI16(this.bytecode)
+          
+          # Crear handler
+          handler = ExceptionHandler(
+            frame.ip,  # tryStartIP
+            frame.ip + catchOffset,  # catchIP
+            finallyOffset > 0 ? frame.ip + finallyOffset : 0,  # finallyIP
+            frame.ip + endOffset,  # endIP
+            this.valueStack.length()  # stackDepth
+          )
+          
+          # Agregar a exception frame
+          if let Some(exFrame) = frame.exceptionFrame {
+            exFrame.addHandler(handler)
+          } else {
+            exFrame = ExceptionFrame()
+            exFrame.addHandler(handler)
+            frame.exceptionFrame = Some(exFrame)
+          }
+        }
+        
+        OP_TRY_END => {
+          # No-op: marca el fin del try block
+        }
+        
+        OP_CATCH => {
+          # Exception ya está en stack (pushed por _throwException)
+          # El bytecode siguiente puede usar la exception
+        }
+        
+        OP_FINALLY => {
+          # Marca inicio de finally block
+          if let Some(exFrame) = frame.exceptionFrame {
+            exFrame.inFinally = true
+          }
+        }
+        
+        OP_RERAISE => {
+          match this.currentException {
+            Some(exception) => {
+              return this._throwException(exception)
+            }
+            None => {
+              exception = createException(EXCEPTION_RUNTIME_ERROR, "No exception to reraise")
+              return this._throwException(exception)
+            }
+          }
+        }
+        
+        # Async
+        OP_CALL_ASYNC => {
+          argc = frame.readByte(this.bytecode)
+          callee = this._pop()
+          
+          # Similar a OP_CALL pero crea AsyncFrame
+          match callee {
+            Value.Function(fn) | Value.Closure(_) => {
+              # Crear async frame
+              asyncFrame = AsyncFrame(Some(frame))
+              
+              # TODO: Implementar async execution completo
+              # Por ahora, ejecutar sincrónicamente
+              this._push(callee)
+              
+              # Reuse OP_CALL logic
+              # (En implementación completa, suspender y retornar Promise)
+            }
+            _ => return Err("Not callable")
+          }
+        }
+        
+        OP_AWAIT => {
+          promiseValue = this._pop()
+          
+          # TODO: Implementar await completo
+          # Por ahora, si es AsyncContext completado, retornar resultado
+          match promiseValue {
+            Value.HeapObject(ref) => {
+              # Check if AsyncContext
+              # this._push(result)
+              return Err("Await not fully implemented")
+            }
+            _ => return Err("Await requires promise")
+          }
+        }
+        
+        # Debug
+        OP_DEBUG_LINE => {
+          lineNum = frame.readU16(this.bytecode)
+          # Store for stack traces
+        }
+        
+        OP_HALT => {
+          this.halted = true
+        }
+        
+        _ => {
+          return Err("Unknown opcode: 0x${opcode.toString(16)}")
+        }
+      }
+  """
+  Retorna estadísticas de ejecución.
+  """
+  public fn getStats() -> Map<String, Number> {
+    heapStats = this.heap.getStats()
+    
+    return {
+      "instructionsExecuted": this.instructionCount,
+      "stackDepth": this.valueStack.length(),
+      "callDepth": this.callStack.length(),
+      "constantsLoaded": this.constants.length(),
+      "heapObjects": heapStats["objectCount"],
+      "internedStrings": heapStats["internedStrings"],
+      "openUpvalues": heapStats["openUpvalues"],
+      "gcRuns": heapStats["gcRuns"],
+      "totalAllocated": heapStats["totalAllocated"],
+      "totalFreed": heapStats["totalFreed"]
+    }
+  }
+  
+  """
+  Ejecuta garbage collection manual.
+  """
+  public fn collectGarbage() -> Number {
+    # Set GC roots
+    this.gc.setRoots(this.valueStack, this.callStack, this.globals)
+    
+    # Run GC
+    return this.gc.collect()
+  }
+} }
+  
+  fn _pop() -> Value {
+    if this.valueStack.length() == 0 {
+      throw Error("Stack underflow")
+    }
+    return this.valueStack.removeAt(this.valueStack.length() - 1)
+  }
+  
+  fn _peek(distance: Number) -> Value {
+    idx = this.valueStack.length() - 1 - distance
+    return this.valueStack[idx]
+  }
+  
+  fn _popNumber() -> Number {
+    value = this._pop()
+    match value {
+      Value.Number(n) => n
+      _ => throw Error("Expected Number")
+    }
+  }
+  
+  fn _popString() -> String {
+    value = this._pop()
+    match value {
+      Value.String(s) => s
+      _ => throw Error("Expected String")
+    }
+  }
+  
+  # ========== Frame Management ==========
+  
+  fn _pushFrame(function: VelaFunction) -> void {
+    slotsOffset = this.valueStack.length()
+    frame = CallFrame(function, slotsOffset)
+    
+    this.callStack.append(frame)
+    this.currentFrame = Some(frame)
+  }
+  
+  fn _popFrame() -> void {
+    this.callStack.removeAt(this.callStack.length() - 1)
+    
+    if this.callStack.length() > 0 {
+      this.currentFrame = Some(this.callStack[this.callStack.length() - 1])
+    } else {
+      this.currentFrame = None
+    }
+  }
+  
+  # ========== Binary Operations ==========
+  
+  fn _binaryOp(op: (Number, Number) -> Number) -> void {
+    b = this._popNumber()
+    a = this._popNumber()
+    result = op(a, b)
+    this._push(Value.Number(result))
+  }
+  
+  fn _compareOp(op: (Number, Number) -> Bool) -> void {
+    b = this._popNumber()
+    a = this._popNumber()
+    result = op(a, b)
+    this._push(Value.Bool(result))
+  }
+  
+  # ========== Exception Handling ==========
+  
+  fn _throwException(exception: VelaException) -> Result<void, String> {
+    # Capturar stack trace
+    if let Some(frame) = this.currentFrame {
+      exception.stackTrace = this.unwinder.captureStackTrace(
+        this.callStack,
+        frame
+      )
+    }
+    
+    # Guardar exception actual
+    this.currentException = Some(exception)
+    
+    # Buscar handler
+    if let Some(frame) = this.currentFrame {
+      match this.unwinder.unwind(
+        this.callStack,
+        frame,
+        exception,
+        this.valueStack
+      ) {
+        Some((handler, handlerFrame)) => {
+          # Handler encontrado, saltar a catch block
+          handlerFrame.ip = handler.catchIP
+          
+          # Push exception al stack para catch block
+          this._push(Value.Exception(exception))
+          
+          # Actualizar current frame
+          this.currentFrame = Some(handlerFrame)
+          
+          return Ok(None)
+        }
+        
+        None => {
+          # No handler, exception sin manejar
+          return Err(exception.formatStackTrace())
+        }
+      }
+    }
+    
+    return Err(exception.toString())
+  }
+  
+  # ========== Utilities ==========
+  
+  fn _getConstantString(idx: Number) -> String {
+    constant = this.constants[idx]
+    match constant {
+      Value.String(s) => s
+      _ => throw Error("Expected string constant")
+    }
+  }
+  
+  """
+  Retorna estadísticas de ejecución.
+  """
+  public fn getStats() -> Map<String, Number> {
+    return {
+      "instructionsExecuted": this.instructionCount,
+      "stackDepth": this.valueStack.length(),
+      "callDepth": this.callStack.length(),
+      "constantsLoaded": this.constants.length()
+    }
+  }
+}
+
+
+# ============================================================================
+# PUBLIC API
+# ============================================================================
+
+"""
+Ejecuta bytecode Vela.
+
+Args:
+  bytecode: Bytecode completo (.velac file)
+  
+Returns:
+  Result<Value, String>: Resultado de la ejecución o error
+
+Example:
+  bytecode = readFile("program.velac")
+  
+  vm = VelaVM()
+  result = vm.loadBytecode(bytecode)
+  match result {
+    Ok(_) => {
+      result = vm.run()
+      match result {
+        Ok(value) => print("Result: ${valueToString(value)}")
+        Err(e) => print("Runtime error: ${e}")
+      }
+    }
+    Err(e) => print("Load error: ${e}")
+  }
+"""
+public fn executeBytecode(bytecode: List<Number>) -> Result<Value, String> {
+  vm = VelaVM()
+  
+  # Load bytecode
+  loadResult = vm.loadBytecode(bytecode)
+  match loadResult {
+    Ok(_) => { /* continue */ }
+    Err(e) => return Err(e)
+  }
+  
+  # Run
+  return vm.run()
+}
+
+
+# ============================================================================
+# MODULE EXPORTS
+# ============================================================================
+
+# Exports:
+# - VelaVM (clase principal)
+# - executeBytecode (función helper)
+# - Value, VelaObject, VelaFunction, etc. (para extensiones)

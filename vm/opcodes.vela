@@ -1,0 +1,513 @@
+"""
+VelaVM Bytecode Opcodes
+
+Definición completa del Instruction Set Architecture (ISA) para VelaVM.
+Este archivo es la referencia autorizada para todos los opcodes del bytecode.
+
+Implementación de: TASK-069
+Historia: US-16 - VelaVM Bytecode Interpreter
+Epic: EPIC-06: Compiler Backend
+Fecha: 2025-12-07
+
+Referencias:
+- ADR-069: docs/architecture/ADR-069-bytecode-instruction-set.md
+- Documentación: docs/features/US-16/TASK-069.md
+"""
+
+# ============================================================================
+# BYTECODE FILE FORMAT CONSTANTS
+# ============================================================================
+
+# Magic number: "VELA" en ASCII
+public MAGIC_NUMBER: Number = 0x56454C41
+
+# Version actual del bytecode format
+public VERSION_MAJOR: Number = 1
+public VERSION_MINOR: Number = 0
+
+# Constant pool type tags
+public CONST_TYPE_NONE: Number = 0x01
+public CONST_TYPE_BOOL: Number = 0x02
+public CONST_TYPE_NUMBER: Number = 0x03
+public CONST_TYPE_FLOAT: Number = 0x04
+public CONST_TYPE_STRING: Number = 0x05
+public CONST_TYPE_FUNCTION: Number = 0x06
+public CONST_TYPE_CLASS: Number = 0x07
+public CONST_TYPE_TYPE: Number = 0x08
+
+
+# ============================================================================
+# STACK OPERATIONS (0x00 - 0x0F)
+# ============================================================================
+
+public OP_NOP: Number = 0x00              # No operation
+public OP_POP: Number = 0x01              # Pop top of stack
+public OP_DUP: Number = 0x02              # Duplicate top
+public OP_DUP2: Number = 0x03             # Duplicate top 2 values
+public OP_SWAP: Number = 0x04             # Swap top 2 values
+public OP_ROT3: Number = 0x05             # Rotate top 3: (a,b,c) → (c,a,b)
+
+
+# ============================================================================
+# CONSTANTS (0x10 - 0x1F)
+# ============================================================================
+
+public OP_CONST_NONE: Number = 0x10       # Push None
+public OP_CONST_TRUE: Number = 0x11       # Push true
+public OP_CONST_FALSE: Number = 0x12      # Push false
+public OP_CONST_0: Number = 0x13          # Push 0
+public OP_CONST_1: Number = 0x14          # Push 1
+public OP_CONST_NEG1: Number = 0x15       # Push -1
+public OP_LOAD_CONST: Number = 0x16       # Load from constant pool (u16 idx)
+public OP_LOAD_CONST_SMALL: Number = 0x17 # Load small integer (u8 value)
+
+
+# ============================================================================
+# ARITHMETIC OPERATIONS (0x20 - 0x2F)
+# ============================================================================
+
+public OP_ADD: Number = 0x20              # a + b
+public OP_SUB: Number = 0x21              # a - b
+public OP_MUL: Number = 0x22              # a * b
+public OP_DIV: Number = 0x23              # a / b (float division)
+public OP_IDIV: Number = 0x24             # a // b (integer division)
+public OP_MOD: Number = 0x25              # a % b
+public OP_POW: Number = 0x26              # a ** b
+public OP_NEG: Number = 0x27              # -a (unary minus)
+public OP_ABS: Number = 0x28              # abs(a)
+public OP_INC: Number = 0x29              # a + 1 (optimized)
+public OP_DEC: Number = 0x2A              # a - 1 (optimized)
+
+
+# ============================================================================
+# BITWISE OPERATIONS (0x30 - 0x3F)
+# ============================================================================
+
+public OP_BIT_AND: Number = 0x30          # a & b
+public OP_BIT_OR: Number = 0x31           # a | b
+public OP_BIT_XOR: Number = 0x32          # a ^ b
+public OP_BIT_NOT: Number = 0x33          # ~a
+public OP_SHL: Number = 0x34              # a << b
+public OP_SHR: Number = 0x35              # a >> b (arithmetic)
+public OP_USHR: Number = 0x36             # a >>> b (logical)
+
+
+# ============================================================================
+# COMPARISON OPERATIONS (0x40 - 0x4F)
+# ============================================================================
+
+public OP_EQ: Number = 0x40               # a == b
+public OP_NE: Number = 0x41               # a != b
+public OP_LT: Number = 0x42               # a < b
+public OP_LE: Number = 0x43               # a <= b
+public OP_GT: Number = 0x44               # a > b
+public OP_GE: Number = 0x45               # a >= b
+public OP_IS_NONE: Number = 0x46          # a is None
+public OP_IS_NOT_NONE: Number = 0x47      # a is not None
+public OP_IS_TYPE: Number = 0x48          # Check runtime type (u8 type)
+
+
+# ============================================================================
+# LOGICAL OPERATIONS (0x50 - 0x5F)
+# ============================================================================
+
+public OP_LOGIC_AND: Number = 0x50        # a && b (via short-circuit jumps)
+public OP_LOGIC_OR: Number = 0x51         # a || b (via short-circuit jumps)
+public OP_LOGIC_NOT: Number = 0x52        # !a
+
+
+# ============================================================================
+# CONTROL FLOW (0x60 - 0x6F)
+# ============================================================================
+
+public OP_JUMP: Number = 0x60             # Unconditional jump (i16 offset)
+public OP_JUMP_IF_TRUE: Number = 0x61     # Jump if top is truthy (i16)
+public OP_JUMP_IF_FALSE: Number = 0x62    # Jump if top is falsy (i16)
+public OP_JUMP_IF_NONE: Number = 0x63     # Jump if top is None (i16)
+public OP_JUMP_FORWARD: Number = 0x64     # Short forward jump (u8 offset)
+public OP_LOOP: Number = 0x65             # Loop back (i16 negative offset)
+public OP_MATCH_JUMP_TABLE: Number = 0x66 # Pattern matching jump table (u16)
+
+
+# ============================================================================
+# VARIABLES (0x70 - 0x7F)
+# ============================================================================
+
+public OP_LOAD_LOCAL: Number = 0x70       # Load local variable (u8 idx)
+public OP_STORE_LOCAL: Number = 0x71      # Store to local variable (u8 idx)
+public OP_LOAD_GLOBAL: Number = 0x72      # Load global variable (u16 name_idx)
+public OP_STORE_GLOBAL: Number = 0x73     # Store to global (u16 name_idx)
+public OP_LOAD_UPVALUE: Number = 0x74     # Load captured var (u8 idx)
+public OP_STORE_UPVALUE: Number = 0x75    # Store to captured var (u8 idx)
+public OP_LOAD_FAST: Number = 0x76        # Optimized local load (u8 idx)
+public OP_STORE_FAST: Number = 0x77       # Optimized local store (u8 idx)
+
+
+# ============================================================================
+# FUNCTION CALLS (0x80 - 0x8F)
+# ============================================================================
+
+public OP_CALL: Number = 0x80             # Call function (u8 argc)
+public OP_CALL_METHOD: Number = 0x81      # Call method (u8 argc, u16 name_idx)
+public OP_RETURN: Number = 0x82           # Return from function
+public OP_RETURN_NONE: Number = 0x83      # Return None (optimization)
+public OP_TAIL_CALL: Number = 0x84        # Tail-call optimization (u8 argc)
+public OP_CALL_BUILTIN: Number = 0x85     # Call builtin (u8 id, u8 argc)
+public OP_CALL_ASYNC: Number = 0x86       # Async function call (u8 argc)
+public OP_AWAIT: Number = 0x87            # Await promise/future
+
+
+# ============================================================================
+# OBJECT OPERATIONS (0x90 - 0x9F)
+# ============================================================================
+
+public OP_NEW_OBJECT: Number = 0x90       # Create object instance (u16 class_idx)
+public OP_GET_ATTR: Number = 0x91         # Get attribute (u16 name_idx)
+public OP_SET_ATTR: Number = 0x92         # Set attribute (u16 name_idx)
+public OP_GET_METHOD: Number = 0x93       # Get bound method (u16 name_idx)
+public OP_LOAD_THIS: Number = 0x94        # Load 'this' reference
+public OP_LOAD_SUPER: Number = 0x95       # Load 'super' reference
+public OP_DELETE_ATTR: Number = 0x96      # Delete attribute (u16 name_idx)
+public OP_HAS_ATTR: Number = 0x97         # Check attribute exists (u16 name_idx)
+
+
+# ============================================================================
+# COLLECTIONS (0xA0 - 0xAF)
+# ============================================================================
+
+public OP_BUILD_LIST: Number = 0xA0       # Build list (u8 size)
+public OP_BUILD_MAP: Number = 0xA1        # Build map (u8 size)
+public OP_BUILD_SET: Number = 0xA2        # Build set (u8 size)
+public OP_BUILD_TUPLE: Number = 0xA3      # Build tuple (u8 size)
+public OP_LIST_APPEND: Number = 0xA4      # Append to list
+public OP_MAP_INSERT: Number = 0xA5       # Insert to map
+public OP_GET_ITEM: Number = 0xA6         # collection[index]
+public OP_SET_ITEM: Number = 0xA7         # collection[index] = value
+public OP_DELETE_ITEM: Number = 0xA8      # delete collection[index]
+public OP_GET_SLICE: Number = 0xA9        # collection[start:end]
+public OP_CONTAINS: Number = 0xAA         # key in collection
+public OP_LIST_EXTEND: Number = 0xAB      # list1.extend(list2)
+
+
+# ============================================================================
+# STRING OPERATIONS (0xB0 - 0xBF)
+# ============================================================================
+
+public OP_BUILD_STRING: Number = 0xB0     # Concatenate N strings (u8 count)
+public OP_FORMAT_STRING: Number = 0xB1    # String interpolation ${} (u8 parts)
+public OP_STRING_CONCAT: Number = 0xB2    # a + b (string concat)
+public OP_STRING_REPEAT: Number = 0xB3    # string * n
+public OP_STRING_SLICE: Number = 0xB4     # string[start:end]
+
+
+# ============================================================================
+# TYPE OPERATIONS (0xC0 - 0xCF)
+# ============================================================================
+
+public OP_CAST: Number = 0xC0             # Type cast (u8 type)
+public OP_INSTANCEOF: Number = 0xC1       # Check instanceof (u16 class_idx)
+public OP_TYPEOF: Number = 0xC2           # Get type of value
+public OP_AS_NUMBER: Number = 0xC3        # Convert to Number
+public OP_AS_STRING: Number = 0xC4        # Convert to String
+public OP_AS_BOOL: Number = 0xC5          # Convert to Bool
+
+
+# ============================================================================
+# CLOSURES & FUNCTIONS (0xD0 - 0xDF)
+# ============================================================================
+
+public OP_MAKE_CLOSURE: Number = 0xD0     # Create closure (u16 fn_idx, u8 upvalue_count)
+public OP_LOAD_CLOSURE: Number = 0xD1     # Load closure (u8 idx)
+public OP_CLOSE_UPVALUE: Number = 0xD2    # Close over variable (u8 idx)
+public OP_MAKE_GENERATOR: Number = 0xD3   # Create generator (u16 fn_idx)
+public OP_YIELD: Number = 0xD4            # Yield value
+public OP_YIELD_FROM: Number = 0xD5       # Yield from generator
+
+
+# ============================================================================
+# EXCEPTION HANDLING (0xE0 - 0xEF)
+# ============================================================================
+
+public OP_THROW: Number = 0xE0            # Throw exception
+public OP_TRY_BEGIN: Number = 0xE1        # Begin try block (u16 catch_offset)
+public OP_TRY_END: Number = 0xE2          # End try block
+public OP_CATCH: Number = 0xE3            # Catch exception (u16 name_idx)
+public OP_FINALLY: Number = 0xE4          # Finally block (u16 offset)
+public OP_RERAISE: Number = 0xE5          # Re-throw caught exception
+
+
+# ============================================================================
+# REACTIVE SYSTEM (0xF0 - 0xF7)
+# Vela-specific: Native reactive programming support
+# ============================================================================
+
+public OP_SIGNAL_CREATE: Number = 0xF0    # Create reactive signal
+public OP_SIGNAL_READ: Number = 0xF1      # Read signal (subscribe)
+public OP_SIGNAL_WRITE: Number = 0xF2     # Write signal (notify)
+public OP_COMPUTED_CREATE: Number = 0xF3  # Create computed signal (u16 fn_idx)
+public OP_EFFECT_CREATE: Number = 0xF4    # Create effect (u16 fn_idx)
+public OP_WATCH_CREATE: Number = 0xF5     # Create watcher (u16 fn_idx)
+public OP_BATCH_UPDATE_BEGIN: Number = 0xF6  # Begin batch update
+public OP_BATCH_UPDATE_END: Number = 0xF7    # End batch update
+
+
+# ============================================================================
+# ACTOR SYSTEM (0xF8 - 0xFD)
+# Vela-specific: Native actor-based concurrency
+# ============================================================================
+
+public OP_ACTOR_SPAWN: Number = 0xF8      # Spawn new actor (u16 actor_idx)
+public OP_ACTOR_SEND: Number = 0xF9       # Send message to actor
+public OP_ACTOR_RECEIVE: Number = 0xFA    # Receive message (blocking)
+public OP_ACTOR_SELF: Number = 0xFB       # Get current actor reference
+public OP_ACTOR_LINK: Number = 0xFC       # Link two actors
+public OP_ACTOR_MONITOR: Number = 0xFD    # Monitor actor
+
+
+# ============================================================================
+# DEBUG & METADATA (0xFE - 0xFF)
+# ============================================================================
+
+public OP_DEBUG_LINE: Number = 0xFE       # Source line number (u16 line)
+public OP_HALT: Number = 0xFF             # Stop execution
+
+
+# ============================================================================
+# OPCODE METADATA
+# ============================================================================
+
+# Mapa de opcodes a nombres (para debugging/disassembly)
+public OPCODE_NAMES: Map<Number, String> = {
+  # Stack Operations
+  0x00: "NOP", 0x01: "POP", 0x02: "DUP", 0x03: "DUP2",
+  0x04: "SWAP", 0x05: "ROT3",
+  
+  # Constants
+  0x10: "CONST_NONE", 0x11: "CONST_TRUE", 0x12: "CONST_FALSE",
+  0x13: "CONST_0", 0x14: "CONST_1", 0x15: "CONST_NEG1",
+  0x16: "LOAD_CONST", 0x17: "LOAD_CONST_SMALL",
+  
+  # Arithmetic
+  0x20: "ADD", 0x21: "SUB", 0x22: "MUL", 0x23: "DIV",
+  0x24: "IDIV", 0x25: "MOD", 0x26: "POW", 0x27: "NEG",
+  0x28: "ABS", 0x29: "INC", 0x2A: "DEC",
+  
+  # Bitwise
+  0x30: "BIT_AND", 0x31: "BIT_OR", 0x32: "BIT_XOR", 0x33: "BIT_NOT",
+  0x34: "SHL", 0x35: "SHR", 0x36: "USHR",
+  
+  # Comparison
+  0x40: "EQ", 0x41: "NE", 0x42: "LT", 0x43: "LE",
+  0x44: "GT", 0x45: "GE", 0x46: "IS_NONE", 0x47: "IS_NOT_NONE",
+  0x48: "IS_TYPE",
+  
+  # Logical
+  0x50: "LOGIC_AND", 0x51: "LOGIC_OR", 0x52: "LOGIC_NOT",
+  
+  # Control Flow
+  0x60: "JUMP", 0x61: "JUMP_IF_TRUE", 0x62: "JUMP_IF_FALSE",
+  0x63: "JUMP_IF_NONE", 0x64: "JUMP_FORWARD", 0x65: "LOOP",
+  0x66: "MATCH_JUMP_TABLE",
+  
+  # Variables
+  0x70: "LOAD_LOCAL", 0x71: "STORE_LOCAL", 0x72: "LOAD_GLOBAL",
+  0x73: "STORE_GLOBAL", 0x74: "LOAD_UPVALUE", 0x75: "STORE_UPVALUE",
+  0x76: "LOAD_FAST", 0x77: "STORE_FAST",
+  
+  # Function Calls
+  0x80: "CALL", 0x81: "CALL_METHOD", 0x82: "RETURN",
+  0x83: "RETURN_NONE", 0x84: "TAIL_CALL", 0x85: "CALL_BUILTIN",
+  0x86: "CALL_ASYNC", 0x87: "AWAIT",
+  
+  # Objects
+  0x90: "NEW_OBJECT", 0x91: "GET_ATTR", 0x92: "SET_ATTR",
+  0x93: "GET_METHOD", 0x94: "LOAD_THIS", 0x95: "LOAD_SUPER",
+  0x96: "DELETE_ATTR", 0x97: "HAS_ATTR",
+  
+  # Collections
+  0xA0: "BUILD_LIST", 0xA1: "BUILD_MAP", 0xA2: "BUILD_SET",
+  0xA3: "BUILD_TUPLE", 0xA4: "LIST_APPEND", 0xA5: "MAP_INSERT",
+  0xA6: "GET_ITEM", 0xA7: "SET_ITEM", 0xA8: "DELETE_ITEM",
+  0xA9: "GET_SLICE", 0xAA: "CONTAINS", 0xAB: "LIST_EXTEND",
+  
+  # Strings
+  0xB0: "BUILD_STRING", 0xB1: "FORMAT_STRING", 0xB2: "STRING_CONCAT",
+  0xB3: "STRING_REPEAT", 0xB4: "STRING_SLICE",
+  
+  # Types
+  0xC0: "CAST", 0xC1: "INSTANCEOF", 0xC2: "TYPEOF",
+  0xC3: "AS_NUMBER", 0xC4: "AS_STRING", 0xC5: "AS_BOOL",
+  
+  # Closures
+  0xD0: "MAKE_CLOSURE", 0xD1: "LOAD_CLOSURE", 0xD2: "CLOSE_UPVALUE",
+  0xD3: "MAKE_GENERATOR", 0xD4: "YIELD", 0xD5: "YIELD_FROM",
+  
+  # Exceptions
+  0xE0: "THROW", 0xE1: "TRY_BEGIN", 0xE2: "TRY_END",
+  0xE3: "CATCH", 0xE4: "FINALLY", 0xE5: "RERAISE",
+  
+  # Reactive
+  0xF0: "SIGNAL_CREATE", 0xF1: "SIGNAL_READ", 0xF2: "SIGNAL_WRITE",
+  0xF3: "COMPUTED_CREATE", 0xF4: "EFFECT_CREATE", 0xF5: "WATCH_CREATE",
+  0xF6: "BATCH_UPDATE_BEGIN", 0xF7: "BATCH_UPDATE_END",
+  
+  # Actors
+  0xF8: "ACTOR_SPAWN", 0xF9: "ACTOR_SEND", 0xFA: "ACTOR_RECEIVE",
+  0xFB: "ACTOR_SELF", 0xFC: "ACTOR_LINK", 0xFD: "ACTOR_MONITOR",
+  
+  # Debug
+  0xFE: "DEBUG_LINE", 0xFF: "HALT"
+}
+
+# Tamaños de instrucciones (en bytes, incluyendo opcode)
+public OPCODE_SIZES: Map<Number, Number> = {
+  # 1 byte (opcode solo)
+  0x00: 1, 0x01: 1, 0x02: 1, 0x03: 1, 0x04: 1, 0x05: 1,
+  0x10: 1, 0x11: 1, 0x12: 1, 0x13: 1, 0x14: 1, 0x15: 1,
+  0x20: 1, 0x21: 1, 0x22: 1, 0x23: 1, 0x24: 1, 0x25: 1,
+  0x26: 1, 0x27: 1, 0x28: 1, 0x29: 1, 0x2A: 1,
+  0x30: 1, 0x31: 1, 0x32: 1, 0x33: 1, 0x34: 1, 0x35: 1, 0x36: 1,
+  0x40: 1, 0x41: 1, 0x42: 1, 0x43: 1, 0x44: 1, 0x45: 1,
+  0x46: 1, 0x47: 1,
+  0x50: 1, 0x51: 1, 0x52: 1,
+  0x82: 1, 0x83: 1, 0x87: 1,
+  0x94: 1, 0x95: 1,
+  0xA4: 1, 0xA5: 1, 0xA6: 1, 0xA7: 1, 0xA8: 1, 0xA9: 1, 0xAA: 1, 0xAB: 1,
+  0xB2: 1, 0xB3: 1, 0xB4: 1,
+  0xC2: 1, 0xC3: 1, 0xC4: 1, 0xC5: 1,
+  0xD4: 1, 0xD5: 1,
+  0xE0: 1, 0xE2: 1, 0xE5: 1,
+  0xF0: 1, 0xF1: 1, 0xF2: 1, 0xF6: 1, 0xF7: 1,
+  0xF9: 1, 0xFA: 1, 0xFB: 1, 0xFC: 1, 0xFD: 1,
+  0xFF: 1,
+  
+  # 2 bytes (opcode + u8)
+  0x17: 2, 0x48: 2, 0x64: 2,
+  0x70: 2, 0x71: 2, 0x74: 2, 0x75: 2, 0x76: 2, 0x77: 2,
+  0x80: 2, 0x84: 2,
+  0xA0: 2, 0xA1: 2, 0xA2: 2, 0xA3: 2,
+  0xB0: 2, 0xB1: 2,
+  0xC0: 2,
+  0xD1: 2, 0xD2: 2,
+  
+  # 3 bytes (opcode + u16)
+  0x16: 3,
+  0x60: 3, 0x61: 3, 0x62: 3, 0x63: 3, 0x65: 3, 0x66: 3,
+  0x72: 3, 0x73: 3,
+  0x90: 3, 0x91: 3, 0x92: 3, 0x93: 3, 0x96: 3, 0x97: 3,
+  0xC1: 3,
+  0xD3: 3,
+  0xE1: 3, 0xE3: 3, 0xE4: 3,
+  0xF3: 3, 0xF4: 3, 0xF5: 3,
+  0xF8: 3,
+  0xFE: 3,
+  
+  # 4 bytes (opcode + 2 operands)
+  0x81: 4, 0x85: 4,
+  0xD0: 4
+}
+
+
+# ============================================================================
+# UTILITY FUNCTIONS
+# ============================================================================
+
+"""
+Obtiene el nombre de un opcode para debugging.
+
+Args:
+  opcode: El código de operación (0x00 - 0xFF)
+
+Returns:
+  String: Nombre del opcode o "UNKNOWN_XX" si no existe
+"""
+public fn getOpcodeName(opcode: Number) -> String {
+  return OPCODE_NAMES.get(opcode)
+    .unwrapOr("UNKNOWN_${opcode.toString(16).toUpperCase()}")
+}
+
+"""
+Obtiene el tamaño de una instrucción en bytes.
+
+Args:
+  opcode: El código de operación
+
+Returns:
+  Number: Tamaño en bytes (1-4)
+"""
+public fn getOpcodeSize(opcode: Number) -> Number {
+  return OPCODE_SIZES.get(opcode).unwrapOr(1)
+}
+
+"""
+Verifica si un opcode es válido.
+
+Args:
+  opcode: El código de operación a verificar
+
+Returns:
+  Bool: true si el opcode está definido
+"""
+public fn isValidOpcode(opcode: Number) -> Bool {
+  return OPCODE_NAMES.contains(opcode)
+}
+
+"""
+Cuenta el número total de opcodes definidos.
+
+Returns:
+  Number: Cantidad de opcodes implementados
+"""
+public fn getTotalOpcodes() -> Number {
+  return OPCODE_NAMES.size()
+}
+
+
+# ============================================================================
+# CATEGORÍAS DE INSTRUCCIONES (para análisis y optimización)
+# ============================================================================
+
+public CATEGORY_STACK: List<Number> = [
+  OP_NOP, OP_POP, OP_DUP, OP_DUP2, OP_SWAP, OP_ROT3
+]
+
+public CATEGORY_CONSTANTS: List<Number> = [
+  OP_CONST_NONE, OP_CONST_TRUE, OP_CONST_FALSE,
+  OP_CONST_0, OP_CONST_1, OP_CONST_NEG1,
+  OP_LOAD_CONST, OP_LOAD_CONST_SMALL
+]
+
+public CATEGORY_ARITHMETIC: List<Number> = [
+  OP_ADD, OP_SUB, OP_MUL, OP_DIV, OP_IDIV, OP_MOD,
+  OP_POW, OP_NEG, OP_ABS, OP_INC, OP_DEC
+]
+
+public CATEGORY_CONTROL_FLOW: List<Number> = [
+  OP_JUMP, OP_JUMP_IF_TRUE, OP_JUMP_IF_FALSE,
+  OP_JUMP_IF_NONE, OP_JUMP_FORWARD, OP_LOOP,
+  OP_MATCH_JUMP_TABLE
+]
+
+public CATEGORY_CALLS: List<Number> = [
+  OP_CALL, OP_CALL_METHOD, OP_RETURN, OP_RETURN_NONE,
+  OP_TAIL_CALL, OP_CALL_BUILTIN, OP_CALL_ASYNC, OP_AWAIT
+]
+
+public CATEGORY_REACTIVE: List<Number> = [
+  OP_SIGNAL_CREATE, OP_SIGNAL_READ, OP_SIGNAL_WRITE,
+  OP_COMPUTED_CREATE, OP_EFFECT_CREATE, OP_WATCH_CREATE,
+  OP_BATCH_UPDATE_BEGIN, OP_BATCH_UPDATE_END
+]
+
+public CATEGORY_ACTORS: List<Number> = [
+  OP_ACTOR_SPAWN, OP_ACTOR_SEND, OP_ACTOR_RECEIVE,
+  OP_ACTOR_SELF, OP_ACTOR_LINK, OP_ACTOR_MONITOR
+]
+
+
+# ============================================================================
+# MODULE EXPORTS
+# ============================================================================
+
+# Este módulo exporta todas las constantes y funciones como public
+# No requiere export explícito (Vela usa modificador public en lugar de export)

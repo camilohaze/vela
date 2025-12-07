@@ -1,0 +1,665 @@
+"""
+VelaVM Heap Manager & Garbage Collector
+
+Heap allocation para objetos de larga vida (closures, objects, upvalues).
+Garbage collector mark-and-sweep con generational optimization.
+
+Implementación de: TASK-072
+Historia: US-16 - VelaVM Bytecode Interpreter
+Epic: EPIC-06: Compiler Backend
+Fecha: 2025-12-07
+
+Referencias:
+- TASK-071: vm/velavm.vela (integración con VM)
+- ADR-069: Especificación de opcodes de closures
+- Documentación: docs/features/US-16/TASK-072.md
+"""
+
+import 'module:vm/opcodes' show {
+  OP_MAKE_CLOSURE, OP_LOAD_UPVALUE, OP_STORE_UPVALUE,
+  OP_CLOSE_UPVALUE, OP_LOAD_CLOSURE
+}
+
+
+# ============================================================================
+# HEAP OBJECT REPRESENTATION
+# ============================================================================
+
+"""
+HeapObject: Base type para todos los objetos en heap.
+Tagged para GC (mark bit + generation).
+"""
+public enum HeapObject {
+  Closure(VelaClosure),
+  Upvalue(VelaUpvalue),
+  Instance(VelaInstance),
+  Class(VelaClass),
+  BoundMethod(VelaBoundMethod),
+  String(VelaString),         # Strings interned en heap
+  List(VelaHeapList),         # Listas grandes en heap
+  Map(VelaHeapMap)            # Maps grandes en heap
+}
+
+"""
+GC metadata para cada heap object.
+"""
+public class GCMetadata {
+  public marked: Bool = false         # Mark bit para GC
+  public generation: Number = 0       # Generational GC (0=young, 1=old)
+  public size: Number = 0             # Size en bytes (para stats)
+  public next: Option<HeapObjectRef> = None  # Linked list para heap
+  
+  constructor(size: Number) {
+    this.size = size
+  }
+}
+
+"""
+HeapObjectRef: Referencia a objeto en heap (con metadata).
+"""
+public class HeapObjectRef {
+  public object: HeapObject
+  public metadata: GCMetadata
+  
+  constructor(object: HeapObject, size: Number) {
+    this.object = object
+    this.metadata = GCMetadata(size)
+  }
+}
+
+
+# ============================================================================
+# CLOSURES & UPVALUES
+# ============================================================================
+
+"""
+VelaClosure: Closure (function + upvalues capturados).
+"""
+public class VelaClosure {
+  public function: VelaFunction      # Function object
+  public upvalues: List<VelaUpvalue> = []  # Captured upvalues
+  
+  constructor(function: VelaFunction) {
+    this.function = function
+  }
+  
+  override fn toString() -> String {
+    return "<closure ${this.function.name}>"
+  }
+}
+
+"""
+VelaUpvalue: Upvalue (variable capturada por closure).
+Un upvalue puede estar:
+- "open": Apunta a slot en stack (mutable)
+- "closed": Copiado a heap (inmutable después de close)
+"""
+public class VelaUpvalue {
+  public location: Option<Number> = None  # Stack slot si open
+  public closed: Option<Value> = None     # Heap value si closed
+  public next: Option<VelaUpvalue> = None # Linked list de open upvalues
+  
+  """
+  Lee el valor del upvalue (open o closed).
+  """
+  public fn read(valueStack: List<Value>) -> Value {
+    match (this.location, this.closed) {
+      (Some(slot), _) => {
+        # Open upvalue: leer del stack
+        return valueStack[slot]
+      }
+      (_, Some(value)) => {
+        # Closed upvalue: leer del heap
+        return value
+      }
+      _ => throw Error("Invalid upvalue state")
+    }
+  }
+  
+  """
+  Escribe al upvalue (solo si open).
+  """
+  public fn write(valueStack: List<Value>, newValue: Value) -> void {
+    match this.location {
+      Some(slot) => {
+        # Open upvalue: escribir al stack
+        valueStack[slot] = newValue
+      }
+      None => throw Error("Cannot write to closed upvalue")
+    }
+  }
+  
+  """
+  Cierra el upvalue (copia del stack al heap).
+  """
+  public fn close(valueStack: List<Value>) -> void {
+    match this.location {
+      Some(slot) => {
+        # Copiar valor del stack al heap
+        this.closed = Some(valueStack[slot])
+        this.location = None
+      }
+      None => { /* Already closed */ }
+    }
+  }
+  
+  public fn isOpen() -> Bool {
+    return this.location.isSome()
+  }
+  
+  public fn isClosed() -> Bool {
+    return this.closed.isSome()
+  }
+  
+  override fn toString() -> String {
+    match (this.location, this.closed) {
+      (Some(slot), _) => "<upvalue @stack[${slot}]>"
+      (_, Some(value)) => "<upvalue closed: ${value}>"
+      _ => "<upvalue invalid>"
+    }
+  }
+}
+
+
+# ============================================================================
+# CLASSES & INSTANCES
+# ============================================================================
+
+"""
+VelaClass: Runtime class object.
+"""
+public class VelaClass {
+  public name: String
+  public methods: Map<String, VelaClosure> = {}
+  public superclass: Option<VelaClass> = None
+  
+  constructor(name: String) {
+    this.name = name
+  }
+  
+  public fn getMethod(name: String) -> Option<VelaClosure> {
+    # Buscar en esta clase
+    match this.methods.get(name) {
+      Some(method) => return Some(method)
+      None => { /* continue */ }
+    }
+    
+    # Buscar en superclass
+    match this.superclass {
+      Some(super) => return super.getMethod(name)
+      None => return None
+    }
+  }
+  
+  override fn toString() -> String {
+    return "<class ${this.name}>"
+  }
+}
+
+"""
+VelaInstance: Instancia de clase.
+"""
+public class VelaInstance {
+  public klass: VelaClass
+  public fields: Map<String, Value> = {}
+  
+  constructor(klass: VelaClass) {
+    this.klass = klass
+  }
+  
+  public fn getField(name: String) -> Option<Value> {
+    return this.fields.get(name)
+  }
+  
+  public fn setField(name: String, value: Value) -> void {
+    this.fields.set(name, value)
+  }
+  
+  override fn toString() -> String {
+    return "<${this.klass.name} instance>"
+  }
+}
+
+"""
+VelaBoundMethod: Method bound to instance.
+"""
+public class VelaBoundMethod {
+  public receiver: VelaInstance
+  public method: VelaClosure
+  
+  constructor(receiver: VelaInstance, method: VelaClosure) {
+    this.receiver = receiver
+    this.method = method
+  }
+  
+  override fn toString() -> String {
+    return "<bound method ${this.method.function.name}>"
+  }
+}
+
+
+# ============================================================================
+# INTERNED STRINGS
+# ============================================================================
+
+"""
+VelaString: String interned en heap (deduplication).
+"""
+public class VelaString {
+  public value: String
+  public hash: Number  # Cached hash
+  
+  constructor(value: String) {
+    this.value = value
+    this.hash = this._computeHash(value)
+  }
+  
+  fn _computeHash(s: String) -> Number {
+    # FNV-1a hash
+    hash: Number = 2166136261
+    
+    s.bytes().forEach(byte => {
+      hash = hash ^ byte
+      hash = hash * 16777619
+    })
+    
+    return hash
+  }
+  
+  override fn toString() -> String {
+    return this.value
+  }
+}
+
+
+# ============================================================================
+# HEAP ALLOCATOR
+# ============================================================================
+
+"""
+VelaHeap: Heap allocator con garbage collection.
+"""
+public class VelaHeap {
+  # Heap objects (linked list)
+  objects: Option<HeapObjectRef> = None
+  objectCount: Number = 0
+  
+  # String interning (deduplication)
+  internedStrings: Map<String, HeapObjectRef> = {}
+  
+  # Open upvalues (por stack slot)
+  openUpvalues: Map<Number, VelaUpvalue> = {}
+  
+  # GC configuration
+  gcThreshold: Number = 1024           # Objects antes de GC
+  nextGC: Number = 1024
+  
+  # GC statistics
+  gcRuns: Number = 0
+  totalAllocated: Number = 0
+  totalFreed: Number = 0
+  
+  """
+  Aloca un objeto en heap.
+  """
+  public fn allocate(object: HeapObject, size: Number) -> HeapObjectRef {
+    # Check if GC needed
+    if this.objectCount >= this.nextGC {
+      this._triggerGC()
+    }
+    
+    # Create heap object reference
+    ref = HeapObjectRef(object, size)
+    
+    # Add to linked list
+    ref.metadata.next = this.objects
+    this.objects = Some(ref)
+    
+    # Update stats
+    this.objectCount = this.objectCount + 1
+    this.totalAllocated = this.totalAllocated + size
+    
+    return ref
+  }
+  
+  """
+  Aloca closure en heap.
+  """
+  public fn allocateClosure(closure: VelaClosure) -> HeapObjectRef {
+    size = 32 + (closure.upvalues.length() * 8)  # Estimate
+    return this.allocate(HeapObject.Closure(closure), size)
+  }
+  
+  """
+  Aloca upvalue en heap.
+  """
+  public fn allocateUpvalue(upvalue: VelaUpvalue) -> HeapObjectRef {
+    size = 24  # Estimate
+    return this.allocate(HeapObject.Upvalue(upvalue), size)
+  }
+  
+  """
+  Aloca class en heap.
+  """
+  public fn allocateClass(klass: VelaClass) -> HeapObjectRef {
+    size = 64 + (klass.methods.size() * 16)  # Estimate
+    return this.allocate(HeapObject.Class(klass), size)
+  }
+  
+  """
+  Aloca instance en heap.
+  """
+  public fn allocateInstance(instance: VelaInstance) -> HeapObjectRef {
+    size = 32 + (instance.fields.size() * 16)  # Estimate
+    return this.allocate(HeapObject.Instance(instance), size)
+  }
+  
+  """
+  Interna string (con deduplication).
+  """
+  public fn internString(value: String) -> HeapObjectRef {
+    # Check if already interned
+    match this.internedStrings.get(value) {
+      Some(ref) => return ref
+      None => { /* continue */ }
+    }
+    
+    # Intern new string
+    velaString = VelaString(value)
+    size = 24 + value.length()
+    ref = this.allocate(HeapObject.String(velaString), size)
+    
+    # Add to interned map
+    this.internedStrings.set(value, ref)
+    
+    return ref
+  }
+  
+  """
+  Captura upvalue (o reutiliza existente).
+  """
+  public fn captureUpvalue(
+    stackSlot: Number,
+    valueStack: List<Value>
+  ) -> VelaUpvalue {
+    # Check if already captured
+    match this.openUpvalues.get(stackSlot) {
+      Some(upvalue) => return upvalue
+      None => { /* continue */ }
+    }
+    
+    # Create new open upvalue
+    upvalue = VelaUpvalue()
+    upvalue.location = Some(stackSlot)
+    
+    # Add to open upvalues
+    this.openUpvalues.set(stackSlot, upvalue)
+    
+    return upvalue
+  }
+  
+  """
+  Cierra upvalues >= stackSlot.
+  """
+  public fn closeUpvalues(
+    stackSlot: Number,
+    valueStack: List<Value>
+  ) -> void {
+    # Cerrar todos los upvalues >= stackSlot
+    slotsToClose = this.openUpvalues.keys()
+      .filter(slot => slot >= stackSlot)
+      .sort()
+    
+    slotsToClose.forEach(slot => {
+      match this.openUpvalues.get(slot) {
+        Some(upvalue) => {
+          upvalue.close(valueStack)
+          this.openUpvalues.remove(slot)
+        }
+        None => { /* continue */ }
+      }
+    })
+  }
+  
+  """
+  Trigger garbage collection.
+  """
+  fn _triggerGC() -> void {
+    # TODO: Implement in TASK-073 with root set from VM
+    this.gcRuns = this.gcRuns + 1
+    
+    # For now, just increase threshold (no actual collection)
+    this.nextGC = this.nextGC * 2
+  }
+  
+  """
+  Retorna estadísticas del heap.
+  """
+  public fn getStats() -> Map<String, Number> {
+    return {
+      "objectCount": this.objectCount,
+      "internedStrings": this.internedStrings.size(),
+      "openUpvalues": this.openUpvalues.size(),
+      "gcRuns": this.gcRuns,
+      "totalAllocated": this.totalAllocated,
+      "totalFreed": this.totalFreed,
+      "nextGC": this.nextGC
+    }
+  }
+}
+
+
+# ============================================================================
+# GARBAGE COLLECTOR
+# ============================================================================
+
+"""
+VelaGC: Garbage collector (mark-and-sweep).
+"""
+public class VelaGC {
+  heap: VelaHeap
+  
+  # GC roots (suministrados por VM)
+  valueStack: List<Value> = []
+  callStack: List<CallFrame> = []
+  globals: Map<String, Value> = {}
+  
+  constructor(heap: VelaHeap) {
+    this.heap = heap
+  }
+  
+  """
+  Ejecuta garbage collection.
+  """
+  public fn collect() -> Number {
+    # Phase 1: Mark
+    this._markRoots()
+    
+    # Phase 2: Sweep
+    freedCount = this._sweep()
+    
+    # Update heap stats
+    this.heap.gcRuns = this.heap.gcRuns + 1
+    
+    return freedCount
+  }
+  
+  """
+  Mark phase: marca objetos alcanzables desde roots.
+  """
+  fn _markRoots() -> void {
+    # Mark value stack
+    this.valueStack.forEach(value => {
+      this._markValue(value)
+    })
+    
+    # Mark call stack frames
+    this.callStack.forEach(frame => {
+      # Mark function
+      this._markValue(Value.Function(frame.function))
+      
+      # Mark slots
+      frame.slots.forEach(value => {
+        this._markValue(value)
+      })
+    })
+    
+    # Mark globals
+    this.globals.values().forEach(value => {
+      this._markValue(value)
+    })
+  }
+  
+  """
+  Marca un valor recursivamente.
+  """
+  fn _markValue(value: Value) -> void {
+    match value {
+      Value.Object(obj) => {
+        # Mark heap object
+        # TODO: Traverse heap to find ref
+      }
+      
+      Value.Function(fn) => {
+        # Mark function upvalues si es closure
+        # TODO: Implement
+      }
+      
+      Value.List(list) => {
+        # Mark list elements
+        list.items.forEach(item => {
+          this._markValue(item)
+        })
+      }
+      
+      Value.Map(map) => {
+        # Mark map values
+        map.entries.values().forEach(v => {
+          this._markValue(v)
+        })
+      }
+      
+      _ => { /* Primitivos no necesitan mark */ }
+    }
+  }
+  
+  """
+  Sweep phase: libera objetos no marcados.
+  """
+  fn _sweep() -> Number {
+    freedCount: Number = 0
+    
+    # Traverse linked list
+    current = this.heap.objects
+    prev: Option<HeapObjectRef> = None
+    
+    while let Some(ref) = current {
+      if !ref.metadata.marked {
+        # Free object
+        freedCount = freedCount + 1
+        this.heap.totalFreed = this.heap.totalFreed + ref.metadata.size
+        this.heap.objectCount = this.heap.objectCount - 1
+        
+        # Remove from linked list
+        match prev {
+          Some(prevRef) => {
+            prevRef.metadata.next = ref.metadata.next
+          }
+          None => {
+            this.heap.objects = ref.metadata.next
+          }
+        }
+        
+        current = ref.metadata.next
+      } else {
+        # Unmark for next GC
+        ref.metadata.marked = false
+        
+        prev = Some(ref)
+        current = ref.metadata.next
+      }
+    }
+    
+    return freedCount
+  }
+  
+  """
+  Configura roots para próximo GC.
+  """
+  public fn setRoots(
+    valueStack: List<Value>,
+    callStack: List<CallFrame>,
+    globals: Map<String, Value>
+  ) -> void {
+    this.valueStack = valueStack
+    this.callStack = callStack
+    this.globals = globals
+  }
+}
+
+
+# ============================================================================
+# HEAP COLLECTIONS (Large lists/maps)
+# ============================================================================
+
+"""
+VelaHeapList: Lista grande en heap.
+"""
+public class VelaHeapList {
+  public items: List<Value> = []
+  
+  public fn append(value: Value) -> void {
+    this.items.append(value)
+  }
+  
+  public fn get(index: Number) -> Option<Value> {
+    if index < 0 || index >= this.items.length() {
+      return None
+    }
+    return Some(this.items[index])
+  }
+  
+  public fn length() -> Number {
+    return this.items.length()
+  }
+  
+  override fn toString() -> String {
+    return "[... ${this.items.length()} items ...]"
+  }
+}
+
+"""
+VelaHeapMap: Map grande en heap.
+"""
+public class VelaHeapMap {
+  public entries: Map<String, Value> = {}
+  
+  public fn set(key: String, value: Value) -> void {
+    this.entries.set(key, value)
+  }
+  
+  public fn get(key: String) -> Option<Value> {
+    return this.entries.get(key)
+  }
+  
+  public fn size() -> Number {
+    return this.entries.size()
+  }
+  
+  override fn toString() -> String {
+    return "{... ${this.entries.size()} entries ...}"
+  }
+}
+
+
+# ============================================================================
+# MODULE EXPORTS
+# ============================================================================
+
+# Exports:
+# - VelaHeap (heap allocator)
+# - VelaGC (garbage collector)
+# - HeapObject, HeapObjectRef (heap object representation)
+# - VelaClosure, VelaUpvalue (closures)
+# - VelaClass, VelaInstance, VelaBoundMethod (OOP)
+# - VelaString (interned strings)
