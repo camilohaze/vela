@@ -27,6 +27,7 @@ pub mod collections;
 pub mod option_result;
 pub mod iterators;
 pub mod strings;
+pub mod io;
 
 // Re-export commonly used types
 pub use primitives::{VelaNumber, VelaString, VelaBool};
