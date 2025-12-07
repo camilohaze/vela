@@ -2,7 +2,7 @@
 
 ## 📋 Información General
 - **Historia:** VELA-589
-- **Estado:** En curso ✅
+- **Estado:** ✅ Completada
 - **Fecha:** 2025-12-07
 
 ## 🎯 Objetivo
@@ -113,8 +113,8 @@ list.capacity() -> usize
 - [x] Métodos básicos (push, pop, get, insert, remove)
 - [x] Métodos funcionales (map, filter, reduce, for_each)
 - [x] Bounds checking seguro
-- [x] Tests unitarios con cobertura >80%
-- [x] Documentación completa
+- [x] Tests unitarios con cobertura >80% (14 tests)
+- [x] Exportado en `collections::List`
 
 ## 🔗 Referencias
 - **Jira:** [TASK-082](https://velalang.atlassian.net/browse/TASK-082)
