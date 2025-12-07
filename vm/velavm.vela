@@ -40,6 +40,7 @@ import 'module:vm/opcodes' show {
   OP_LOAD_LOCAL, OP_STORE_LOCAL, OP_LOAD_GLOBAL, OP_STORE_GLOBAL,
   OP_LOAD_UPVALUE, OP_STORE_UPVALUE, OP_LOAD_FAST, OP_STORE_FAST,
   OP_CALL, OP_CALL_METHOD, OP_RETURN, OP_RETURN_NONE,
+  OP_MAKE_CLOSURE, OP_CLOSE_UPVALUE, OP_LOAD_CLOSURE,
   OP_TAIL_CALL, OP_CALL_BUILTIN, OP_CALL_ASYNC, OP_AWAIT,
   OP_NEW_OBJECT, OP_GET_ATTR, OP_SET_ATTR, OP_GET_METHOD,
   OP_LOAD_THIS, OP_LOAD_SUPER, OP_DELETE_ATTR, OP_HAS_ATTR,
@@ -64,22 +65,30 @@ import 'module:vm/opcodes' show {
   getOpcodeName, getOpcodeSize
 }
 
+import 'module:vm/heap' show {
+  VelaHeap, VelaGC, HeapObjectRef, HeapObject,
+  VelaClosure, VelaUpvalue, VelaClass, VelaInstance,
+  VelaBoundMethod, VelaString, VelaHeapList, VelaHeapMap
+}
+
 
 # ============================================================================
 # VALUE REPRESENTATION
-# ============================================================================
-
-"""
-Value: Representa cualquier valor en VelaVM.
-Usa tagged union para tipos primitivos y references para objetos.
-"""
 public enum Value {
   None,
   Bool(Bool),
   Number(Number),
   Float(Float),
   String(String),
-  Object(VelaObject),      # Heap-allocated objects
+  Object(VelaObject),      # Stack-allocated objects (legacy)
+  Function(VelaFunction),  # Function objects
+  Closure(HeapObjectRef),  # Heap-allocated closure
+  List(VelaList),
+  Map(VelaMap),
+  Signal(VelaSignal),      # Reactive signal
+  Actor(VelaActor),        # Actor reference
+  HeapObject(HeapObjectRef) # Generic heap object reference
+} Object(VelaObject),      # Heap-allocated objects
   Function(VelaFunction),  # Function objects
   List(VelaList),
   Map(VelaMap),
@@ -96,13 +105,20 @@ public fn valueToString(value: Value) -> String {
     Value.Bool(b) => b.toString()
     Value.Number(n) => n.toString()
     Value.Float(f) => f.toString()
-    Value.String(s) => s
-    Value.Object(obj) => obj.toString()
     Value.Function(fn) => "<function ${fn.name}>"
+    Value.Closure(ref) => {
+      match ref.object {
+        HeapObject.Closure(closure) => closure.toString()
+        _ => "<closure>"
+      }
+    }
     Value.List(list) => list.toString()
     Value.Map(map) => map.toString()
     Value.Signal(sig) => "<signal>"
     Value.Actor(actor) => "<actor ${actor.id}>"
+    Value.HeapObject(ref) => "<heap object>"
+  }
+}   Value.Actor(actor) => "<actor ${actor.id}>"
   }
 }
 
@@ -290,6 +306,7 @@ public class CallFrame {
   public ip: Number                    # Instruction pointer
   public slots: List<Value>            # Locals + temporaries
   public slotsOffset: Number           # Offset en value stack
+  public closure: Option<VelaClosure> = None  # Closure si esta función es closure
   
   constructor(
     function: VelaFunction,
@@ -334,13 +351,6 @@ public class CallFrame {
 
 
 # ============================================================================
-# VELAVM INTERPRETER
-# ============================================================================
-
-"""
-VelaVM: Virtual machine principal.
-Stack-based interpreter con fetch-decode-execute cycle.
-"""
 public class VelaVM {
   # Bytecode y constant pool
   bytecode: List<Number> = []
@@ -350,6 +360,21 @@ public class VelaVM {
   # Stacks
   valueStack: List<Value> = []
   callStack: List<CallFrame> = []
+  
+  # Heap & GC
+  heap: VelaHeap = VelaHeap()
+  gc: VelaGC
+  
+  # Estado
+  currentFrame: Option<CallFrame> = None
+  halted: Bool = false
+  
+  # Estadísticas (para profiling)
+  instructionCount: Number = 0
+  
+  constructor() {
+    this.gc = VelaGC(this.heap)
+  } []
   
   # Estado
   currentFrame: Option<CallFrame> = None
@@ -727,21 +752,13 @@ public class VelaVM {
         }
         
         OP_STORE_GLOBAL => {
-          idx = frame.readU16(this.bytecode)
-          name = this._getConstantString(idx)
-          value = this._peek(0)
-          
-          this.globals.set(name, value)
-        }
-        
-        # Functions
         OP_CALL => {
           argc = frame.readByte(this.bytecode)
           
-          # Pop function
-          funcValue = this._pop()
+          # Pop callee
+          callee = this._pop()
           
-          match funcValue {
+          match callee {
             Value.Function(fn) => {
               if fn.arity != argc {
                 return Err("Expected ${fn.arity} args, got ${argc}")
@@ -753,6 +770,129 @@ public class VelaVM {
               # Pop arguments and store as locals
               args = (0..argc).map(_ => this._pop()).reverse()
               args.forEach((arg, idx) => {
+                this.currentFrame.unwrap().slots.append(arg)
+              })
+            }
+            
+            Value.Closure(ref) => {
+              # Call closure
+              match ref.object {
+                HeapObject.Closure(closure) => {
+        OP_RETURN => {
+          returnValue = this._pop()
+          
+          # Close upvalues cuando función retorna
+          if let Some(frame) = this.currentFrame {
+            this.heap.closeUpvalues(frame.slotsOffset, this.valueStack)
+          }
+          
+          # Pop frame
+          this._popFrame()
+          
+          # Push return value
+          if let Some(_) = this.currentFrame {
+            this._push(returnValue)
+          }
+        }           this.currentFrame.unwrap().slots.append(arg)
+                  })
+                  
+                  # Store closure for upvalue access
+                  this.currentFrame.unwrap().closure = Some(closure)
+        OP_RETURN_NONE => {
+          # Close upvalues cuando función retorna
+          if let Some(frame) = this.currentFrame {
+            this.heap.closeUpvalues(frame.slotsOffset, this.valueStack)
+          }
+          
+          this._popFrame()
+          
+          if let Some(_) = this.currentFrame {
+            this._push(Value.None)
+          }
+        }
+        
+        # Closures
+        OP_MAKE_CLOSURE => {
+          # Pop function
+          funcValue = this._pop()
+          
+          match funcValue {
+            Value.Function(fn) => {
+              # Create closure
+              closure = VelaClosure(fn)
+              
+              # Capture upvalues
+              (0..fn.upvalueCount).forEach(_ => {
+                isLocal = frame.readByte(this.bytecode) == 1
+                index = frame.readByte(this.bytecode)
+                
+                upvalue: VelaUpvalue
+                
+                if isLocal {
+                  # Capture local variable
+                  stackSlot = frame.slotsOffset + index
+                  upvalue = this.heap.captureUpvalue(stackSlot, this.valueStack)
+                } else {
+                  # Capture upvalue from enclosing closure
+                  if let Some(enclosingClosure) = frame.closure {
+                    upvalue = enclosingClosure.upvalues[index]
+                  } else {
+                    return Err("No enclosing closure")
+                  }
+                }
+                
+                closure.upvalues.append(upvalue)
+              })
+              
+              # Allocate closure en heap
+              ref = this.heap.allocateClosure(closure)
+              this._push(Value.Closure(ref))
+            }
+            
+            _ => return Err("Expected function for closure")
+          }
+        }
+        
+        OP_LOAD_UPVALUE => {
+          idx = frame.readByte(this.bytecode)
+          
+          if let Some(closure) = frame.closure {
+            if idx < closure.upvalues.length() {
+              upvalue = closure.upvalues[idx]
+              value = upvalue.read(this.valueStack)
+              this._push(value)
+            } else {
+              return Err("Invalid upvalue index: ${idx}")
+            }
+          } else {
+            return Err("No closure in current frame")
+          }
+        }
+        
+        OP_STORE_UPVALUE => {
+          idx = frame.readByte(this.bytecode)
+          value = this._peek(0)
+          
+          if let Some(closure) = frame.closure {
+            if idx < closure.upvalues.length() {
+              upvalue = closure.upvalues[idx]
+              upvalue.write(this.valueStack, value)
+            } else {
+              return Err("Invalid upvalue index: ${idx}")
+            }
+          } else {
+            return Err("No closure in current frame")
+          }
+        }
+        
+        OP_CLOSE_UPVALUE => {
+          # Close upvalue en top of stack
+          stackSlot = this.valueStack.length() - 1
+          this.heap.closeUpvalues(stackSlot, this.valueStack)
+          this._pop()
+        }
+        
+        # CollectionsrEach((arg, idx) => {
                 this.currentFrame.unwrap().slots.append(arg)
               })
             }
@@ -881,18 +1021,37 @@ public class VelaVM {
           return Err("Unknown opcode: 0x${opcode.toString(16)}")
         }
       }
-      
-      return Ok(None)
-    }
+  """
+  Retorna estadísticas de ejecución.
+  """
+  public fn getStats() -> Map<String, Number> {
+    heapStats = this.heap.getStats()
     
-    return Err("No current frame")
+    return {
+      "instructionsExecuted": this.instructionCount,
+      "stackDepth": this.valueStack.length(),
+      "callDepth": this.callStack.length(),
+      "constantsLoaded": this.constants.length(),
+      "heapObjects": heapStats["objectCount"],
+      "internedStrings": heapStats["internedStrings"],
+      "openUpvalues": heapStats["openUpvalues"],
+      "gcRuns": heapStats["gcRuns"],
+      "totalAllocated": heapStats["totalAllocated"],
+      "totalFreed": heapStats["totalFreed"]
+    }
   }
   
-  # ========== Stack Helpers ==========
-  
-  fn _push(value: Value) -> void {
-    this.valueStack.append(value)
+  """
+  Ejecuta garbage collection manual.
+  """
+  public fn collectGarbage() -> Number {
+    # Set GC roots
+    this.gc.setRoots(this.valueStack, this.callStack, this.globals)
+    
+    # Run GC
+    return this.gc.collect()
   }
+} }
   
   fn _pop() -> Value {
     if this.valueStack.length() == 0 {
