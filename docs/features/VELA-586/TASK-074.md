@@ -1,7 +1,7 @@
 # TASK-074: Tests para VelaVM
 
 ## 📋 Información General
-- **Historia:** US-16 - VelaVM Bytecode Interpreter
+- **Historia:** VELA-586 - VelaVM Bytecode Interpreter
 - **Epic:** EPIC-06: Compiler Backend
 - **Estado:** Completada ✅
 - **Fecha:** 2025-12-07

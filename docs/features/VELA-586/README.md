@@ -1,4 +1,4 @@
-# US-16: Sistema de Bytecode e Intérprete VelaVM
+# VELA-586: Sistema de Bytecode e Intérprete VelaVM
 
 ## 📋 Información General
 
@@ -34,7 +34,7 @@ Implementación completa del sistema de bytecode para Vela y su intérprete virt
 - **Entregables:**
   - `docs/architecture/ADR-069-bytecode-instruction-set.md` (950 líneas)
   - `vm/opcodes.vela` (520 líneas)
-  - `docs/features/US-16/TASK-069.md` (450 líneas)
+  - `docs/features/VELA-586/TASK-069.md` (450 líneas)
 - **Métricas:**
   - 120 opcodes definidos
   - 18 categorías (Stack, Constants, Arithmetic, Bitwise, Comparison, Logical, Control Flow, Variables, Functions, Collections, Objects, Reactive, Async, Exceptions, Actors, Debug, etc.)
@@ -52,7 +52,7 @@ Implementación completa del sistema de bytecode para Vela y su intérprete virt
 - **Archivos:** 2 archivos, 1,500 líneas
 - **Entregables:**
   - `vm/bytecode_generator.vela` (850 líneas)
-  - `docs/features/US-16/TASK-070.md` (650 líneas)
+  - `docs/features/VELA-586/TASK-070.md` (650 líneas)
 - **Clases implementadas:**
   - `ConstantPool`: Pool de constantes (strings, numbers, functions)
   - `BytecodeEmitter`: Emisor de bytecode con encoding
@@ -74,7 +74,7 @@ Implementación completa del sistema de bytecode para Vela y su intérprete virt
 - **Archivos:** 2 archivos, 1,850 líneas
 - **Entregables:**
   - `vm/velavm.vela` (1,200 líneas base + 200 modificaciones)
-  - `docs/features/US-16/TASK-071.md` (650 líneas)
+  - `docs/features/VELA-586/TASK-071.md` (650 líneas)
 - **Clases implementadas:**
   - `Value`: Representación de valores (Number, String, Bool, None, HeapObject, Function)
   - `CallFrame`: Frame de llamada con function, IP, locals, stack
@@ -101,7 +101,7 @@ Implementación completa del sistema de bytecode para Vela y su intérprete virt
 - **Archivos:** 2 archivos, 1,700 líneas
 - **Entregables:**
   - `vm/heap.vela` (800 líneas)
-  - `docs/features/US-16/TASK-072.md` (700 líneas)
+  - `docs/features/VELA-586/TASK-072.md` (700 líneas)
   - Modificaciones en `vm/velavm.vela` (+200 líneas)
 - **Clases implementadas:**
   - `VelaHeap`: Heap allocator con string interning
@@ -134,7 +134,7 @@ Implementación completa del sistema de bytecode para Vela y su intérprete virt
 - **Archivos:** 2 archivos, 1,700 líneas
 - **Entregables:**
   - `vm/exceptions.vela` (550 líneas)
-  - `docs/features/US-16/TASK-073.md` (2,850 líneas - incluye análisis)
+  - `docs/features/VELA-586/TASK-073.md` (2,850 líneas - incluye análisis)
   - Modificaciones en `vm/velavm.vela` (+150 líneas)
 - **Clases implementadas:**
   - `VelaException`: Exception base con type, message, stackTrace, cause
@@ -171,7 +171,7 @@ Implementación completa del sistema de bytecode para Vela y su intérprete virt
   - `tests/unit/vm/test_heap.vela` (1,150 líneas) - 50+ tests
   - `tests/unit/vm/test_exceptions.vela` (1,050 líneas) - 40+ tests
   - `tests/integration/vm/test_programs.vela` (1,200 líneas) - 12 tests
-  - `docs/features/US-16/TASK-074.md` (1,000 líneas)
+  - `docs/features/VELA-586/TASK-074.md` (1,000 líneas)
 - **Cobertura:**
   - **test_opcodes.vela**: 79/120 opcodes (66%)
     - Stack ops, constants, arithmetic, bitwise, comparison, logical, control flow
@@ -316,7 +316,7 @@ Implementación completa del sistema de bytecode para Vela y su intérprete virt
 | 072 | Heap & GC | 2 | 1,700 | 1 (0140f69) | 0 |
 | 073 | Exceptions & Async | 2 | 1,700 | 1 (83ba4ac) | 0 |
 | 074 | Test Suite | 5 | 5,050 | 1 (c4a5720) | 167 |
-| **Total** | **US-16 Complete** | **16** | **13,720** | **6** | **167** |
+| **Total** | **VELA-586 Complete** | **16** | **13,720** | **6** | **167** |
 
 ### Código vs Tests
 
@@ -391,13 +391,13 @@ Implementación completa del sistema de bytecode para Vela y su intérprete virt
 
 **Documentación:**
 1. `docs/architecture/ADR-069-bytecode-instruction-set.md` (950 líneas)
-2. `docs/features/US-16/TASK-069.md` (450 líneas)
-3. `docs/features/US-16/TASK-070.md` (650 líneas)
-4. `docs/features/US-16/TASK-071.md` (650 líneas)
-5. `docs/features/US-16/TASK-072.md` (700 líneas)
-6. `docs/features/US-16/TASK-073.md` (2,850 líneas)
-7. `docs/features/US-16/TASK-074.md` (1,000 líneas)
-8. `docs/features/US-16/README.md` (350 líneas - este archivo)
+2. `docs/features/VELA-586/TASK-069.md` (450 líneas)
+3. `docs/features/VELA-586/TASK-070.md` (650 líneas)
+4. `docs/features/VELA-586/TASK-071.md` (650 líneas)
+5. `docs/features/VELA-586/TASK-072.md` (700 líneas)
+6. `docs/features/VELA-586/TASK-073.md` (2,850 líneas)
+7. `docs/features/VELA-586/TASK-074.md` (1,000 líneas)
+8. `docs/features/VELA-586/README.md` (350 líneas - este archivo)
 
 ---
 
@@ -713,15 +713,15 @@ Constants: [...]
 ## 🔗 Enlaces
 
 - **Jira Epic**: [EPIC-06](https://velalang.atlassian.net/browse/EPIC-06)
-- **Jira Historia**: [US-16](https://velalang.atlassian.net/browse/US-16)
-- **GitHub Branch**: `feature/US-16-velavm-bytecode`
+- **Jira Historia**: [VELA-586](https://velalang.atlassian.net/browse/VELA-586)
+- **GitHub Branch**: `feature/VELA-586-velavm-bytecode`
 - **Pull Request**: [#XXX](https://github.com/velalang/vela/pull/XXX) (pendiente)
 
 ---
 
 ## 📊 Resumen Ejecutivo
 
-**US-16** implementa el backend completo del compiler Vela:
+**VELA-586** implementa el backend completo del compiler Vela:
 
 - ✅ **120 opcodes** definidos en ISA (79 implementados, 41 pendientes)
 - ✅ **Bytecode generator** con constant pool y visitor pattern

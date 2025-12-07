@@ -1,7 +1,7 @@
 # TASK-069: Diseñar Bytecode Instruction Set
 
 ## 📋 Información General
-- **Historia:** US-16 - Sistema de Bytecode e Intérprete VelaVM
+- **Historia:** VELA-586 - Sistema de Bytecode e Intérprete VelaVM
 - **Epic:** EPIC-06: Compiler Backend (VelaVM)
 - **Sprint:** 23
 - **Estado:** Completada ✅

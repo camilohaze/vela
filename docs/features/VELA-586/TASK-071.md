@@ -1,7 +1,7 @@
 # TASK-071: Implementar VelaVM Core (Stack Machine)
 
 ## 📋 Información General
-- **Historia:** US-16 - Sistema de Bytecode e Intérprete VelaVM
+- **Historia:** VELA-586 - Sistema de Bytecode e Intérprete VelaVM
 - **Epic:** EPIC-06: Compiler Backend (VelaVM)
 - **Estado:** Completada ✅
 - **Fecha:** 2025-12-07
