@@ -1,0 +1,821 @@
+"""
+VelaVM Bytecode Generator
+
+Traduce Vela IR (Intermediate Representation) a bytecode VelaVM.
+Incluye optimizaciones básicas, constant pooling, y emission de instrucciones.
+
+Implementación de: TASK-070
+Historia: US-16 - VelaVM Bytecode Interpreter
+Epic: EPIC-06: Compiler Backend
+Fecha: 2025-12-07
+
+Referencias:
+- ADR-069: docs/architecture/ADR-069-bytecode-instruction-set.md
+- Opcodes: vm/opcodes.vela
+- Documentación: docs/features/US-16/TASK-070.md
+"""
+
+import 'module:vm/opcodes' show {
+  # Magic & Version
+  MAGIC_NUMBER, VERSION_MAJOR, VERSION_MINOR,
+  
+  # Constant types
+  CONST_TYPE_NONE, CONST_TYPE_BOOL, CONST_TYPE_NUMBER,
+  CONST_TYPE_FLOAT, CONST_TYPE_STRING, CONST_TYPE_FUNCTION,
+  
+  # All opcodes
+  OP_NOP, OP_POP, OP_DUP, OP_SWAP,
+  OP_CONST_NONE, OP_CONST_TRUE, OP_CONST_FALSE,
+  OP_CONST_0, OP_CONST_1, OP_CONST_NEG1,
+  OP_LOAD_CONST, OP_LOAD_CONST_SMALL,
+  OP_ADD, OP_SUB, OP_MUL, OP_DIV, OP_MOD, OP_POW, OP_NEG,
+  OP_EQ, OP_NE, OP_LT, OP_LE, OP_GT, OP_GE,
+  OP_LOGIC_NOT,
+  OP_JUMP, OP_JUMP_IF_TRUE, OP_JUMP_IF_FALSE, OP_LOOP,
+  OP_LOAD_LOCAL, OP_STORE_LOCAL, OP_LOAD_GLOBAL, OP_STORE_GLOBAL,
+  OP_CALL, OP_RETURN, OP_RETURN_NONE, OP_TAIL_CALL,
+  OP_NEW_OBJECT, OP_GET_ATTR, OP_SET_ATTR, OP_LOAD_THIS,
+  OP_BUILD_LIST, OP_BUILD_MAP, OP_GET_ITEM, OP_SET_ITEM,
+  OP_SIGNAL_CREATE, OP_SIGNAL_READ, OP_SIGNAL_WRITE,
+  OP_HALT
+}
+
+
+# ============================================================================
+# CONSTANT POOL
+# ============================================================================
+
+"""
+Constant Pool: almacena todas las constantes usadas en el bytecode.
+Evita duplicados y permite compartir constantes entre funciones.
+"""
+public class ConstantPool {
+  # Lista de constantes (values)
+  constants: List<Constant> = []
+  
+  # Map para deduplicación: value -> index
+  _constantMap: Map<String, Number> = {}
+  
+  """
+  Agrega una constante al pool (o retorna index si ya existe).
+  
+  Args:
+    value: El valor de la constante
+    
+  Returns:
+    Number: Índice en el constant pool
+  """
+  public fn addConstant(value: Any) -> Number {
+    # Generar key única para deduplicación
+    key = this._makeKey(value)
+    
+    # Si ya existe, retornar índice existente
+    if let Some(idx) = this._constantMap.get(key) {
+      return idx
+    }
+    
+    # Crear nueva constante
+    constant = Constant(value)
+    idx = this.constants.length()
+    
+    # Agregar a pool y map
+    this.constants.append(constant)
+    this._constantMap.set(key, idx)
+    
+    return idx
+  }
+  
+  """
+  Genera key única para un valor (para deduplicación).
+  """
+  fn _makeKey(value: Any) -> String {
+    match value {
+      None => "none"
+      Bool(b) => "bool:${b}"
+      Number(n) => "num:${n}"
+      Float(f) => "float:${f}"
+      String(s) => "str:${s}"
+      _ => "obj:${value.hashCode()}"
+    }
+  }
+  
+  """
+  Serializa el constant pool a bytes.
+  """
+  public fn toBytes() -> List<Number> {
+    bytes: List<Number> = []
+    
+    # Escribir tamaño (u16)
+    size = this.constants.length()
+    bytes.append((size >> 8) & 0xFF)
+    bytes.append(size & 0xFF)
+    
+    # Escribir cada constante
+    this.constants.forEach(constant => {
+      bytes.extend(constant.toBytes())
+    })
+    
+    return bytes
+  }
+  
+  """
+  Retorna el número de constantes en el pool.
+  """
+  public fn size() -> Number {
+    return this.constants.length()
+  }
+}
+
+
+"""
+Representa una constante en el constant pool.
+"""
+public class Constant {
+  value: Any
+  typeTag: Number
+  
+  constructor(value: Any) {
+    this.value = value
+    this.typeTag = this._determineTypeTag(value)
+  }
+  
+  """
+  Determina el type tag para un valor.
+  """
+  fn _determineTypeTag(value: Any) -> Number {
+    match value {
+      None => CONST_TYPE_NONE
+      Bool(_) => CONST_TYPE_BOOL
+      Number(_) => CONST_TYPE_NUMBER
+      Float(_) => CONST_TYPE_FLOAT
+      String(_) => CONST_TYPE_STRING
+      Function(_) => CONST_TYPE_FUNCTION
+      _ => throw Error("Unsupported constant type")
+    }
+  }
+  
+  """
+  Serializa la constante a bytes.
+  """
+  public fn toBytes() -> List<Number> {
+    bytes: List<Number> = []
+    
+    # Escribir type tag
+    bytes.append(this.typeTag)
+    
+    # Escribir data según tipo
+    match this.value {
+      None => {
+        # None no tiene data adicional
+      }
+      Bool(b) => {
+        bytes.append(b ? 1 : 0)
+      }
+      Number(n) => {
+        # Escribir como i64 (8 bytes, big-endian)
+        bytes.extend(this._encodeI64(n))
+      }
+      Float(f) => {
+        # Escribir como f64 (8 bytes, IEEE 754)
+        bytes.extend(this._encodeF64(f))
+      }
+      String(s) => {
+        # Escribir length (u16) + UTF-8 bytes
+        utf8Bytes = s.toUTF8Bytes()
+        len = utf8Bytes.length()
+        bytes.append((len >> 8) & 0xFF)
+        bytes.append(len & 0xFF)
+        bytes.extend(utf8Bytes)
+      }
+      Function(f) => {
+        # Escribir function metadata (offset + arity)
+        bytes.extend(this._encodeFunctionMeta(f))
+      }
+    }
+    
+    return bytes
+  }
+  
+  """
+  Codifica un Number (i64) a 8 bytes big-endian.
+  """
+  fn _encodeI64(n: Number) -> List<Number> {
+    bytes: List<Number> = []
+    value = n
+    
+    # 8 bytes, big-endian
+    (0..8).forEach(_ => {
+      bytes.append((value >> 56) & 0xFF)
+      value = value << 8
+    })
+    
+    return bytes
+  }
+  
+  """
+  Codifica un Float (f64) a 8 bytes IEEE 754.
+  """
+  fn _encodeF64(f: Float) -> List<Number> {
+    # Convertir float a bits IEEE 754
+    bits = f.toIEEE754Bits()
+    
+    bytes: List<Number> = []
+    (0..8).forEach(i => {
+      bytes.append((bits >> (56 - i * 8)) & 0xFF)
+    })
+    
+    return bytes
+  }
+  
+  """
+  Codifica metadata de función (offset + arity).
+  """
+  fn _encodeFunctionMeta(f: Function) -> List<Number> {
+    bytes: List<Number> = []
+    
+    # Offset (u32)
+    offset = f.codeOffset
+    bytes.append((offset >> 24) & 0xFF)
+    bytes.append((offset >> 16) & 0xFF)
+    bytes.append((offset >> 8) & 0xFF)
+    bytes.append(offset & 0xFF)
+    
+    # Arity (u8)
+    bytes.append(f.arity & 0xFF)
+    
+    return bytes
+  }
+}
+
+
+# ============================================================================
+# BYTECODE EMITTER
+# ============================================================================
+
+"""
+Emite bytecode instructions a un buffer de bytes.
+Maneja encoding de operands y backpatching de jumps.
+"""
+public class BytecodeEmitter {
+  # Buffer de bytecode
+  code: List<Number> = []
+  
+  # Constant pool
+  constantPool: ConstantPool = ConstantPool()
+  
+  # Stack de jump addresses para backpatching
+  _jumpStack: List<Number> = []
+  
+  """
+  Emite una instrucción sin operands.
+  
+  Args:
+    opcode: El opcode de la instrucción
+  """
+  public fn emit(opcode: Number) -> void {
+    this.code.append(opcode)
+  }
+  
+  """
+  Emite una instrucción con un operand u8.
+  """
+  public fn emitU8(opcode: Number, operand: Number) -> void {
+    this.code.append(opcode)
+    this.code.append(operand & 0xFF)
+  }
+  
+  """
+  Emite una instrucción con un operand u16.
+  """
+  public fn emitU16(opcode: Number, operand: Number) -> void {
+    this.code.append(opcode)
+    this.code.append((operand >> 8) & 0xFF)
+    this.code.append(operand & 0xFF)
+  }
+  
+  """
+  Emite una instrucción con un operand i16 (signed).
+  """
+  public fn emitI16(opcode: Number, operand: Number) -> void {
+    this.code.append(opcode)
+    # Convertir a two's complement si negativo
+    value = operand < 0 ? (0x10000 + operand) : operand
+    this.code.append((value >> 8) & 0xFF)
+    this.code.append(value & 0xFF)
+  }
+  
+  """
+  Emite una instrucción con dos operands (u8, u16).
+  """
+  public fn emitU8U16(opcode: Number, op1: Number, op2: Number) -> void {
+    this.code.append(opcode)
+    this.code.append(op1 & 0xFF)
+    this.code.append((op2 >> 8) & 0xFF)
+    this.code.append(op2 & 0xFF)
+  }
+  
+  """
+  Emite una constante (optimiza constantes comunes).
+  
+  Args:
+    value: El valor de la constante
+  """
+  public fn emitConstant(value: Any) -> void {
+    # Optimización: constantes comunes tienen opcodes dedicados
+    match value {
+      None => this.emit(OP_CONST_NONE)
+      Bool(true) => this.emit(OP_CONST_TRUE)
+      Bool(false) => this.emit(OP_CONST_FALSE)
+      Number(0) => this.emit(OP_CONST_0)
+      Number(1) => this.emit(OP_CONST_1)
+      Number(-1) => this.emit(OP_CONST_NEG1)
+      Number(n) if n >= -128 && n <= 127 => {
+        # Small integer optimization
+        this.emitU8(OP_LOAD_CONST_SMALL, n & 0xFF)
+      }
+      _ => {
+        # Agregar a constant pool
+        idx = this.constantPool.addConstant(value)
+        this.emitU16(OP_LOAD_CONST, idx)
+      }
+    }
+  }
+  
+  """
+  Marca posición actual para jump (push a stack).
+  
+  Returns:
+    Number: Posición actual (para backpatching)
+  """
+  public fn markJump() -> Number {
+    pos = this.currentOffset()
+    this._jumpStack.append(pos)
+    return pos
+  }
+  
+  """
+  Parchea un jump con el offset correcto.
+  
+  Args:
+    jumpPos: Posición del jump a parchear
+  """
+  public fn patchJump(jumpPos: Number) -> void {
+    # Calcular offset desde jump hasta aquí
+    offset = this.currentOffset() - jumpPos - 3  # -3 por opcode + operand
+    
+    # Escribir offset en la posición del jump
+    this.code[jumpPos + 1] = (offset >> 8) & 0xFF
+    this.code[jumpPos + 2] = offset & 0xFF
+  }
+  
+  """
+  Retorna el offset actual en el bytecode.
+  """
+  public fn currentOffset() -> Number {
+    return this.code.length()
+  }
+  
+  """
+  Genera el bytecode completo (header + constant pool + code).
+  
+  Returns:
+    List<Number>: Bytecode completo en bytes
+  """
+  public fn toBytecode() -> List<Number> {
+    bytes: List<Number> = []
+    
+    # 1. Magic number (4 bytes)
+    bytes.append((MAGIC_NUMBER >> 24) & 0xFF)
+    bytes.append((MAGIC_NUMBER >> 16) & 0xFF)
+    bytes.append((MAGIC_NUMBER >> 8) & 0xFF)
+    bytes.append(MAGIC_NUMBER & 0xFF)
+    
+    # 2. Version (2 bytes)
+    bytes.append(VERSION_MAJOR & 0xFF)
+    bytes.append(VERSION_MINOR & 0xFF)
+    
+    # 3. Constant pool
+    bytes.extend(this.constantPool.toBytes())
+    
+    # 4. Code size (u32)
+    codeSize = this.code.length()
+    bytes.append((codeSize >> 24) & 0xFF)
+    bytes.append((codeSize >> 16) & 0xFF)
+    bytes.append((codeSize >> 8) & 0xFF)
+    bytes.append(codeSize & 0xFF)
+    
+    # 5. Code
+    bytes.extend(this.code)
+    
+    return bytes
+  }
+  
+  """
+  Retorna estadísticas del bytecode generado.
+  """
+  public fn getStats() -> Map<String, Number> {
+    return {
+      "instructions": this.code.length(),
+      "constants": this.constantPool.size(),
+      "totalBytes": this.toBytecode().length()
+    }
+  }
+}
+
+
+# ============================================================================
+# IR NODE TYPES (Simplified)
+# ============================================================================
+
+"""
+Nodos del IR (Intermediate Representation).
+Estos serían generados por el compilador frontend.
+"""
+
+public enum IRNodeType {
+  # Literals
+  NumberLiteral,
+  StringLiteral,
+  BoolLiteral,
+  NoneLiteral,
+  
+  # Variables
+  LoadLocal,
+  StoreLocal,
+  LoadGlobal,
+  StoreGlobal,
+  
+  # Binary operations
+  BinaryOp,  # +, -, *, /, etc.
+  CompareOp, # ==, <, >, etc.
+  
+  # Control flow
+  IfStatement,
+  WhileLoop,
+  Block,
+  
+  # Functions
+  FunctionDef,
+  FunctionCall,
+  Return,
+  
+  # Objects
+  GetAttr,
+  SetAttr,
+  
+  # Collections
+  ListLiteral,
+  MapLiteral,
+  GetItem,
+  SetItem,
+  
+  # Reactive
+  SignalCreate,
+  SignalRead,
+  SignalWrite
+}
+
+public class IRNode {
+  nodeType: IRNodeType
+  data: Any  # Datos específicos del nodo
+  children: List<IRNode> = []
+  
+  constructor(nodeType: IRNodeType, data: Any = None) {
+    this.nodeType = nodeType
+    this.data = data
+  }
+}
+
+
+# ============================================================================
+# BYTECODE GENERATOR
+# ============================================================================
+
+"""
+Genera bytecode VelaVM desde IR.
+"""
+public class BytecodeGenerator {
+  emitter: BytecodeEmitter = BytecodeEmitter()
+  
+  # Symbol table para variables locales
+  _localVars: Map<String, Number> = {}
+  _localCount: Number = 0
+  
+  """
+  Genera bytecode desde un nodo IR.
+  
+  Args:
+    node: El nodo IR raíz
+    
+  Returns:
+    List<Number>: Bytecode completo
+  """
+  public fn generate(node: IRNode) -> List<Number> {
+    # Visitar el árbol IR
+    this._visit(node)
+    
+    # Emitir HALT al final
+    this.emitter.emit(OP_HALT)
+    
+    # Retornar bytecode completo
+    return this.emitter.toBytecode()
+  }
+  
+  """
+  Visita un nodo IR y emite bytecode correspondiente.
+  """
+  fn _visit(node: IRNode) -> void {
+    match node.nodeType {
+      # Literals
+      IRNodeType.NumberLiteral => {
+        this.emitter.emitConstant(node.data)
+      }
+      
+      IRNodeType.StringLiteral => {
+        this.emitter.emitConstant(node.data)
+      }
+      
+      IRNodeType.BoolLiteral => {
+        this.emitter.emitConstant(node.data)
+      }
+      
+      IRNodeType.NoneLiteral => {
+        this.emitter.emit(OP_CONST_NONE)
+      }
+      
+      # Variables
+      IRNodeType.LoadLocal => {
+        varName = node.data
+        idx = this._getLocalIndex(varName)
+        this.emitter.emitU8(OP_LOAD_LOCAL, idx)
+      }
+      
+      IRNodeType.StoreLocal => {
+        varName = node.data
+        
+        # Evaluar expresión del valor
+        this._visit(node.children[0])
+        
+        # Store
+        idx = this._allocateLocal(varName)
+        this.emitter.emitU8(OP_STORE_LOCAL, idx)
+      }
+      
+      IRNodeType.LoadGlobal => {
+        varName = node.data
+        idx = this.emitter.constantPool.addConstant(varName)
+        this.emitter.emitU16(OP_LOAD_GLOBAL, idx)
+      }
+      
+      IRNodeType.StoreGlobal => {
+        varName = node.data
+        
+        # Evaluar valor
+        this._visit(node.children[0])
+        
+        # Store
+        idx = this.emitter.constantPool.addConstant(varName)
+        this.emitter.emitU16(OP_STORE_GLOBAL, idx)
+      }
+      
+      # Binary operations
+      IRNodeType.BinaryOp => {
+        # Evaluar left
+        this._visit(node.children[0])
+        
+        # Evaluar right
+        this._visit(node.children[1])
+        
+        # Emitir operación
+        op = node.data  # "+", "-", "*", etc.
+        this._emitBinaryOp(op)
+      }
+      
+      IRNodeType.CompareOp => {
+        # Evaluar left
+        this._visit(node.children[0])
+        
+        # Evaluar right
+        this._visit(node.children[1])
+        
+        # Emitir comparación
+        op = node.data  # "==", "<", etc.
+        this._emitCompareOp(op)
+      }
+      
+      # Control flow
+      IRNodeType.IfStatement => {
+        # Evaluar condición
+        this._visit(node.children[0])
+        
+        # Emitir JUMP_IF_FALSE
+        this.emitter.emitU16(OP_JUMP_IF_FALSE, 0)  # placeholder
+        jumpPos = this.emitter.currentOffset() - 3
+        
+        # Emitir then branch
+        this._visit(node.children[1])
+        
+        # Parchear jump
+        this.emitter.patchJump(jumpPos)
+        
+        # Si hay else branch
+        if node.children.length() > 2 {
+          # TODO: implementar else con jump adicional
+          this._visit(node.children[2])
+        }
+      }
+      
+      IRNodeType.Block => {
+        # Visitar todos los statements
+        node.children.forEach(child => this._visit(child))
+      }
+      
+      # Functions
+      IRNodeType.FunctionCall => {
+        funcName = node.data
+        args = node.children
+        
+        # Evaluar argumentos (push a stack)
+        args.forEach(arg => this._visit(arg))
+        
+        # Cargar función
+        idx = this.emitter.constantPool.addConstant(funcName)
+        this.emitter.emitU16(OP_LOAD_GLOBAL, idx)
+        
+        # Emitir CALL
+        argc = args.length()
+        this.emitter.emitU8(OP_CALL, argc)
+      }
+      
+      IRNodeType.Return => {
+        if node.children.length() > 0 {
+          # Return con valor
+          this._visit(node.children[0])
+          this.emitter.emit(OP_RETURN)
+        } else {
+          # Return sin valor (optimization)
+          this.emitter.emit(OP_RETURN_NONE)
+        }
+      }
+      
+      # Collections
+      IRNodeType.ListLiteral => {
+        elements = node.children
+        
+        # Evaluar todos los elementos
+        elements.forEach(elem => this._visit(elem))
+        
+        # BUILD_LIST
+        size = elements.length()
+        this.emitter.emitU8(OP_BUILD_LIST, size)
+      }
+      
+      # Reactive
+      IRNodeType.SignalCreate => {
+        # Evaluar valor inicial
+        this._visit(node.children[0])
+        
+        # SIGNAL_CREATE
+        this.emitter.emit(OP_SIGNAL_CREATE)
+      }
+      
+      IRNodeType.SignalRead => {
+        signalName = node.data
+        
+        # Cargar signal
+        idx = this._getLocalIndex(signalName)
+        this.emitter.emitU8(OP_LOAD_LOCAL, idx)
+        
+        # Read value
+        this.emitter.emit(OP_SIGNAL_READ)
+      }
+      
+      IRNodeType.SignalWrite => {
+        signalName = node.data
+        
+        # Cargar signal
+        idx = this._getLocalIndex(signalName)
+        this.emitter.emitU8(OP_LOAD_LOCAL, idx)
+        
+        # Evaluar nuevo valor
+        this._visit(node.children[0])
+        
+        # Write
+        this.emitter.emit(OP_SIGNAL_WRITE)
+      }
+      
+      _ => {
+        throw Error("Unknown IR node type: ${node.nodeType}")
+      }
+    }
+  }
+  
+  """
+  Emite opcode para operación binaria.
+  """
+  fn _emitBinaryOp(op: String) -> void {
+    match op {
+      "+" => this.emitter.emit(OP_ADD)
+      "-" => this.emitter.emit(OP_SUB)
+      "*" => this.emitter.emit(OP_MUL)
+      "/" => this.emitter.emit(OP_DIV)
+      "%" => this.emitter.emit(OP_MOD)
+      "**" => this.emitter.emit(OP_POW)
+      _ => throw Error("Unknown binary op: ${op}")
+    }
+  }
+  
+  """
+  Emite opcode para operación de comparación.
+  """
+  fn _emitCompareOp(op: String) -> void {
+    match op {
+      "==" => this.emitter.emit(OP_EQ)
+      "!=" => this.emitter.emit(OP_NE)
+      "<" => this.emitter.emit(OP_LT)
+      "<=" => this.emitter.emit(OP_LE)
+      ">" => this.emitter.emit(OP_GT)
+      ">=" => this.emitter.emit(OP_GE)
+      _ => throw Error("Unknown compare op: ${op}")
+    }
+  }
+  
+  """
+  Obtiene el índice de una variable local.
+  """
+  fn _getLocalIndex(varName: String) -> Number {
+    return this._localVars.get(varName)
+      .unwrapOr(throw Error("Undefined variable: ${varName}"))
+  }
+  
+  """
+  Asigna índice a una nueva variable local.
+  """
+  fn _allocateLocal(varName: String) -> Number {
+    if let Some(idx) = this._localVars.get(varName) {
+      return idx
+    }
+    
+    idx = this._localCount
+    this._localVars.set(varName, idx)
+    this._localCount = this._localCount + 1
+    
+    return idx
+  }
+  
+  """
+  Retorna estadísticas del bytecode generado.
+  """
+  public fn getStats() -> Map<String, Any> {
+    emitterStats = this.emitter.getStats()
+    
+    return {
+      "instructions": emitterStats["instructions"],
+      "constants": emitterStats["constants"],
+      "totalBytes": emitterStats["totalBytes"],
+      "localVars": this._localCount
+    }
+  }
+}
+
+
+# ============================================================================
+# PUBLIC API
+# ============================================================================
+
+"""
+Genera bytecode desde IR.
+
+Args:
+  irRoot: Nodo raíz del árbol IR
+  
+Returns:
+  List<Number>: Bytecode VelaVM completo
+
+Example:
+  # Crear IR para: x = 42
+  ir = IRNode(IRNodeType.StoreLocal, "x")
+  ir.children.append(IRNode(IRNodeType.NumberLiteral, 42))
+  
+  # Generar bytecode
+  generator = BytecodeGenerator()
+  bytecode = generator.generate(ir)
+  
+  # Guardar a archivo .velac
+  writeFile("output.velac", bytecode)
+"""
+public fn generateBytecode(irRoot: IRNode) -> List<Number> {
+  generator = BytecodeGenerator()
+  return generator.generate(irRoot)
+}
+
+
+# ============================================================================
+# MODULE EXPORTS
+# ============================================================================
+
+# Exports:
+# - BytecodeGenerator (clase principal)
+# - generateBytecode (función helper)
+# - ConstantPool, BytecodeEmitter (para uso avanzado)
+# - IRNode, IRNodeType (para testing)
