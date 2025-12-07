@@ -1,0 +1,563 @@
+"""
+VelaVM Automatic Reference Counting (ARC) Manager
+
+Sistema de gestión automática de memoria basado en reference counting.
+Liberación determinística de objetos cuando refcount = 0.
+
+Implementación de: TASK-075
+Historia: VELA-587 - Memory Management Automático
+Epic: EPIC-06: Compiler Backend
+Fecha: 2025-12-07
+
+Referencias:
+- ADR-075: Especificación de ARC
+- TASK-072: vm/heap.vela (integración con heap)
+- TASK-071: vm/velavm.vela (integración con VM opcodes)
+- Documentación: docs/features/VELA-587/TASK-075.md
+"""
+
+import 'module:vm/heap' show {
+  HeapObjectRef, HeapObject, VelaHeap,
+  VelaClosure, VelaUpvalue, VelaInstance, VelaClass,
+  VelaString, VelaHeapList, VelaHeapMap, VelaBoundMethod
+}
+
+import 'module:vm/weak' show {
+  WeakRef, WeakRefTracker, CycleDetector
+}
+
+import 'system:collections' show { Map, List }
+
+
+# ============================================================================
+# ARC STATISTICS
+# ============================================================================
+
+"""
+ARCStats: Estadísticas de operaciones ARC (para debugging y profiling).
+"""
+public class ARCStats {
+  public retainCount: Number = 0      # Total retain() calls
+  public releaseCount: Number = 0     # Total release() calls
+  public freedCount: Number = 0       # Total objects freed
+  public leakedCount: Number = 0      # Objects con refcount > 0 al final
+  public peakLiveObjects: Number = 0  # Peak de objetos vivos
+  public currentLiveObjects: Number = 0
+  
+  constructor() {}
+  
+  fn recordRetain() -> void {
+    this.retainCount = this.retainCount + 1
+    this.currentLiveObjects = this.currentLiveObjects + 1
+    if this.currentLiveObjects > this.peakLiveObjects {
+      this.peakLiveObjects = this.currentLiveObjects
+    }
+  }
+  
+  fn recordRelease() -> void {
+    this.releaseCount = this.releaseCount + 1
+  }
+  
+  fn recordFree() -> void {
+    this.freedCount = this.freedCount + 1
+    this.currentLiveObjects = this.currentLiveObjects - 1
+  }
+  
+  fn recordLeak() -> void {
+    this.leakedCount = this.leakedCount + 1
+  }
+  
+  fn reset() -> void {
+    this.retainCount = 0
+    this.releaseCount = 0
+    this.freedCount = 0
+    this.leakedCount = 0
+    this.peakLiveObjects = 0
+    this.currentLiveObjects = 0
+  }
+  
+  override fn toString() -> String {
+    return "ARCStats(retain=${this.retainCount}, release=${this.releaseCount}, " +
+           "freed=${this.freedCount}, leaked=${this.leakedCount}, " +
+           "peak=${this.peakLiveObjects}, current=${this.currentLiveObjects})"
+  }
+}
+
+
+# ============================================================================
+# ARC MANAGER
+# ============================================================================
+
+"""
+ARCManager: Gestor de Automatic Reference Counting.
+
+Operaciones principales:
+- retain(ref): Incrementar refcount
+- release(ref): Decrementar refcount y liberar si es 0
+- autorelease(ref): Defer release hasta end of scope
+- retainCycle(refs): Validar si hay ciclo de referencias
+
+Integración:
+- VelaVM llama retain() en OP_STORE_LOCAL, OP_DUP, etc.
+- VelaVM llama release() en OP_POP, OP_RETURN, etc.
+- Heap allocator crea objetos con refcount = 1
+"""
+public class ARCManager {
+  heap: VelaHeap
+  stats: ARCStats = ARCStats()
+  
+  # Autorelease pool (LIFO stack de refs a liberar al final del scope)
+  autoreleasePool: List<HeapObjectRef> = []
+  
+  # TASK-076: Weak references and cycle detection
+  weakRefTracker: WeakRefTracker = WeakRefTracker()
+  cycleDetector: CycleDetector = CycleDetector()
+  
+  constructor(heap: VelaHeap) {
+    this.heap = heap
+  }
+  
+  # ========================================================================
+  # RETAIN / RELEASE
+  # ========================================================================
+  
+  """
+  retain: Incrementar reference count.
+  Llamado cuando:
+  - Se crea nueva referencia a objeto (OP_DUP, OP_STORE_LOCAL)
+  - Se asigna a variable (OP_STORE_GLOBAL, OP_STORE_UPVALUE)
+  - Se agrega a colección (OP_BUILD_LIST, OP_SET_ITEM)
+  """
+  public fn retain(ref: HeapObjectRef) -> void {
+    # Weak refs NO incrementan refcount
+    if ref.isWeak {
+      return
+    }
+    
+    ref.refCount = ref.refCount + 1
+    this.stats.recordRetain()
+  }
+  
+  """
+  release: Decrementar reference count y liberar si es 0.
+  Llamado cuando:
+  - Se elimina referencia (OP_POP)
+  - Variable sale de scope (OP_RETURN)
+  - Se sobrescribe variable (OP_STORE_LOCAL con valor previo)
+  """
+  public fn release(ref: HeapObjectRef) -> void {
+    # Weak refs NO decrementan refcount
+    if ref.isWeak {
+      return
+    }
+    
+    if ref.refCount <= 0 {
+      # ERROR: double-free o refcount corrupto
+      throw Error("ARC: release() on object with refcount <= 0")
+    }
+    
+    ref.refCount = ref.refCount - 1
+    this.stats.recordRelease()
+    
+    # Si refcount = 0, liberar objeto inmediatamente
+    if ref.refCount == 0 {
+      this.free(ref)
+    }
+  }
+  
+  """
+  autorelease: Defer release hasta end of scope.
+  Útil para:
+  - Retornar objetos de funciones sin retener
+  - Operaciones batch en loops
+  
+  Ejemplo:
+    fn createUser() -> User {
+      user = allocateUser()
+      return autorelease(user)  # Liberado al final del caller's scope
+    }
+  """
+  public fn autorelease(ref: HeapObjectRef) -> HeapObjectRef {
+    this.autoreleasePool.append(ref)
+    return ref
+  }
+  
+  """
+  drainAutoreleasePool: Liberar todos los objetos en autorelease pool.
+  Llamado al final de cada VM frame (OP_RETURN).
+  """
+  public fn drainAutoreleasePool() -> void {
+    this.autoreleasePool.forEach(ref => {
+      this.release(ref)
+    })
+    this.autoreleasePool.clear()
+  }
+  
+  # ========================================================================
+  # FREE (RECURSIVE)
+  # ========================================================================
+  
+  """
+  free: Liberar objeto y sus hijos recursivamente.
+  
+  Proceso:
+  1. Release children (upvalues, fields, list items, etc.)
+  2. Deallocate memoria del objeto
+  3. Update stats
+  
+  Recursión:
+  - Si un child llega a refcount=0, se libera automáticamente (cascade)
+  - Ejemplo: Closure → Upvalues → Valores capturados
+  """
+  public fn free(ref: HeapObjectRef) -> void {
+    # 0. TASK-076: Invalidar weak refs antes de liberar
+    this.weakRefTracker.invalidateAll(ref)
+    
+    # 1. Release children recursively
+    match ref.object {
+      HeapObject.Closure(closure) => {
+        this.freeClosure(closure)
+      }
+      
+      HeapObject.Upvalue(upvalue) => {
+        this.freeUpvalue(upvalue)
+      }
+      
+      HeapObject.Instance(instance) => {
+        this.freeInstance(instance)
+      }
+      
+      HeapObject.Class(cls) => {
+        this.freeClass(cls)
+      }
+      
+      HeapObject.BoundMethod(method) => {
+        this.freeBoundMethod(method)
+      }
+      
+      HeapObject.String(str) => {
+        # Strings no tienen children, solo liberar
+      }
+      
+      HeapObject.List(list) => {
+        this.freeList(list)
+      }
+      
+      HeapObject.Map(map) => {
+        this.freeMap(map)
+      }
+    }
+    
+    # 2. Deallocate memoria
+    this.heap.deallocate(ref)
+    
+    # 3. Update stats
+    this.stats.recordFree()
+  }
+  
+  # ========================================================================
+  # FREE HELPERS (PER TYPE)
+  # ========================================================================
+  
+  """
+  freeClosure: Liberar closure y sus upvalues.
+  """
+  fn freeClosure(closure: VelaClosure) -> void {
+    # Release cada upvalue capturado
+    closure.upvalues.forEach(upvalue => {
+      if upvalue.ref.isSome() {
+        match upvalue.ref {
+          Some(uvRef) => this.release(uvRef)
+          None => {}
+        }
+      }
+    })
+  }
+  
+  """
+  freeUpvalue: Liberar upvalue y su valor cerrado (si aplica).
+  """
+  fn freeUpvalue(upvalue: VelaUpvalue) -> void {
+    # Si upvalue está cerrado, release el valor heap
+    match upvalue.closed {
+      Some(Value.HeapObject(ref)) => {
+        this.release(ref)
+      }
+      _ => {}
+    }
+  }
+  
+  """
+  freeInstance: Liberar instance y sus fields.
+  """
+  fn freeInstance(instance: VelaInstance) -> void {
+    # Release cada field que sea heap object
+    instance.fields.values().forEach(value => {
+      match value {
+        Value.HeapObject(ref) => this.release(ref)
+        _ => {}
+      }
+    })
+  }
+  
+  """
+  freeClass: Liberar class y sus métodos.
+  """
+  fn freeClass(cls: VelaClass) -> void {
+    # Release cada método
+    cls.methods.values().forEach(methodRef => {
+      this.release(methodRef)
+    })
+  }
+  
+  """
+  freeBoundMethod: Liberar bound method (receiver + method).
+  """
+  fn freeBoundMethod(method: VelaBoundMethod) -> void {
+    # Release receiver
+    this.release(method.receiver)
+    
+    # Release method
+    this.release(method.method)
+  }
+  
+  """
+  freeList: Liberar lista y sus items.
+  """
+  fn freeList(list: VelaHeapList) -> void {
+    # Release cada item que sea heap object
+    list.items.forEach(value => {
+      match value {
+        Value.HeapObject(ref) => this.release(ref)
+        _ => {}
+      }
+    })
+  }
+  
+  """
+  freeMap: Liberar map y sus keys/values.
+  """
+  fn freeMap(map: VelaHeapMap) -> void {
+    # Release keys (si son heap objects)
+    map.entries.keys().forEach(key => {
+      match key {
+        Value.HeapObject(ref) => this.release(ref)
+        _ => {}
+      }
+    })
+    
+    # Release values (si son heap objects)
+    map.entries.values().forEach(value => {
+      match value {
+        Value.HeapObject(ref) => this.release(ref)
+        _ => {}
+      }
+    })
+  }
+  
+  # ========================================================================
+  # WEAK REFERENCES
+  # ========================================================================
+  
+  """
+  createWeakRef: Crear weak reference a objeto.
+  Weak refs NO incrementan refcount.
+  
+  Usado para:
+  - Parent refs (parent-child relationships)
+  - Delegates (observer pattern)
+  - Caches (evitable)
+  
+  TASK-076: Implementación completa con WeakRefTracker.
+  """
+  public fn createWeakRef(ref: HeapObjectRef) -> WeakRef {
+    # Crear weak reference
+    weakRef = WeakRef(ref)
+    
+    # Registrar en tracker para invalidación automática
+    this.weakRefTracker.register(ref, weakRef)
+    
+    return weakRef
+  }
+  
+  """
+  lockWeakRef: Convertir weak ref a strong ref temporalmente.
+  
+  Retorna:
+  - Some(ref) si objeto aún vive
+  - None si objeto ya fue liberado
+  
+  Ejemplo:
+    match weakRef.lock() {
+      Some(strongRef) => {
+        # Usar objeto (refcount incrementado temporalmente)
+        use(strongRef)
+        arc.release(strongRef)  # Release manual
+      }
+      None => {
+        # Objeto ya fue liberado
+      }
+    }
+  
+  TASK-076: Implementación completa.
+  """
+  public fn lockWeakRef(weakRef: WeakRef) -> Option<HeapObjectRef> {
+    # WeakRef.lock() maneja la conversión weak→strong
+    return weakRef.lock()
+  }
+  
+  # ========================================================================
+  # CYCLE DETECTION (BASIC)
+  # ========================================================================
+  
+  """
+  checkForCycles: Verificar si hay ciclos de referencias.
+  Ejecutado periódicamente (cada N allocations).
+  
+  Algoritmo:
+  1. Mark phase: Marcar objetos alcanzables desde roots (stack, globals)
+  2. Sweep phase: Objetos con refcount > 0 pero NO marcados → CYCLE
+  3. Free cycles: Liberar objetos del ciclo manualmente
+  
+  TASK-076: Implementación completa con CycleDetector.
+  
+  @param roots - Lista de valores root (stack + globals + call frames)
+  @param allObjects - Lista de todos los objetos en heap
+  """
+  public fn checkForCycles(
+    roots: List<Value>,
+    allObjects: List<HeapObjectRef>
+  ) -> void {
+    # Detectar cycles
+    cycles = this.cycleDetector.detectCycles(roots, allObjects)
+    
+    # Liberar objetos del ciclo
+    cycles.forEach(ref => {
+      # Forzar refcount a 0 y liberar
+      ref.refCount = 0
+      this.free(ref)
+    })
+  }
+  
+  """
+  recordAllocation: Registrar nueva allocación (para cycle detection threshold).
+  
+  TASK-076: Trigger cycle detection cuando se alcanza threshold.
+  """
+  public fn recordAllocation() -> void {
+    shouldCheck = this.cycleDetector.recordAllocation()
+    
+    if shouldCheck {
+      # Trigger cycle detection
+      # NOTA: Necesitamos roots y allObjects del VM
+      # Por ahora, solo incrementa contador en CycleDetector
+      # La llamada real a checkForCycles() se hace desde VelaVM
+    }
+  }
+  
+  # ========================================================================
+  # STATS & DEBUGGING
+  # ========================================================================
+  
+  """
+  getStats: Obtener estadísticas de ARC.
+  """
+  public fn getStats() -> ARCStats {
+    return this.stats
+  }
+  
+  """
+  resetStats: Resetear estadísticas (útil para benchmarks).
+  """
+  public fn resetStats() -> void {
+    this.stats.reset()
+  }
+  
+  """
+  validateRefcount: Validar que refcount de objeto es correcto.
+  Útil para debugging de memory leaks.
+  
+  Retorna:
+  - true si refcount >= 0
+  - false si refcount < 0 (corrupto)
+  """
+  public fn validateRefcount(ref: HeapObjectRef) -> Bool {
+    return ref.refCount >= 0
+  }
+  
+  """
+  dumpLiveObjects: Dump de todos los objetos vivos (refcount > 0).
+  Útil para detectar memory leaks.
+  
+  Retorna: List de objetos con refcount > 0
+  """
+  public fn dumpLiveObjects() -> List<HeapObjectRef> {
+    liveObjects: List<HeapObjectRef> = []
+    
+    # TODO: Iterar sobre todos los objetos del heap
+    # Por ahora, retornar lista vacía
+    
+    return liveObjects
+  }
+  
+  """
+  findLeaks: Detectar memory leaks (objetos con refcount > 0 no alcanzables).
+  
+  Proceso:
+  1. Mark phase desde roots (stack, globals)
+  2. Objetos con refcount > 0 pero NO marcados → LEAK
+  
+  Retorna: List de objetos leaked
+  """
+  public fn findLeaks() -> List<HeapObjectRef> {
+    leaks: List<HeapObjectRef> = []
+    
+    # TODO: Implementar leak detection en TASK-078
+    # Por ahora, retornar lista vacía
+    
+    return leaks
+  }
+}
+
+
+# ============================================================================
+# VALUE HELPERS
+# ============================================================================
+
+"""
+Value: Extensión de Value con ARC helpers.
+(Estas funciones se integrarán en vm/velavm.vela)
+"""
+
+"""
+retainValue: Retain si es heap object.
+"""
+public fn retainValue(arc: ARCManager, value: Value) -> void {
+  match value {
+    Value.HeapObject(ref) => arc.retain(ref)
+    _ => {}
+  }
+}
+
+"""
+releaseValue: Release si es heap object.
+"""
+public fn releaseValue(arc: ARCManager, value: Value) -> void {
+  match value {
+    Value.HeapObject(ref) => arc.release(ref)
+    _ => {}
+  }
+}
+
+"""
+autoreleaseValue: Autorelease si es heap object.
+"""
+public fn autoreleaseValue(arc: ARCManager, value: Value) -> Value {
+  match value {
+    Value.HeapObject(ref) => {
+      arc.autorelease(ref)
+      return value
+    }
+    _ => return value
+  }
+}

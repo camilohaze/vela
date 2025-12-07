@@ -1,0 +1,781 @@
+"""
+Sistema Reactivo de Vela con ARC Integration
+
+Implementación de: VELA-587 TASK-077
+Historia: US-17 - Memory Management Automático
+Fecha: 2025-12-07
+
+Descripción:
+Sistema reactivo inspirado en Vue 3, Solid.js y MobX con integración completa
+de ARC para memory management. Signals, computed y effects manejan
+automáticamente retain/release de valores y dependencias.
+
+Características:
+- signal<T>: Estado reactivo mutable con ARC
+- computed<T>: Valores derivados con memoization
+- effect: Side effects con auto-tracking de dependencias
+- watch: Observador de cambios específicos
+- batch: Agrupación de updates
+- Weak refs para subscribers (evitar leaks)
+
+Referencias:
+- Vue 3 Reactivity API: ref(), computed(), watch(), effect()
+- Solid.js: createSignal(), createMemo(), createEffect()
+- MobX: observable, computed, reaction
+- Swift Combine: Publisher, Subscriber
+"""
+
+import 'module:vm/arc' show { ARCManager, retainValue, releaseValue, autoreleaseValue }
+import 'module:vm/weak' show { WeakRef, weak }
+import 'module:vm/heap' show { Heap, HeapObjectRef, Value }
+
+
+# ============================================================================
+# TRACKING DE DEPENDENCIAS
+# ============================================================================
+
+"""
+Reactive Context: Rastrrea el efecto activo para auto-tracking de dependencias.
+
+Cuando un effect se ejecuta, se registra como "activeEffect" en el contexto.
+Cuando un signal se lee (get), automáticamente registra el activeEffect como
+subscriber.
+
+Ejemplo:
+  effect(() => {
+    # activeEffect = este effect
+    count.get()  # Signal registra activeEffect como subscriber
+  })
+"""
+class ReactiveContext {
+  activeEffect: Option<Effect> = None
+  batchDepth: Number = 0
+  pendingEffects: Set<Effect> = Set()
+  
+  fn startTracking(effect: Effect) -> void {
+    this.activeEffect = Some(effect)
+  }
+  
+  fn stopTracking() -> void {
+    this.activeEffect = None
+  }
+  
+  fn getActiveEffect() -> Option<Effect> {
+    return this.activeEffect
+  }
+  
+  fn startBatch() -> void {
+    this.batchDepth = this.batchDepth + 1
+  }
+  
+  fn endBatch() -> void {
+    this.batchDepth = this.batchDepth - 1
+    if this.batchDepth == 0 {
+      this.flushPendingEffects()
+    }
+  }
+  
+  fn isInBatch() -> Bool {
+    return this.batchDepth > 0
+  }
+  
+  fn schedulePendingEffect(effect: Effect) -> void {
+    this.pendingEffects.add(effect)
+  }
+  
+  fn flushPendingEffects() -> void {
+    effects = this.pendingEffects.toList()
+    this.pendingEffects.clear()
+    
+    effects.forEach(effect => {
+      if effect.isActive {
+        effect.run()
+      }
+    })
+  }
+}
+
+# Contexto global de reactividad
+globalReactiveContext: ReactiveContext = ReactiveContext()
+
+
+# ============================================================================
+# SIGNAL<T>: Estado Reactivo Mutable
+# ============================================================================
+
+"""
+Signal<T>: Valor reactivo mutable que notifica subscribers cuando cambia.
+
+ARC Integration:
+- Constructor: retain(value)
+- set(): release(oldValue), retain(newValue)
+- Destructor: release(value)
+- Subscribers: weak refs para evitar leaks
+
+Ejemplo:
+  count = signal(0, arc)
+  count.set(5)  # Notifica subscribers
+  value = count.get()  # Registra activeEffect si existe
+"""
+class Signal<T> {
+  value: T
+  subscribers: List<WeakRef> = []  # WeakRef<Effect>
+  arc: ARCManager
+  heap: Heap
+  isDestroyed: Bool = false
+  
+  constructor(value: T, arc: ARCManager, heap: Heap) {
+    this.value = value
+    this.arc = arc
+    this.heap = heap
+    
+    # ARC: Retain initial value
+    retainValue(this.arc, value)
+  }
+  
+  """
+  Obtiene el valor actual del signal.
+  
+  Si hay un effect activo, automáticamente lo registra como subscriber.
+  
+  Returns:
+    T - Valor actual
+  """
+  public fn get() -> T {
+    # Auto-tracking: Registrar activeEffect como subscriber
+    match globalReactiveContext.getActiveEffect() {
+      Some(effect) => {
+        # Crear weak ref para evitar leak
+        weakEffect = weak(effect)
+        
+        # Agregar si no existe
+        alreadySubscribed = this.subscribers
+          .map(w => w.isAlive())
+          .some(alive => alive)
+        
+        if !alreadySubscribed {
+          this.subscribers.append(weakEffect)
+        }
+      }
+      None => {
+        # No hay effect activo, solo retornar valor
+      }
+    }
+    
+    return this.value
+  }
+  
+  """
+  Actualiza el valor del signal y notifica subscribers.
+  
+  ARC: Release old value, retain new value.
+  
+  Args:
+    newValue: Nuevo valor
+  """
+  public fn set(newValue: T) -> void {
+    if this.isDestroyed {
+      throw Error("Cannot set destroyed signal")
+    }
+    
+    # ARC: Release old value
+    releaseValue(this.arc, this.value)
+    
+    # ARC: Retain new value
+    retainValue(this.arc, newValue)
+    
+    # Update value
+    this.value = newValue
+    
+    # Notify subscribers
+    this._notifySubscribers()
+  }
+  
+  """
+  Update in-place con función transformadora.
+  
+  Ejemplo:
+    count.update(x => x + 1)
+  """
+  public fn update(fn: (T) -> T) -> void {
+    newValue = fn(this.value)
+    this.set(newValue)
+  }
+  
+  """
+  Notifica a todos los subscribers activos.
+  
+  Limpia weak refs inválidas automáticamente.
+  """
+  fn _notifySubscribers() -> void {
+    # Filtrar subscribers vivos
+    aliveSubscribers: List<Effect> = []
+    
+    this.subscribers.forEach(weakSub => {
+      match weakSub.lock() {
+        Some(effect) => {
+          aliveSubscribers.append(effect)
+          # Release (lock incrementó refCount)
+          releaseValue(this.arc, effect)
+        }
+        None => {
+          # Subscriber muerto, será eliminado
+        }
+      }
+    })
+    
+    # Remover weak refs inválidas
+    this.subscribers = this.subscribers.filter(w => w.isAlive())
+    
+    # Notificar subscribers
+    if globalReactiveContext.isInBatch() {
+      # Batch mode: Agendar effects
+      aliveSubscribers.forEach(effect => {
+        globalReactiveContext.schedulePendingEffect(effect)
+      })
+    } else {
+      # Ejecutar inmediatamente
+      aliveSubscribers.forEach(effect => {
+        if effect.isActive {
+          effect.run()
+        }
+      })
+    }
+  }
+  
+  """
+  Destructor: Release value y limpiar subscribers.
+  """
+  public fn destroy() -> void {
+    if this.isDestroyed {
+      return
+    }
+    
+    # ARC: Release value
+    releaseValue(this.arc, this.value)
+    
+    # Limpiar subscribers
+    this.subscribers.clear()
+    
+    this.isDestroyed = true
+  }
+}
+
+
+# ============================================================================
+# COMPUTED<T>: Valor Derivado con Memoization
+# ============================================================================
+
+"""
+Computed<T>: Valor derivado que se recalcula automáticamente cuando sus
+dependencias cambian.
+
+Features:
+- Lazy evaluation: Solo calcula cuando se accede
+- Memoization: Cachea resultado hasta que dependencias cambien
+- Auto-tracking: Detecta dependencias automáticamente
+- ARC: Retain computed value y dependencias
+
+Ejemplo:
+  count = signal(5, arc)
+  doubled = computed(() => count.get() * 2, arc)
+  doubled.get()  # 10
+  count.set(10)
+  doubled.get()  # 20
+"""
+class Computed<T> {
+  computeFn: () -> T
+  cachedValue: Option<T> = None
+  isDirty: Bool = true
+  dependencies: List<Signal<Any>> = []
+  arc: ARCManager
+  heap: Heap
+  effect: Option<Effect> = None
+  isDestroyed: Bool = false
+  
+  constructor(computeFn: () -> T, arc: ARCManager, heap: Heap) {
+    this.computeFn = computeFn
+    this.arc = arc
+    this.heap = heap
+    
+    # Crear effect interno para auto-tracking
+    this.effect = Some(Effect(
+      () => {
+        # Recalcular y marcar como dirty
+        this.isDirty = true
+      },
+      this.arc,
+      this.heap
+    ))
+  }
+  
+  """
+  Obtiene el valor computado.
+  
+  Si está dirty, recalcula. Si no, retorna cached value.
+  
+  Returns:
+    T - Valor computado
+  """
+  public fn get() -> T {
+    if this.isDirty {
+      this._recompute()
+    }
+    
+    match this.cachedValue {
+      Some(value) => {
+        # Auto-tracking: Si hay activeEffect, registrarlo
+        match globalReactiveContext.getActiveEffect() {
+          Some(effect) => {
+            # TODO: Registrar effect como subscriber del computed
+          }
+          None => {}
+        }
+        
+        return value
+      }
+      None => {
+        # Nunca debería pasar (dirty trigger recalcula)
+        throw Error("Computed value not initialized")
+      }
+    }
+  }
+  
+  """
+  Recalcula el valor ejecutando computeFn.
+  
+  ARC: Release old cached value, retain new value.
+  Auto-tracking: Detecta dependencias automáticamente.
+  """
+  fn _recompute() -> void {
+    if this.isDestroyed {
+      throw Error("Cannot recompute destroyed computed")
+    }
+    
+    # ARC: Release old cached value
+    match this.cachedValue {
+      Some(oldValue) => {
+        releaseValue(this.arc, oldValue)
+      }
+      None => {}
+    }
+    
+    # Auto-tracking: Registrar effect para capturar dependencias
+    match this.effect {
+      Some(effect) => {
+        globalReactiveContext.startTracking(effect)
+      }
+      None => {}
+    }
+    
+    # Ejecutar computeFn
+    newValue = this.computeFn()
+    
+    # Stop tracking
+    globalReactiveContext.stopTracking()
+    
+    # ARC: Retain new value
+    retainValue(this.arc, newValue)
+    
+    # Cache
+    this.cachedValue = Some(newValue)
+    this.isDirty = false
+  }
+  
+  """
+  Destructor: Release cached value.
+  """
+  public fn destroy() -> void {
+    if this.isDestroyed {
+      return
+    }
+    
+    # ARC: Release cached value
+    match this.cachedValue {
+      Some(value) => {
+        releaseValue(this.arc, value)
+      }
+      None => {}
+    }
+    
+    # Destroy effect interno
+    match this.effect {
+      Some(effect) => {
+        effect.destroy()
+      }
+      None => {}
+    }
+    
+    this.cachedValue = None
+    this.isDestroyed = true
+  }
+}
+
+
+# ============================================================================
+# EFFECT: Side Effect Reactivo
+# ============================================================================
+
+"""
+Effect: Side effect que se ejecuta automáticamente cuando sus dependencias
+cambian.
+
+Features:
+- Auto-tracking: Detecta dependencias automáticamente
+- Cleanup: Ejecuta cleanup function antes de re-ejecutar
+- Lifecycle: stop() para desactivar, run() para ejecutar manualmente
+
+Ejemplo:
+  count = signal(0, arc)
+  effect(() => {
+    print("Count: ${count.get()}")
+  }, arc)
+  
+  count.set(5)  # Imprime "Count: 5"
+"""
+class Effect {
+  effectFn: () -> void
+  cleanupFn: Option<() -> void> = None
+  dependencies: List<WeakRef> = []  # WeakRef<Signal>
+  isActive: Bool = true
+  isDestroyed: Bool = false
+  arc: ARCManager
+  heap: Heap
+  
+  constructor(effectFn: () -> void, arc: ARCManager, heap: Heap) {
+    this.effectFn = effectFn
+    this.arc = arc
+    this.heap = heap
+    
+    # Ejecutar inmediatamente
+    this.run()
+  }
+  
+  """
+  Ejecuta el effect function.
+  
+  Auto-tracking: Registra este effect como activeEffect para capturar
+  dependencias automáticamente.
+  """
+  public fn run() -> void {
+    if !this.isActive || this.isDestroyed {
+      return
+    }
+    
+    # Ejecutar cleanup si existe
+    match this.cleanupFn {
+      Some(cleanup) => {
+        cleanup()
+        this.cleanupFn = None
+      }
+      None => {}
+    }
+    
+    # Auto-tracking: Registrar como activeEffect
+    globalReactiveContext.startTracking(this)
+    
+    # Ejecutar effect
+    this.effectFn()
+    
+    # Stop tracking
+    globalReactiveContext.stopTracking()
+  }
+  
+  """
+  Registra cleanup function que se ejecuta antes de re-ejecutar effect.
+  
+  Ejemplo:
+    effect(() => {
+      interval = setInterval(() => print("tick"), 1000)
+      
+      onCleanup(() => {
+        clearInterval(interval)
+      })
+    })
+  """
+  public fn onCleanup(cleanup: () -> void) -> void {
+    this.cleanupFn = Some(cleanup)
+  }
+  
+  """
+  Detiene el effect (no se ejecuta en futuros updates).
+  """
+  public fn stop() -> void {
+    this.isActive = false
+  }
+  
+  """
+  Destructor: Ejecuta cleanup y limpia dependencias.
+  """
+  public fn destroy() -> void {
+    if this.isDestroyed {
+      return
+    }
+    
+    # Ejecutar cleanup final
+    match this.cleanupFn {
+      Some(cleanup) => {
+        cleanup()
+      }
+      None => {}
+    }
+    
+    # Limpiar dependencias
+    this.dependencies.clear()
+    
+    this.isActive = false
+    this.isDestroyed = true
+  }
+}
+
+
+# ============================================================================
+# WATCH: Observador de Cambios Específicos
+# ============================================================================
+
+"""
+Watch: Observa cambios en signals específicos y ejecuta callback.
+
+Diferencia con effect:
+- effect: Auto-tracking de cualquier signal accedido
+- watch: Observa signals específicos pasados como argumentos
+
+Ejemplo:
+  count = signal(0, arc)
+  watch(count, (newVal, oldVal) => {
+    print("Count changed: ${oldVal} -> ${newVal}")
+  }, arc)
+"""
+class Watch<T> {
+  source: Signal<T>
+  callback: (T, T) -> void
+  oldValue: Option<T> = None
+  effect: Effect
+  arc: ARCManager
+  heap: Heap
+  
+  constructor(
+    source: Signal<T>,
+    callback: (T, T) -> void,
+    arc: ARCManager,
+    heap: Heap
+  ) {
+    this.source = source
+    this.callback = callback
+    this.arc = arc
+    this.heap = heap
+    
+    # Crear effect interno
+    this.effect = Effect(() => {
+      newValue = this.source.get()
+      
+      match this.oldValue {
+        Some(oldVal) => {
+          # Ejecutar callback con old y new
+          this.callback(newValue, oldVal)
+          
+          # ARC: Release old value
+          releaseValue(this.arc, oldVal)
+        }
+        None => {
+          # Primera ejecución, skip callback
+        }
+      }
+      
+      # ARC: Retain new value
+      retainValue(this.arc, newValue)
+      this.oldValue = Some(newValue)
+    }, arc, heap)
+  }
+  
+  """
+  Detiene el watch.
+  """
+  public fn stop() -> void {
+    this.effect.stop()
+    
+    # ARC: Release old value
+    match this.oldValue {
+      Some(value) => {
+        releaseValue(this.arc, value)
+      }
+      None => {}
+    }
+  }
+  
+  """
+  Destructor.
+  """
+  public fn destroy() -> void {
+    this.stop()
+    this.effect.destroy()
+  }
+}
+
+
+# ============================================================================
+# BATCH: Agrupación de Updates
+# ============================================================================
+
+"""
+Batch: Agrupa múltiples updates y ejecuta effects solo al final.
+
+Uso:
+  batch(() => {
+    signal1.set(1)
+    signal2.set(2)
+    signal3.set(3)
+    # Effects se ejecutan UNA VEZ al final
+  })
+
+Sin batch:
+  signal1.set(1)  # Ejecuta effects
+  signal2.set(2)  # Ejecuta effects
+  signal3.set(3)  # Ejecuta effects
+  # 3 ejecuciones de effects
+"""
+public fn batch(fn: () -> void) -> void {
+  globalReactiveContext.startBatch()
+  
+  try {
+    fn()
+  } finally {
+    globalReactiveContext.endBatch()
+  }
+}
+
+
+# ============================================================================
+# FACTORY FUNCTIONS (API Pública)
+# ============================================================================
+
+"""
+Crea un signal reactivo.
+
+Ejemplo:
+  count = signal(0, arc, heap)
+  count.set(5)
+"""
+public fn signal<T>(value: T, arc: ARCManager, heap: Heap) -> Signal<T> {
+  return Signal(value, arc, heap)
+}
+
+"""
+Crea un computed reactivo.
+
+Ejemplo:
+  count = signal(5, arc, heap)
+  doubled = computed(() => count.get() * 2, arc, heap)
+"""
+public fn computed<T>(fn: () -> T, arc: ARCManager, heap: Heap) -> Computed<T> {
+  return Computed(fn, arc, heap)
+}
+
+"""
+Crea un effect reactivo.
+
+Ejemplo:
+  count = signal(0, arc, heap)
+  effect(() => {
+    print("Count: ${count.get()}")
+  }, arc, heap)
+"""
+public fn effect(fn: () -> void, arc: ARCManager, heap: Heap) -> Effect {
+  return Effect(fn, arc, heap)
+}
+
+"""
+Crea un watch para observar cambios en signal.
+
+Ejemplo:
+  count = signal(0, arc, heap)
+  watch(count, (newVal, oldVal) => {
+    print("${oldVal} -> ${newVal}")
+  }, arc, heap)
+"""
+public fn watch<T>(
+  source: Signal<T>,
+  callback: (T, T) -> void,
+  arc: ARCManager,
+  heap: Heap
+) -> Watch<T> {
+  return Watch(source, callback, arc, heap)
+}
+
+
+# ============================================================================
+# REACTIVE UTILITIES
+# ============================================================================
+
+"""
+Ejecuta función sin auto-tracking.
+
+Útil para leer signals sin registrar dependencias.
+
+Ejemplo:
+  effect(() => {
+    # Esta lectura registra dependencia
+    value1 = signal1.get()
+    
+    # Esta NO registra dependencia
+    value2 = untrack(() => signal2.get())
+  })
+"""
+public fn untrack<T>(fn: () -> T) -> T {
+  previousEffect = globalReactiveContext.getActiveEffect()
+  globalReactiveContext.stopTracking()
+  
+  result = fn()
+  
+  match previousEffect {
+    Some(effect) => {
+      globalReactiveContext.startTracking(effect)
+    }
+    None => {}
+  }
+  
+  return result
+}
+
+"""
+Verifica si hay un effect activo (estamos en reactive context).
+
+Returns:
+  Bool - true si hay activeEffect
+"""
+public fn isTracking() -> Bool {
+  match globalReactiveContext.getActiveEffect() {
+    Some(_) => return true
+    None => return false
+  }
+}
+
+
+# ============================================================================
+# INTEGRATION CON VELAVM
+# ============================================================================
+
+"""
+Inicializa el sistema reactivo en VelaVM.
+
+Debe llamarse en VelaVM constructor:
+  this.reactiveContext = initReactiveSystem(this.arc, this.heap)
+"""
+public fn initReactiveSystem(arc: ARCManager, heap: Heap) -> ReactiveContext {
+  return ReactiveContext()
+}
+
+"""
+Limpia el sistema reactivo al finalizar VelaVM.
+
+Debe llamarse en VelaVM destructor.
+"""
+public fn cleanupReactiveSystem(context: ReactiveContext) -> void {
+  # Flush pending effects
+  context.flushPendingEffects()
+  
+  # Clear state
+  context.pendingEffects.clear()
+  context.activeEffect = None
+  context.batchDepth = 0
+}

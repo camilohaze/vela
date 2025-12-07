@@ -1,0 +1,716 @@
+"""
+Unit Tests para ARC (Automatic Reference Counting)
+
+Implementación de: VELA-587 TASK-078
+Historia: US-17 - Memory Management Automático
+Fecha: 2025-12-07
+
+Descripción:
+Tests unitarios completos para ARCManager, incluyendo:
+- Retain/Release correctness
+- Reference counting
+- Autorelease pool
+- Recursive freeing
+- Edge cases y error handling
+
+Cobertura objetivo: >= 80%
+"""
+
+import 'module:vm/arc' show { ARCManager, ARCStats, retainValue, releaseValue, autoreleaseValue }
+import 'module:vm/heap' show { Heap, HeapObjectRef, Value }
+import 'system:test' show { describe, it, expect, beforeEach, afterEach }
+
+
+# ============================================================================
+# TEST SUITE: ARC BASICS
+# ============================================================================
+
+describe("ARC Basics", () => {
+  heap: Heap
+  arc: ARCManager
+  
+  beforeEach(() => {
+    heap = Heap(1024 * 1024)  # 1 MB heap
+    arc = ARCManager(heap)
+    heap.setARCManager(arc)
+  })
+  
+  afterEach(() => {
+    heap.destroy()
+  })
+  
+  it("should initialize with correct defaults", () => {
+    stats = arc.getStats()
+    
+    expect(stats.totalRetains).toBe(0)
+    expect(stats.totalReleases).toBe(0)
+    expect(stats.totalFrees).toBe(0)
+    expect(stats.liveObjects).toBe(0)
+    expect(stats.peakMemory).toBe(0)
+  })
+  
+  it("should retain value and increment refCount", () => {
+    # Allocate object
+    ref = heap.allocate(HeapObjectType.Instance, 64)
+    expect(ref.refCount).toBe(0)
+    
+    # Retain
+    retainValue(arc, ref)
+    expect(ref.refCount).toBe(1)
+    
+    stats = arc.getStats()
+    expect(stats.totalRetains).toBe(1)
+    expect(stats.liveObjects).toBe(1)
+  })
+  
+  it("should release value and decrement refCount", () => {
+    ref = heap.allocate(HeapObjectType.Instance, 64)
+    retainValue(arc, ref)
+    expect(ref.refCount).toBe(1)
+    
+    # Release
+    releaseValue(arc, ref)
+    expect(ref.refCount).toBe(0)
+    
+    stats = arc.getStats()
+    expect(stats.totalReleases).toBe(1)
+  })
+  
+  it("should free object when refCount reaches 0", () => {
+    ref = heap.allocate(HeapObjectType.Instance, 64)
+    retainValue(arc, ref)
+    
+    # Release (refCount 1 -> 0, should free)
+    releaseValue(arc, ref)
+    
+    stats = arc.getStats()
+    expect(stats.totalFrees).toBe(1)
+    expect(stats.liveObjects).toBe(0)
+  })
+  
+  it("should NOT free object if refCount > 0", () => {
+    ref = heap.allocate(HeapObjectType.Instance, 64)
+    retainValue(arc, ref)
+    retainValue(arc, ref)
+    expect(ref.refCount).toBe(2)
+    
+    # Release once (refCount 2 -> 1, should NOT free)
+    releaseValue(arc, ref)
+    expect(ref.refCount).toBe(1)
+    
+    stats = arc.getStats()
+    expect(stats.totalFrees).toBe(0)
+    expect(stats.liveObjects).toBe(1)
+  })
+  
+  it("should handle multiple retains/releases correctly", () => {
+    ref = heap.allocate(HeapObjectType.Instance, 64)
+    
+    # Retain 5 times
+    (0..5).forEach(_ => retainValue(arc, ref))
+    expect(ref.refCount).toBe(5)
+    
+    # Release 3 times
+    (0..3).forEach(_ => releaseValue(arc, ref))
+    expect(ref.refCount).toBe(2)
+    
+    # Release 2 more times (should free)
+    releaseValue(arc, ref)
+    expect(ref.refCount).toBe(1)
+    releaseValue(arc, ref)
+    
+    stats = arc.getStats()
+    expect(stats.totalFrees).toBe(1)
+  })
+  
+  it("should handle retain of primitive values (no-op)", () => {
+    # Primitives (Number, Bool, None) should be no-op
+    retainValue(arc, 42)
+    retainValue(arc, true)
+    retainValue(arc, None)
+    
+    stats = arc.getStats()
+    expect(stats.totalRetains).toBe(0)  # No retains for primitives
+  })
+  
+  it("should throw error on release with refCount = 0", () => {
+    ref = heap.allocate(HeapObjectType.Instance, 64)
+    
+    expect(() => {
+      releaseValue(arc, ref)  # refCount already 0
+    }).toThrow("Cannot release object with refCount = 0")
+  })
+})
+
+
+# ============================================================================
+# TEST SUITE: AUTORELEASE POOL
+# ============================================================================
+
+describe("Autorelease Pool", () => {
+  heap: Heap
+  arc: ARCManager
+  
+  beforeEach(() => {
+    heap = Heap(1024 * 1024)
+    arc = ARCManager(heap)
+    heap.setARCManager(arc)
+  })
+  
+  afterEach(() => {
+    heap.destroy()
+  })
+  
+  it("should add object to autorelease pool", () => {
+    ref = heap.allocate(HeapObjectType.Instance, 64)
+    retainValue(arc, ref)
+    
+    # Autorelease
+    autoreleaseValue(arc, ref)
+    
+    expect(ref.refCount).toBe(1)  # Still retained
+    expect(arc.autoreleasePool.length).toBe(1)
+  })
+  
+  it("should drain autorelease pool and release objects", () => {
+    ref1 = heap.allocate(HeapObjectType.Instance, 64)
+    ref2 = heap.allocate(HeapObjectType.Instance, 64)
+    
+    retainValue(arc, ref1)
+    retainValue(arc, ref2)
+    
+    autoreleaseValue(arc, ref1)
+    autoreleaseValue(arc, ref2)
+    
+    expect(arc.autoreleasePool.length).toBe(2)
+    
+    # Drain
+    arc.drainAutoreleasePool()
+    
+    expect(arc.autoreleasePool.length).toBe(0)
+    
+    stats = arc.getStats()
+    expect(stats.totalFrees).toBe(2)
+  })
+  
+  it("should handle empty autorelease pool drain", () => {
+    expect(() => {
+      arc.drainAutoreleasePool()
+    }).not.toThrow()
+  })
+  
+  it("should NOT free autoreleased object if still retained", () => {
+    ref = heap.allocate(HeapObjectType.Instance, 64)
+    retainValue(arc, ref)
+    retainValue(arc, ref)  # refCount = 2
+    
+    autoreleaseValue(arc, ref)
+    arc.drainAutoreleasePool()
+    
+    # refCount 2 -> 1, should NOT free
+    expect(ref.refCount).toBe(1)
+    
+    stats = arc.getStats()
+    expect(stats.totalFrees).toBe(0)
+  })
+})
+
+
+# ============================================================================
+# TEST SUITE: RECURSIVE FREEING
+# ============================================================================
+
+describe("Recursive Freeing", () => {
+  heap: Heap
+  arc: ARCManager
+  
+  beforeEach(() => {
+    heap = Heap(1024 * 1024)
+    arc = ARCManager(heap)
+    heap.setARCManager(arc)
+  })
+  
+  afterEach(() => {
+    heap.destroy()
+  })
+  
+  it("should recursively free Closure with upvalues", () => {
+    # Create closure with 2 upvalues
+    closure = heap.allocate(HeapObjectType.Closure, 128)
+    upvalue1 = heap.allocate(HeapObjectType.Upvalue, 32)
+    upvalue2 = heap.allocate(HeapObjectType.Upvalue, 32)
+    
+    # Retain upvalues (simular que closure los retiene)
+    retainValue(arc, upvalue1)
+    retainValue(arc, upvalue2)
+    
+    closure.upvalues = [upvalue1, upvalue2]
+    
+    # Retain closure
+    retainValue(arc, closure)
+    
+    # Release closure (should recursively free upvalues)
+    releaseValue(arc, closure)
+    
+    stats = arc.getStats()
+    expect(stats.totalFrees).toBe(3)  # closure + 2 upvalues
+  })
+  
+  it("should recursively free Instance with fields", () => {
+    # Create instance with 3 fields
+    instance = heap.allocate(HeapObjectType.Instance, 128)
+    field1 = heap.allocate(HeapObjectType.String, 32)
+    field2 = heap.allocate(HeapObjectType.Number, 16)
+    field3 = heap.allocate(HeapObjectType.Instance, 64)
+    
+    retainValue(arc, field1)
+    retainValue(arc, field2)
+    retainValue(arc, field3)
+    
+    instance.fields = {
+      "name": field1,
+      "age": field2,
+      "parent": field3
+    }
+    
+    retainValue(arc, instance)
+    releaseValue(arc, instance)
+    
+    stats = arc.getStats()
+    expect(stats.totalFrees).toBe(4)  # instance + 3 fields
+  })
+  
+  it("should recursively free List with items", () => {
+    # Create list with 5 items
+    list = heap.allocate(HeapObjectType.List, 256)
+    items = (0..5).map(i => {
+      item = heap.allocate(HeapObjectType.Number, 16)
+      retainValue(arc, item)
+      return item
+    })
+    
+    list.items = items
+    
+    retainValue(arc, list)
+    releaseValue(arc, list)
+    
+    stats = arc.getStats()
+    expect(stats.totalFrees).toBe(6)  # list + 5 items
+  })
+  
+  it("should recursively free Map with values", () => {
+    # Create map with 3 entries
+    map = heap.allocate(HeapObjectType.Map, 256)
+    val1 = heap.allocate(HeapObjectType.String, 32)
+    val2 = heap.allocate(HeapObjectType.String, 32)
+    val3 = heap.allocate(HeapObjectType.String, 32)
+    
+    retainValue(arc, val1)
+    retainValue(arc, val2)
+    retainValue(arc, val3)
+    
+    map.entries = {
+      "key1": val1,
+      "key2": val2,
+      "key3": val3
+    }
+    
+    retainValue(arc, map)
+    releaseValue(arc, map)
+    
+    stats = arc.getStats()
+    expect(stats.totalFrees).toBe(4)  # map + 3 values
+  })
+  
+  it("should handle deeply nested structures", () => {
+    # Create nested structure: List -> Instance -> List -> Instance
+    list1 = heap.allocate(HeapObjectType.List, 128)
+    instance1 = heap.allocate(HeapObjectType.Instance, 128)
+    list2 = heap.allocate(HeapObjectType.List, 128)
+    instance2 = heap.allocate(HeapObjectType.Instance, 128)
+    
+    retainValue(arc, instance2)
+    list2.items = [instance2]
+    
+    retainValue(arc, list2)
+    instance1.fields = { "nested": list2 }
+    
+    retainValue(arc, instance1)
+    list1.items = [instance1]
+    
+    retainValue(arc, list1)
+    releaseValue(arc, list1)
+    
+    stats = arc.getStats()
+    expect(stats.totalFrees).toBe(4)  # All 4 objects freed
+  })
+})
+
+
+# ============================================================================
+# TEST SUITE: REFERENCE COUNTING EDGE CASES
+# ============================================================================
+
+describe("Reference Counting Edge Cases", () => {
+  heap: Heap
+  arc: ARCManager
+  
+  beforeEach(() => {
+    heap = Heap(1024 * 1024)
+    arc = ARCManager(heap)
+    heap.setARCManager(arc)
+  })
+  
+  afterEach(() => {
+    heap.destroy()
+  })
+  
+  it("should handle self-referential structures (cycle)", () => {
+    # Create cycle: A.ref = A
+    instance = heap.allocate(HeapObjectType.Instance, 128)
+    retainValue(arc, instance)
+    
+    # Self-reference
+    instance.fields = { "self": instance }
+    retainValue(arc, instance)  # instance now has refCount = 2
+    
+    # Release once
+    releaseValue(arc, instance)
+    expect(instance.refCount).toBe(1)
+    
+    # Still alive (cycle keeps it alive)
+    stats = arc.getStats()
+    expect(stats.totalFrees).toBe(0)
+    
+    # NOTE: Cycle detector should free this in checkForCycles()
+  })
+  
+  it("should handle bidirectional references (cycle)", () => {
+    # Create cycle: A -> B -> A
+    instanceA = heap.allocate(HeapObjectType.Instance, 128)
+    instanceB = heap.allocate(HeapObjectType.Instance, 128)
+    
+    retainValue(arc, instanceA)
+    retainValue(arc, instanceB)
+    
+    # Bidirectional refs
+    instanceA.fields = { "b": instanceB }
+    instanceB.fields = { "a": instanceA }
+    retainValue(arc, instanceA)
+    retainValue(arc, instanceB)
+    
+    # Release external refs
+    releaseValue(arc, instanceA)
+    releaseValue(arc, instanceB)
+    
+    # Both still alive (cycle)
+    expect(instanceA.refCount).toBe(1)
+    expect(instanceB.refCount).toBe(1)
+    
+    stats = arc.getStats()
+    expect(stats.totalFrees).toBe(0)
+  })
+  
+  it("should handle shared references correctly", () => {
+    # Create shared reference: A -> C <- B
+    instanceA = heap.allocate(HeapObjectType.Instance, 128)
+    instanceB = heap.allocate(HeapObjectType.Instance, 128)
+    sharedC = heap.allocate(HeapObjectType.Instance, 128)
+    
+    retainValue(arc, sharedC)
+    retainValue(arc, sharedC)  # refCount = 2 (shared)
+    
+    instanceA.fields = { "shared": sharedC }
+    instanceB.fields = { "shared": sharedC }
+    
+    retainValue(arc, instanceA)
+    retainValue(arc, instanceB)
+    
+    # Release A (should NOT free sharedC)
+    releaseValue(arc, instanceA)
+    expect(sharedC.refCount).toBe(1)
+    
+    # Release B (should free sharedC)
+    releaseValue(arc, instanceB)
+    
+    stats = arc.getStats()
+    expect(stats.totalFrees).toBe(3)  # A, B, sharedC
+  })
+  
+  it("should handle NULL/None references gracefully", () => {
+    instance = heap.allocate(HeapObjectType.Instance, 128)
+    instance.fields = {
+      "nullable": None,
+      "value": 42
+    }
+    
+    retainValue(arc, instance)
+    releaseValue(arc, instance)
+    
+    # Should not crash on None field
+    stats = arc.getStats()
+    expect(stats.totalFrees).toBe(1)
+  })
+  
+  it("should track peak memory usage", () => {
+    refs = (0..10).map(_ => {
+      ref = heap.allocate(HeapObjectType.Instance, 1024)  # 1 KB each
+      retainValue(arc, ref)
+      return ref
+    })
+    
+    stats = arc.getStats()
+    expect(stats.peakMemory).toBeGreaterThan(10 * 1024)
+    
+    # Free all
+    refs.forEach(ref => releaseValue(arc, ref))
+    
+    stats = arc.getStats()
+    expect(stats.currentMemory).toBe(0)
+    expect(stats.peakMemory).toBeGreaterThan(0)  # Peak preserved
+  })
+})
+
+
+# ============================================================================
+# TEST SUITE: ARC STATISTICS
+# ============================================================================
+
+describe("ARC Statistics", () => {
+  heap: Heap
+  arc: ARCManager
+  
+  beforeEach(() => {
+    heap = Heap(1024 * 1024)
+    arc = ARCManager(heap)
+    heap.setARCManager(arc)
+  })
+  
+  afterEach(() => {
+    heap.destroy()
+  })
+  
+  it("should track total retains/releases", () => {
+    ref1 = heap.allocate(HeapObjectType.Instance, 64)
+    ref2 = heap.allocate(HeapObjectType.Instance, 64)
+    
+    retainValue(arc, ref1)
+    retainValue(arc, ref1)
+    retainValue(arc, ref2)
+    
+    stats = arc.getStats()
+    expect(stats.totalRetains).toBe(3)
+    
+    releaseValue(arc, ref1)
+    releaseValue(arc, ref1)
+    releaseValue(arc, ref2)
+    
+    stats = arc.getStats()
+    expect(stats.totalReleases).toBe(3)
+  })
+  
+  it("should track live objects count", () => {
+    refs = (0..5).map(_ => {
+      ref = heap.allocate(HeapObjectType.Instance, 64)
+      retainValue(arc, ref)
+      return ref
+    })
+    
+    stats = arc.getStats()
+    expect(stats.liveObjects).toBe(5)
+    
+    # Free 3
+    (0..3).forEach(i => releaseValue(arc, refs[i]))
+    
+    stats = arc.getStats()
+    expect(stats.liveObjects).toBe(2)
+  })
+  
+  it("should track memory usage", () => {
+    ref1 = heap.allocate(HeapObjectType.Instance, 1024)
+    ref2 = heap.allocate(HeapObjectType.Instance, 2048)
+    
+    retainValue(arc, ref1)
+    retainValue(arc, ref2)
+    
+    stats = arc.getStats()
+    expect(stats.currentMemory).toBe(1024 + 2048)
+    
+    releaseValue(arc, ref1)
+    
+    stats = arc.getStats()
+    expect(stats.currentMemory).toBe(2048)
+  })
+  
+  it("should reset statistics", () => {
+    ref = heap.allocate(HeapObjectType.Instance, 64)
+    retainValue(arc, ref)
+    releaseValue(arc, ref)
+    
+    stats = arc.getStats()
+    expect(stats.totalRetains).toBe(1)
+    expect(stats.totalReleases).toBe(1)
+    
+    # Reset
+    arc.resetStats()
+    
+    stats = arc.getStats()
+    expect(stats.totalRetains).toBe(0)
+    expect(stats.totalReleases).toBe(0)
+    expect(stats.totalFrees).toBe(0)
+  })
+})
+
+
+# ============================================================================
+# TEST SUITE: ERROR HANDLING
+# ============================================================================
+
+describe("Error Handling", () => {
+  heap: Heap
+  arc: ARCManager
+  
+  beforeEach(() => {
+    heap = Heap(1024 * 1024)
+    arc = ARCManager(heap)
+    heap.setARCManager(arc)
+  })
+  
+  afterEach(() => {
+    heap.destroy()
+  })
+  
+  it("should throw on double free", () => {
+    ref = heap.allocate(HeapObjectType.Instance, 64)
+    retainValue(arc, ref)
+    releaseValue(arc, ref)
+    
+    expect(() => {
+      releaseValue(arc, ref)  # Already freed
+    }).toThrow("Cannot release freed object")
+  })
+  
+  it("should throw on retain after free", () => {
+    ref = heap.allocate(HeapObjectType.Instance, 64)
+    retainValue(arc, ref)
+    releaseValue(arc, ref)
+    
+    expect(() => {
+      retainValue(arc, ref)  # Already freed
+    }).toThrow("Cannot retain freed object")
+  })
+  
+  it("should handle heap allocation failure gracefully", () => {
+    # Fill heap to capacity
+    refs = []
+    
+    expect(() => {
+      # Try to allocate more than heap capacity
+      (0..1000000).forEach(_ => {
+        ref = heap.allocate(HeapObjectType.Instance, 1024)
+        retainValue(arc, ref)
+        refs.append(ref)
+      })
+    }).toThrow("Heap out of memory")
+  })
+})
+
+
+# ============================================================================
+# TEST SUITE: PERFORMANCE CHARACTERISTICS
+# ============================================================================
+
+describe("Performance Characteristics", () => {
+  heap: Heap
+  arc: ARCManager
+  
+  beforeEach(() => {
+    heap = Heap(10 * 1024 * 1024)  # 10 MB heap
+    arc = ARCManager(heap)
+    heap.setARCManager(arc)
+  })
+  
+  afterEach(() => {
+    heap.destroy()
+  })
+  
+  it("should handle large number of objects efficiently", () => {
+    startTime = performance.now()
+    
+    refs = (0..10000).map(_ => {
+      ref = heap.allocate(HeapObjectType.Instance, 64)
+      retainValue(arc, ref)
+      return ref
+    })
+    
+    endTime = performance.now()
+    allocTime = endTime - startTime
+    
+    expect(allocTime).toBeLessThan(1000)  # < 1 second
+    
+    # Free all
+    startTime = performance.now()
+    refs.forEach(ref => releaseValue(arc, ref))
+    endTime = performance.now()
+    freeTime = endTime - startTime
+    
+    expect(freeTime).toBeLessThan(1000)
+  })
+  
+  it("retain/release should be O(1)", () => {
+    ref = heap.allocate(HeapObjectType.Instance, 64)
+    
+    # Measure 1000 retain/release operations
+    startTime = performance.now()
+    
+    (0..1000).forEach(_ => {
+      retainValue(arc, ref)
+      releaseValue(arc, ref)
+    })
+    
+    endTime = performance.now()
+    avgTime = (endTime - startTime) / 1000
+    
+    expect(avgTime).toBeLessThan(0.1)  # < 0.1 ms per operation
+  })
+})
+
+
+# ============================================================================
+# RUN ALL TESTS
+# ============================================================================
+
+fn main() -> void {
+  print("Running ARC Unit Tests...")
+  print("=" * 60)
+  
+  # Run test suites
+  testResults = [
+    runTestSuite("ARC Basics"),
+    runTestSuite("Autorelease Pool"),
+    runTestSuite("Recursive Freeing"),
+    runTestSuite("Reference Counting Edge Cases"),
+    runTestSuite("ARC Statistics"),
+    runTestSuite("Error Handling"),
+    runTestSuite("Performance Characteristics")
+  ]
+  
+  # Summary
+  totalTests = testResults.map(r => r.total).reduce((a, b) => a + b, 0)
+  passedTests = testResults.map(r => r.passed).reduce((a, b) => a + b, 0)
+  failedTests = totalTests - passedTests
+  
+  print("")
+  print("=" * 60)
+  print("TEST SUMMARY")
+  print("=" * 60)
+  print("Total: ${totalTests}")
+  print("Passed: ${passedTests} ✅")
+  print("Failed: ${failedTests} ❌")
+  print("Success Rate: ${(passedTests / totalTests * 100).toFixed(2)}%")
+  
+  if failedTests == 0 {
+    print("")
+    print("🎉 ALL TESTS PASSED!")
+  }
+}
