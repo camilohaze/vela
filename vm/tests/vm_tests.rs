@@ -145,7 +145,7 @@ fn test_vm_execute_jump() {
 
     let mut code = CodeObject::new(0, 0);
     code.bytecode = vec![
-        0x40, 0x03, 0x00, 0x00, 0x00, // Jump +3 bytes
+        0x40, 0x06, 0x00, 0x00, 0x00, // Jump to position 6
         0x51, // Return (skipped)
         0x00, 0x00, 0x00, // LoadConst 0 (42)
         0x51, // Return
@@ -166,7 +166,7 @@ fn test_vm_execute_conditional_jump() {
     let mut code = CodeObject::new(0, 0);
     code.bytecode = vec![
         0x00, 0x00, 0x00, // LoadConst 0 (false)
-        0x41, 0x04, 0x00, 0x00, 0x00, // JumpIfFalse +4
+        0x41, 0x09, 0x00, 0x00, 0x00, // JumpIfFalse to position 9
         0x51, // Return (skipped)
         0x00, 0x01, 0x00, // LoadConst 1 (100)
         0x51, // Return
@@ -183,7 +183,8 @@ fn test_vm_local_variables() {
     let mut bytecode = Bytecode::new();
     bytecode.add_constant(Constant::Int(42));
 
-    let mut code = CodeObject::new(0, 2); // 2 locals
+    let mut code = CodeObject::new(0, 2);
+    code.local_count = 2; // Set local count explicitly
     code.bytecode = vec![
         0x00, 0x00, 0x00, // LoadConst 0 (42)
         0x02, 0x00, 0x00, // StoreLocal 0
@@ -279,7 +280,7 @@ fn test_vm_division_by_zero() {
 fn test_vm_invalid_opcode() {
     let mut bytecode = Bytecode::new();
     let mut code = CodeObject::new(0, 0);
-    code.bytecode = vec![0xFF]; // Invalid opcode
+    code.bytecode = vec![0xFE]; // Invalid opcode (0xFE is not defined)
     bytecode.add_code_object(code);
 
     let mut vm = VirtualMachine::new();
@@ -291,7 +292,8 @@ fn test_vm_invalid_opcode() {
 fn test_call_frame_initialization() {
     use std::rc::Rc;
 
-    let code = CodeObject::new(2, 3);
+    let mut code = CodeObject::new(2, 3);
+    code.local_count = 3; // Set local count explicitly
     let frame = CallFrame::new(Rc::new(code), 0);
 
     assert_eq!(frame.ip, 0);
@@ -322,20 +324,21 @@ fn test_call_frame_ip_advancement() {
     use std::rc::Rc;
 
     let mut code = CodeObject::new(0, 0);
-    code.bytecode = vec![0x00, 0x12, 0x34, 0x56];
+    code.bytecode = vec![0x00, 0x12, 0x34, 0x56]; // LoadConst(0x3412) followed by 0x56
 
     let mut frame = CallFrame::new(Rc::new(code), 0);
-    
-    // Simulate IP advancement (read_u16/read_i32 are private)
+
+    // LoadConst advances IP by 3 bytes (opcode + u16)
     assert_eq!(frame.ip, 0);
-    let _ = frame.fetch(); // Advances IP
-    assert_eq!(frame.ip, 1);
+    let _ = frame.fetch(); // LoadConst advances IP by 3
+    assert_eq!(frame.ip, 3);
 }
 #[test]
 fn test_call_frame_locals() {
     use std::rc::Rc;
 
-    let code = CodeObject::new(2, 5); // 2 args, 5 locals
+    let mut code = CodeObject::new(2, 5);
+    code.local_count = 5; // Set local count explicitly
     let frame = CallFrame::new(Rc::new(code), 0);
 
     // Verify locals initialized

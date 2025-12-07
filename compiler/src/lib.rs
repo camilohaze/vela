@@ -78,7 +78,10 @@ impl Compiler {
         let mut codegen = CodeGenerator::new();
         let bytecode = codegen.generate_program(&ast)?;
 
-        Ok(bytecode.into_bytes())
+        Ok(bytecode.to_bytes().map_err(|e| CompileError::Io {
+            path: std::path::PathBuf::from("bytecode"),
+            error: format!("Failed to serialize bytecode: {}", e),
+        })?)
     }
 
     /// Compile a source file

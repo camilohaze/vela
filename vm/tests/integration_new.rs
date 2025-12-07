@@ -95,16 +95,22 @@ fn test_type_error_operations() {
     assert!(result.is_ok() || result.is_err());
 }
 
-/// Test: Empty bytecode
+/// Test: Empty bytecode execution (should succeed with NULL)
 #[test]
 fn test_empty_bytecode() {
-    let bytecode = Bytecode::new();
-    
+    let mut bytecode = Bytecode::new();
+
+    // Create an empty code object (no instructions)
+    let code_obj = CodeObject::new(0, 0);
+    // Empty code object is valid - should execute successfully
+    bytecode.code_objects.push(code_obj);
+
     let mut vm = VirtualMachine::new();
     let result = vm.execute(&bytecode);
-    
-    // Should fail with EmptyBytecode or similar
-    assert!(result.is_err());
+
+    // Should succeed and return NULL
+    assert!(result.is_ok());
+    assert_eq!(result.unwrap(), vela_vm::Value::NULL);
 }
 
 /// Test: Missing return instruction

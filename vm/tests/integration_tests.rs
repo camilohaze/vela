@@ -114,7 +114,7 @@ fn test_conditional_jump() {
     let program = create_program(
         vec![
             0x00, 0x00, 0x00, // LoadConst 0 (false) - Position 0-2
-            0x41, 0x0C, 0x00, 0x00, 0x00, // JumpIfFalse to position 12 - Position 3-7
+            0x41, 0x0C, 0x00, 0x00, 0x00, // JumpIfFalse to position 12
             0x00, 0x01, 0x00, // LoadConst 1 (10) - Position 8-10
             0x51, // Return - Position 11
             0x00, 0x02, 0x00, // LoadConst 2 (20) - Position 12-14 (jump target)
@@ -363,7 +363,7 @@ fn test_unconditional_jump() {
     // Program: jump over LoadConst(10), return LoadConst(20)
     let program = create_program(
         vec![
-            0x40, 0x08, 0x00, 0x00, 0x00, // Jump to position 8 (LoadConst 1)
+            0x40, 0x08, 0x00, 0x00, 0x00, // Jump to position 8
             0x00, 0x00, 0x00, // LoadConst 0 (10) - SKIPPED
             0x00, 0x01, 0x00, // LoadConst 1 (20) - Position 8
             0x51, // Return

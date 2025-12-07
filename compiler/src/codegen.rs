@@ -13,25 +13,29 @@ de bytecode apropiadas para cada constructo del lenguaje.
 use std::collections::HashMap;
 use crate::ast::*;
 use crate::error::{CompileError, CompileResult, CodegenError};
-use vela_vm::{Bytecode, Instruction, Value, Function};
+use vela_vm::{Bytecode, Instruction, Value, CodeObject};
 
 /// Generador de código que convierte AST en bytecode
 pub struct CodeGenerator {
     /// Bytecode resultante
     bytecode: Bytecode,
-    /// Tabla de símbolos para variables y funciones
-    symbol_table: HashMap<String, usize>, // nombre -> índice en bytecode.constants
-    /// Funciones definidas
-    functions: Vec<Function>,
+    /// Tabla de símbolos para variables y funciones (nombre -> índice en constantes/strings)
+    symbol_table: HashMap<String, u16>,
+    /// Índice del code object actual
+    current_code_object: usize,
 }
 
 impl CodeGenerator {
     /// Crear un nuevo generador de código
     pub fn new() -> Self {
+        let mut bytecode = Bytecode::new();
+        // Crear el code object principal
+        bytecode.code_objects.push(CodeObject::new(0, 0)); // name=0, filename=0
+
         Self {
-            bytecode: Bytecode::new(),
+            bytecode,
             symbol_table: HashMap::new(),
-            functions: Vec::new(),
+            current_code_object: 0,
         }
     }
 
@@ -43,11 +47,29 @@ impl CodeGenerator {
         }
 
         // Agregar instrucción de retorno al final si no hay una
-        if self.bytecode.instructions.is_empty() || !matches!(self.bytecode.instructions.last(), Some(Instruction::Return)) {
-            self.bytecode.instructions.push(Instruction::Return);
+        let code_obj = &self.bytecode.code_objects[self.current_code_object];
+        if code_obj.bytecode.is_empty() || !matches!(code_obj.bytecode.last(), Some(0x51)) { // 0x51 = Return
+            self.emit_instruction(Instruction::Return);
         }
 
         Ok(self.bytecode.clone())
+    }
+
+    /// Emitir una instrucción al code object actual
+    fn emit_instruction(&mut self, instruction: Instruction) {
+        self.bytecode.push(instruction);
+    }
+
+    /// Agregar una constante y retornar su índice
+    fn add_constant(&mut self, constant: vela_vm::Constant) -> u16 {
+        self.bytecode.constants.push(constant);
+        (self.bytecode.constants.len() - 1) as u16
+    }
+
+    /// Agregar una string y retornar su índice
+    fn add_string(&mut self, string: String) -> u16 {
+        self.bytecode.strings.push(string);
+        (self.bytecode.strings.len() - 1) as u16
     }
 
     /// Generar código para una declaración
@@ -65,31 +87,37 @@ impl CodeGenerator {
 
     /// Generar código para declaración de función
     fn generate_function_declaration(&mut self, func: &FunctionDeclaration) -> CompileResult<()> {
-        // Crear un nuevo generador para el scope de la función
-        let mut func_generator = CodeGenerator::new();
+        // Crear un nuevo code object para la función
+        let name_idx = self.add_string(func.name.clone());
+        let filename_idx = self.add_string("main.vela".to_string()); // TODO: obtener del contexto
+        let code_obj_idx = self.bytecode.code_objects.len() as u16;
+
+        let mut code_obj = CodeObject::new(name_idx, filename_idx);
+        code_obj.arg_count = func.parameters.len() as u16;
+        code_obj.local_count = func.parameters.len() as u16; // Por ahora, parámetros = locales
+
+        // Guardar el code object actual
+        let prev_code_object = self.current_code_object;
+
+        // Agregar el nuevo code object y cambiar al contexto de la función
+        self.bytecode.code_objects.push(code_obj);
+        self.current_code_object = self.bytecode.code_objects.len() - 1;
 
         // Generar el cuerpo de la función
-        func_generator.generate_block_statement(&func.body)?;
+        self.generate_block_statement(&func.body)?;
 
         // Agregar RETURN si no está presente
-        if !func_generator.bytecode.instructions.iter().any(|i| matches!(i, Instruction::Return)) {
-            func_generator.bytecode.instructions.push(Instruction::Return);
+        let current_code = &self.bytecode.code_objects[self.current_code_object];
+        if current_code.bytecode.is_empty() || !matches!(current_code.bytecode.last(), Some(0x51)) { // 0x51 = Return
+            self.emit_instruction(Instruction::Return);
         }
 
-        // Crear la función
-        let function = Function::new(
-            func.name.clone(),
-            func.parameters.iter().map(|p| p.name.clone()).collect(),
-            0, // body_start - será establecido por el VM
-            func_generator.bytecode.instructions.len(), // body_end
-        );
+        // Restaurar el code object anterior
+        self.current_code_object = prev_code_object;
 
-        // Agregar a la lista de funciones del generador principal
-        self.functions.push(function.clone());
-
-        // Agregar al bytecode principal como constante
-        let const_index = self.bytecode.add_constant(Value::Function(function));
-        self.symbol_table.insert(func.name.clone(), const_index);
+        // Agregar el índice del code object como constante
+        let const_idx = self.add_constant(vela_vm::Constant::Code(code_obj_idx));
+        self.symbol_table.insert(func.name.clone(), const_idx);
 
         Ok(())
     }
@@ -98,10 +126,10 @@ impl CodeGenerator {
     fn generate_variable_declaration(&mut self, var: &VariableDeclaration) -> CompileResult<()> {
         if let Some(initializer) = &var.initializer {
             self.generate_expression(initializer)?;
-            // Registrar en tabla de símbolos primero
-            let var_index = self.symbol_table.len();
+            // Registrar en tabla de símbolos
+            let var_index = self.symbol_table.len() as u16;
             self.symbol_table.insert(var.name.clone(), var_index);
-            self.bytecode.instructions.push(Instruction::Store(var_index));
+            self.emit_instruction(Instruction::StoreLocal(var_index));
         }
 
         Ok(())
@@ -136,7 +164,7 @@ impl CodeGenerator {
     fn generate_expression_statement(&mut self, expr_stmt: &ExpressionStatement) -> CompileResult<()> {
         self.generate_expression(&expr_stmt.expression)?;
         // Los resultados de expresiones en statements se descartan
-        self.bytecode.instructions.push(Instruction::Pop);
+        self.emit_instruction(Instruction::Pop);
         Ok(())
     }
 
@@ -146,7 +174,7 @@ impl CodeGenerator {
         match &assign.target {
             Expression::Identifier(ident) => {
                 if let Some(&index) = self.symbol_table.get(&ident.name) {
-                    self.bytecode.instructions.push(Instruction::Store(index));
+                    self.emit_instruction(Instruction::StoreLocal(index));
                 } else {
                     return Err(CompileError::Codegen(CodegenError {
                         message: format!("Undefined variable: {}", ident.name),
@@ -157,7 +185,7 @@ impl CodeGenerator {
             _ => return Err(CompileError::Codegen(CodegenError {
                 message: "Unsupported assignment target".to_string(),
                 location: None,
-            })),
+                    })),
         }
         Ok(())
     }
@@ -167,9 +195,11 @@ impl CodeGenerator {
         if let Some(value) = &ret.value {
             self.generate_expression(value)?;
         } else {
-            self.bytecode.instructions.push(Instruction::Push(0)); // Push None equivalent
+            // Push null for void return
+            let null_idx = self.add_constant(vela_vm::Constant::Null);
+            self.emit_instruction(Instruction::LoadConst(null_idx));
         }
-        self.bytecode.instructions.push(Instruction::Return);
+        self.emit_instruction(Instruction::Return);
         Ok(())
     }
 
@@ -178,38 +208,19 @@ impl CodeGenerator {
         // Generar condición
         self.generate_expression(&if_stmt.condition)?;
 
-        // JumpIf al else branch
-        let jump_false_index = self.bytecode.instructions.len();
-        self.bytecode.instructions.push(Instruction::JumpIf(0)); // placeholder
+        // JumpIfFalse al else branch (placeholder por ahora)
+        self.emit_instruction(Instruction::JumpIfFalse(0)); // será actualizado
 
         // Generar then branch
         self.generate_statement(&*if_stmt.then_branch)?;
 
         if let Some(else_branch) = &if_stmt.else_branch {
-            // Jump al final después del then
-            let jump_end_index = self.bytecode.instructions.len();
-            self.bytecode.instructions.push(Instruction::Jump(0)); // placeholder
+            // Jump al final después del then (placeholder)
+            self.emit_instruction(Instruction::Jump(0)); // será actualizado
 
-            // Actualizar el JumpIf
-            let else_start = self.bytecode.instructions.len();
-            if let Instruction::JumpIf(ref mut offset) = &mut self.bytecode.instructions[jump_false_index] {
-                *offset = else_start;
-            }
-
-            // Generar else branch
+            // Aquí iría la lógica para backpatch los jumps
+            // Por simplicidad, por ahora solo generamos el else
             self.generate_statement(&*else_branch)?;
-
-            // Actualizar el Jump
-            let end_pos = self.bytecode.instructions.len();
-            if let Instruction::Jump(ref mut offset) = &mut self.bytecode.instructions[jump_end_index] {
-                *offset = end_pos;
-            }
-        } else {
-            // Sin else, actualizar JumpIf al final del then
-            let end_pos = self.bytecode.instructions.len();
-            if let Instruction::JumpIf(ref mut offset) = &mut self.bytecode.instructions[jump_false_index] {
-                *offset = end_pos;
-            }
         }
 
         Ok(())
@@ -239,9 +250,11 @@ impl CodeGenerator {
             "number" => {
                 if let Some(num) = literal.value.as_f64() {
                     if num.fract() == 0.0 {
-                        self.bytecode.instructions.push(Instruction::Push(num as i64));
+                        let const_idx = self.add_constant(vela_vm::Constant::Int(num as i64));
+                        self.emit_instruction(Instruction::LoadConst(const_idx));
                     } else {
-                        self.bytecode.instructions.push(Instruction::PushFloat(num));
+                        let const_idx = self.add_constant(vela_vm::Constant::Float(num));
+                        self.emit_instruction(Instruction::LoadConst(const_idx));
                     }
                 } else {
                     return Err(CompileError::Codegen(CodegenError {
@@ -252,7 +265,9 @@ impl CodeGenerator {
             }
             "string" => {
                 if let Some(s) = literal.value.as_str() {
-                    self.bytecode.instructions.push(Instruction::PushString(s.to_string()));
+                    let string_idx = self.add_string(s.to_string());
+                    let const_idx = self.add_constant(vela_vm::Constant::String(string_idx));
+                    self.emit_instruction(Instruction::LoadConst(const_idx));
                 } else {
                     return Err(CompileError::Codegen(CodegenError {
                         message: "Invalid string literal".to_string(),
@@ -262,7 +277,8 @@ impl CodeGenerator {
             }
             "bool" => {
                 if let Some(b) = literal.value.as_bool() {
-                    self.bytecode.instructions.push(Instruction::PushBool(b));
+                    let const_idx = self.add_constant(vela_vm::Constant::Bool(b));
+                    self.emit_instruction(Instruction::LoadConst(const_idx));
                 } else {
                     return Err(CompileError::Codegen(CodegenError {
                         message: "Invalid bool literal".to_string(),
@@ -281,7 +297,7 @@ impl CodeGenerator {
     /// Generar código para identificador
     fn generate_identifier(&mut self, ident: &Identifier) -> CompileResult<()> {
         if let Some(&index) = self.symbol_table.get(&ident.name) {
-            self.bytecode.instructions.push(Instruction::Load(index));
+            self.emit_instruction(Instruction::LoadLocal(index));
         } else {
             return Err(CompileError::Codegen(CodegenError {
                 message: format!("Undefined variable: {}", ident.name),
@@ -315,7 +331,7 @@ impl CodeGenerator {
             })),
         };
 
-        self.bytecode.instructions.push(instruction);
+        self.emit_instruction(instruction);
         Ok(())
     }
 
@@ -326,8 +342,9 @@ impl CodeGenerator {
         match unary.operator.as_str() {
             "-" => {
                 // Negación: 0 - x
-                self.bytecode.instructions.push(Instruction::Push(0));
-                self.bytecode.instructions.push(Instruction::Sub);
+                let zero_idx = self.add_constant(vela_vm::Constant::Int(0));
+                self.emit_instruction(Instruction::LoadConst(zero_idx));
+                self.emit_instruction(Instruction::Sub);
             }
             "!" => {
                 // NOT lógico - por ahora no soportado
@@ -356,7 +373,7 @@ impl CodeGenerator {
         self.generate_expression(&call.callee)?;
 
         // Generar llamada
-        self.bytecode.instructions.push(Instruction::Call(call.arguments.len()));
+        self.emit_instruction(Instruction::Call(call.arguments.len() as u8));
         Ok(())
     }
 
@@ -368,7 +385,7 @@ impl CodeGenerator {
         }
 
         // Crear array
-        self.bytecode.instructions.push(Instruction::ListNew);
+        self.emit_instruction(Instruction::BuildList(array.elements.len() as u16));
         Ok(())
     }
 
@@ -379,23 +396,21 @@ impl CodeGenerator {
             self.generate_expression(&field.value)?;
         }
 
-        // Crear dict con los campos
-        let field_names: Vec<String> = struct_lit.fields.iter().map(|f| f.name.clone()).collect();
-        for name in field_names {
-            self.bytecode.instructions.push(Instruction::PushString(name));
+        // Generar nombres de campos como strings
+        for field in &struct_lit.fields {
+            let string_idx = self.add_string(field.name.clone());
+            let const_idx = self.add_constant(vela_vm::Constant::String(string_idx));
+            self.emit_instruction(Instruction::LoadConst(const_idx));
         }
-        self.bytecode.instructions.push(Instruction::DictNew);
+
+        // Crear dict con los campos (clave + valor por cada campo)
+        self.emit_instruction(Instruction::BuildDict(struct_lit.fields.len() as u16));
         Ok(())
     }
 
     /// Obtener el bytecode generado
     pub fn get_bytecode(&self) -> &Bytecode {
         &self.bytecode
-    }
-
-    /// Obtener las funciones generadas
-    pub fn get_functions(&self) -> &[Function] {
-        &self.functions
     }
 }
 
