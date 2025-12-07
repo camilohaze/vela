@@ -55,15 +55,20 @@ public class GCMetadata {
 }
 
 """
-HeapObjectRef: Referencia a objeto en heap (con metadata).
+HeapObjectRef: Referencia a objeto en heap (con metadata + ARC).
 """
 public class HeapObjectRef {
   public object: HeapObject
   public metadata: GCMetadata
   
+  # ARC (TASK-075): Automatic Reference Counting
+  public refCount: Number = 1        # Reference count (empieza en 1)
+  public isWeak: Bool = false        # Weak reference flag (no incrementa refcount)
+  
   constructor(object: HeapObject, size: Number) {
     this.object = object
     this.metadata = GCMetadata(size)
+    # refCount = 1 por defecto (objeto recién creado tiene 1 ref)
   }
 }
 
@@ -98,6 +103,7 @@ public class VelaUpvalue {
   public location: Option<Number> = None  # Stack slot si open
   public closed: Option<Value> = None     # Heap value si closed
   public next: Option<VelaUpvalue> = None # Linked list de open upvalues
+  public ref: Option<HeapObjectRef> = None # ARC: Ref a este upvalue en heap
   
   """
   Lee el valor del upvalue (open o closed).
@@ -299,6 +305,11 @@ public class VelaHeap {
   totalAllocated: Number = 0
   totalFreed: Number = 0
   
+  # ARC Manager (TASK-075)
+  # NOTE: ARCManager será inyectado después de la creación para evitar
+  # dependencia circular (heap.vela → arc.vela → heap.vela)
+  arc: Option<ARCManager> = None
+  
   """
   Aloca un objeto en heap.
   """
@@ -318,6 +329,12 @@ public class VelaHeap {
     # Update stats
     this.objectCount = this.objectCount + 1
     this.totalAllocated = this.totalAllocated + size
+    
+    # ARC: Registrar allocation para cycle detection (TASK-075)
+    match this.arc {
+      Some(arcManager) => arcManager.recordAllocation()
+      None => {}  # ARC no inicializado aún
+    }
     
     return ref
   }
@@ -445,6 +462,74 @@ public class VelaHeap {
       "totalFreed": this.totalFreed,
       "nextGC": this.nextGC
     }
+  }
+  
+  # ============================================================================
+  # ARC INTEGRATION (TASK-075)
+  # ============================================================================
+  
+  """
+  setARCManager: Configura el ARCManager para este heap.
+  
+  Debe llamarse después de crear el heap y el ARCManager para evitar
+  dependencia circular.
+  
+  @param arcManager - Instancia de ARCManager a usar
+  """
+  public fn setARCManager(arcManager: ARCManager) -> void {
+    this.arc = Some(arcManager)
+  }
+  
+  """
+  deallocate: Liberar objeto del heap (llamado por ARCManager).
+  
+  Este método es invocado por ARCManager cuando el refCount de un objeto
+  llega a 0. Remueve el objeto del heap y actualiza las estadísticas.
+  
+  @param ref - Referencia al objeto heap a liberar
+  """
+  public fn deallocate(ref: HeapObjectRef) -> void {
+    # 1. Remover de linked list
+    match this.objects {
+      Some(headRef) => {
+        if headRef === ref {
+          # Es el primer objeto
+          this.objects = ref.metadata.next
+        } else {
+          # Buscar en la lista
+          current = Some(headRef)
+          while let Some(currentRef) = current {
+            match currentRef.metadata.next {
+              Some(nextRef) => {
+                if nextRef === ref {
+                  # Encontrado, remover de la lista
+                  currentRef.metadata.next = ref.metadata.next
+                  break
+                }
+                current = Some(nextRef)
+              }
+              None => break
+            }
+          }
+        }
+      }
+      None => {
+        # Lista vacía, no debería pasar
+        throw Error("deallocate(): heap objects list is empty")
+      }
+    }
+    
+    # 2. Remover de interned strings si aplica
+    match ref.object {
+      HeapObject.String(str) => {
+        this.internedStrings.remove(str.value)
+      }
+      _ => {}
+    }
+    
+    # 3. Actualizar estadísticas
+    this.objectCount = this.objectCount - 1
+    this.totalFreed = this.totalFreed + ref.metadata.size
   }
 }
 
