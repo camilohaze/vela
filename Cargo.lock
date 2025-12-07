@@ -2576,6 +2576,7 @@ dependencies = [
  "serde",
  "serde_json",
  "thiserror",
+ "tokio",
  "tracing",
  "urlencoding",
  "vela-vm",
