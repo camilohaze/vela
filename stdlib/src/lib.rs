@@ -30,6 +30,7 @@ pub mod strings;
 pub mod io;
 pub mod http;
 pub mod websocket;
+pub mod json;
 
 // Re-export commonly used types
 pub use primitives::{VelaNumber, VelaString, VelaBool};
