@@ -1,0 +1,33 @@
+{
+  "greeting": {
+    "hello": "Hello",
+    "goodbye": "Goodbye",
+    "welcome": "Welcome to our application"
+  },
+  "messages": {
+    "error": "An error occurred",
+    "success": "Operation completed successfully",
+    "loading": "Loading...",
+    "items": "You have {{count, plural, one{# item} other{# items}}}",
+    "user_greeting": "Hello, {{name}}! Welcome back."
+  },
+  "buttons": {
+    "save": "Save",
+    "cancel": "Cancel",
+    "delete": "Delete",
+    "edit": "Edit",
+    "add": "Add"
+  },
+  "validation": {
+    "required": "This field is required",
+    "email": "Please enter a valid email address",
+    "min_length": "Minimum length is {{min}} characters",
+    "max_length": "Maximum length is {{max}} characters"
+  },
+  "dates": {
+    "today": "Today",
+    "yesterday": "Yesterday",
+    "tomorrow": "Tomorrow",
+    "date_format": "MM/DD/YYYY"
+  }
+}

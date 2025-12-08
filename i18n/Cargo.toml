@@ -1,0 +1,32 @@
+[package]
+name = "vela-i18n"
+version = "0.1.0"
+edition = "2021"
+description = "Internationalization (i18n) system for Vela programming language"
+authors = ["Vela Team <team@velalang.org>"]
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/velalang/vela"
+keywords = ["i18n", "internationalization", "localization", "vela"]
+categories = ["internationalization", "localization"]
+
+[dependencies]
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+serde_yaml = "0.9"
+tokio = { version = "1.0", features = ["fs", "sync"] }
+chrono = { version = "0.4", features = ["serde"] }
+regex = "1.10"
+thiserror = "1.0"
+anyhow = "1.0"
+unic-langid = "0.9"
+fluent-langneg = "0.13"
+intl_pluralrules = "7.0"
+intl-memoizer = "0.5"
+unic-ucd-category = "0.9"
+rust_decimal = "1.35"
+num-format = "0.4"
+icu = { version = "1.5", features = ["icu_datetime", "icu_decimal", "icu_plurals", "icu_locid"] }
+
+[dev-dependencies]
+tokio-test = "0.4"
+tempfile = "3.10"

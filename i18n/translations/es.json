@@ -1,0 +1,33 @@
+{
+  "greeting": {
+    "hello": "Hola",
+    "goodbye": "Adiós",
+    "welcome": "Bienvenido a nuestra aplicación"
+  },
+  "messages": {
+    "error": "Ocurrió un error",
+    "success": "Operación completada exitosamente",
+    "loading": "Cargando...",
+    "items": "Tienes {{count, plural, one{# elemento} other{# elementos}}}",
+    "user_greeting": "¡Hola, {{name}}! Bienvenido de vuelta."
+  },
+  "buttons": {
+    "save": "Guardar",
+    "cancel": "Cancelar",
+    "delete": "Eliminar",
+    "edit": "Editar",
+    "add": "Agregar"
+  },
+  "validation": {
+    "required": "Este campo es obligatorio",
+    "email": "Por favor ingrese una dirección de correo válida",
+    "min_length": "La longitud mínima es de {{min}} caracteres",
+    "max_length": "La longitud máxima es de {{max}} caracteres"
+  },
+  "dates": {
+    "today": "Hoy",
+    "yesterday": "Ayer",
+    "tomorrow": "Mañana",
+    "date_format": "DD/MM/YYYY"
+  }
+}
