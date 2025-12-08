@@ -43,8 +43,10 @@ pub mod error;
 pub mod validators;
 pub mod schema;
 pub mod decorator;
+pub mod errors;
 
 pub use error::{ValidationError, ValidationResult};
 pub use validators::*;
 pub use schema::*;
 pub use decorator::*;
+pub use errors::*;
