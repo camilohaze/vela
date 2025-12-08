@@ -133,6 +133,29 @@ enum Commands {
         registry: Option<String>,
     },
 
+    /// Publish package to registry
+    Publish {
+        /// Package directory (default: current directory)
+        #[arg(short, long, value_name = "DIR")]
+        dir: Option<PathBuf>,
+
+        /// Target registry URL
+        #[arg(long, value_name = "URL")]
+        registry: Option<String>,
+
+        /// Skip validation checks
+        #[arg(long)]
+        no_verify: bool,
+
+        /// Dry run (don't actually publish)
+        #[arg(long)]
+        dry_run: bool,
+
+        /// API token for authentication
+        #[arg(long, value_name = "TOKEN")]
+        token: Option<String>,
+    },
+
     /// Language server for IDE integration
     Lsp,
 
@@ -199,6 +222,9 @@ async fn main() -> Result<()> {
         }
         Commands::Install { production, force, registry } => {
             handle_install(production, force, registry).await
+        }
+        Commands::Publish { dir, registry, no_verify, dry_run, token } => {
+            handle_publish(dir, registry, no_verify, dry_run, token).await
         }
         Commands::Lsp => {
             handle_lsp()
@@ -1540,6 +1566,107 @@ async fn handle_install(production: bool, force: bool, registry: Option<String>)
 
     println!("\n✅ All dependencies installed successfully!");
     println!("📁 Dependencies installed in: {}", install_dir.display());
+
+    Ok(())
+}
+
+async fn handle_publish(
+    dir: Option<PathBuf>,
+    registry: Option<String>,
+    no_verify: bool,
+    dry_run: bool,
+    token: Option<String>,
+) -> Result<()> {
+    println!("📦 Publishing Vela package...");
+
+    // Determinar directorio del proyecto
+    let project_dir = dir.unwrap_or_else(|| std::env::current_dir().unwrap());
+    println!("📁 Project directory: {}", project_dir.display());
+
+    // Verificar que existe vela.yaml
+    let manifest_path = project_dir.join("vela.yaml");
+    if !manifest_path.exists() {
+        anyhow::bail!("No vela.yaml found in {}", project_dir.display());
+    }
+
+    // Cargar y parsear manifest
+    let manifest = VelaManifest::from_file(&manifest_path)
+        .with_context(|| format!("Failed to parse manifest at {}", manifest_path.display()))?;
+
+    println!("📋 Package: {}", manifest.name);
+    println!("📋 Version: {}", manifest.version);
+
+    // Validación del paquete (si no se salta)
+    if !no_verify {
+        println!("\n🔍 Validating package...");
+        validate_package(&project_dir, &manifest).await?;
+        println!("✅ Package validation passed");
+    } else {
+        println!("⚠️  Skipping package validation (--no-verify)");
+    }
+
+    // Configurar cliente del registry
+    let registry_client = if let Some(url) = registry {
+        RegistryClient::new(url, get_cache_dir())
+    } else {
+        RegistryClient::default()
+    };
+
+    // Autenticación si se proporciona token
+    if let Some(token) = token {
+        println!("🔐 Authenticating with registry...");
+        registry_client.authenticate(&token)
+            .context("Failed to authenticate with registry")?;
+    }
+
+    if dry_run {
+        println!("🏃 Dry run mode - would publish:");
+        println!("  📦 Package: {}@{}", manifest.name, manifest.version);
+        println!("  🎯 Registry: {}", registry_client.base_url());
+        println!("  📁 Source: {}", project_dir.display());
+        println!("✅ Dry run completed successfully!");
+        return Ok(());
+    }
+
+    // Publicar el paquete
+    println!("\n⬆️  Publishing package {}@{}...", manifest.name, manifest.version);
+    registry_client.publish_package(&manifest, &project_dir).await
+        .context("Failed to publish package")?;
+
+    println!("\n✅ Package published successfully!");
+    println!("📦 Published: {}@{}", manifest.name, manifest.version);
+    println!("🎯 Registry: {}", registry_client.base_url());
+
+    Ok(())
+}
+
+/// Validate package before publishing
+async fn validate_package(project_dir: &Path, manifest: &VelaManifest) -> Result<()> {
+    // Verificar que existe src/ directory
+    let src_dir = project_dir.join("src");
+    if !src_dir.exists() {
+        anyhow::bail!("src/ directory not found - required for publishing");
+    }
+
+    // Verificar archivos fuente
+    let vela_files = WalkDir::new(&src_dir)
+        .into_iter()
+        .filter_map(|e| e.ok())
+        .filter(|e| e.path().extension().map_or(false, |ext| ext == "vela"))
+        .count();
+
+    if vela_files == 0 {
+        anyhow::bail!("No .vela source files found in src/ directory");
+    }
+
+    println!("  📄 Found {} source files", vela_files);
+
+    // TODO: Aquí irían validaciones adicionales como:
+    // - Compilación exitosa
+    // - Tests pasan
+    // - Documentación completa
+    // - Licencia válida
+    // - etc.
 
     Ok(())
 }

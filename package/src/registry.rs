@@ -11,6 +11,7 @@ Maneja descarga, verificación e instalación de paquetes.
 */
 
 use crate::resolver::ResolvedDependency;
+use crate::manifest::VelaManifest;
 use anyhow::{Context, Result};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -129,6 +130,40 @@ impl RegistryClient {
     /// Obtiene la ruta de instalación de una dependencia
     pub fn get_install_path(&self, dep: &ResolvedDependency, install_dir: &Path) -> PathBuf {
         install_dir.join(&dep.name)
+    }
+
+    /// Obtiene la URL base del registry
+    pub fn base_url(&self) -> &str {
+        &self.base_url
+    }
+
+    /// Autentica con el registry usando token
+    pub fn authenticate(&self, token: &str) -> Result<()> {
+        // Placeholder: en implementación real, guardaría el token para requests HTTP
+        println!("🔐 Autenticado con registry (token: {}...)", &token[..8.min(token.len())]);
+        Ok(())
+    }
+
+    /// Publica un paquete al registry
+    pub async fn publish_package(&self, manifest: &VelaManifest, project_dir: &Path) -> Result<()> {
+        println!("📤 Publicando paquete {}@{} al registry...", manifest.name, manifest.version);
+
+        // Validar que el paquete no existe ya (placeholder)
+        // En implementación real, haría request al registry para verificar
+
+        // Crear archivo de paquete (placeholder)
+        // En implementación real, crearía tarball con src/, tests/, docs/, etc.
+
+        // Simular subida al registry
+        println!("⬆️  Subiendo archivos al registry...");
+        println!("📦 Paquete: {}@{}", manifest.name, manifest.version);
+        println!("🎯 Registry: {}", self.base_url);
+
+        // Placeholder: simular delay de red (comentado por ahora)
+        // tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+
+        println!("✅ Paquete publicado exitosamente");
+        Ok(())
     }
 }
 

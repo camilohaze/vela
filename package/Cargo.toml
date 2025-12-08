@@ -20,6 +20,7 @@ anyhow.workspace = true
 thiserror.workspace = true
 dirs = "5.0"
 tokio = { version = "1.0", features = ["fs"] }
+regex = "1.10"
 
 [dev-dependencies]
 tempfile = "3.0"
