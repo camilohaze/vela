@@ -13,11 +13,12 @@ categories = ["internationalization", "localization"]
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 serde_yaml = "0.9"
-tokio = { version = "1.0", features = ["fs", "sync"] }
+tokio = { version = "1.0", features = ["fs", "sync", "rt", "macros", "rt-multi-thread", "time"] }
 chrono = { version = "0.4", features = ["serde"] }
 regex = "1.10"
 thiserror = "1.0"
 anyhow = "1.0"
+async-trait = "0.1"
 unic-langid = "0.9"
 fluent-langneg = "0.13"
 intl_pluralrules = "7.0"
@@ -25,8 +26,18 @@ intl-memoizer = "0.5"
 unic-ucd-category = "0.9"
 rust_decimal = "1.35"
 num-format = "0.4"
-icu = { version = "1.5", features = ["icu_datetime", "icu_decimal", "icu_plurals", "icu_locid"] }
+icu_locid = "1.5"
+icu_datetime = "1.5"
+icu_decimal = "1.5"
+icu_plurals = "1.5"
+icu_calendar = "1.5"
+icu_collator = "1.5"
+icu_list = "1.5"
+icu_casemap = "1.5"
+icu_provider = "1.5"
+fixed_decimal = "0.5"
 
 [dev-dependencies]
 tokio-test = "0.4"
 tempfile = "3.10"
+notify = { version = "6.1", default-features = false, features = ["macos_fsevent"] }
