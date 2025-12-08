@@ -72,8 +72,8 @@ impl<T> Logger<T> {
 
     /// Escribe un registro de log a través de todos los transports
     async fn write_record(&self, record: LogRecord) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        // Filtrar por nivel global
-        if record.level < self.config.level {
+        // Aplicar filtros avanzados, sampling y rate limiting
+        if !self.config.should_log(&record) {
             return Ok(());
         }
 
