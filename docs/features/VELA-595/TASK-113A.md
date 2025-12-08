@@ -69,5 +69,5 @@ drop(subscription) // Unsubscribe automático
 
 ## 🔗 Referencias
 - **Jira:** VELA-595
-- **ADR:** docs/architecture/ADR-XXX-event-system.md
+- **ADR:** docs/architecture/ADR-113A-event-system.md
 - **Historia:** VELA-595

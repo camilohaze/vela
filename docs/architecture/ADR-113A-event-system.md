@@ -1,4 +1,4 @@
-# ADR-XXX: Arquitectura del Sistema de Eventos
+# ADR-113A: Arquitectura del Sistema de Eventos
 
 ## Estado
 ✅ Aceptado
