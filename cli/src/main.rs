@@ -9,6 +9,8 @@ use clap::{Parser, Subcommand};
 use std::path::PathBuf;
 use std::fs;
 use std::path::Path;
+use std::time::Instant;
+use walkdir::WalkDir;
 use anyhow::{Context, Result};
 
 #[derive(Parser)]
@@ -65,6 +67,25 @@ enum Commands {
         /// Enable GC statistics
         #[arg(long)]
         gc_stats: bool,
+    },
+
+    /// Run Vela tests
+    Test {
+        /// Test files to run (if not specified, runs all tests in tests/ directory)
+        #[arg(value_name = "FILES")]
+        files: Vec<PathBuf>,
+
+        /// Run tests in verbose mode
+        #[arg(short, long)]
+        verbose: bool,
+
+        /// Filter tests by pattern
+        #[arg(short, long, value_name = "PATTERN")]
+        filter: Option<String>,
+
+        /// Show test execution time
+        #[arg(long)]
+        time: bool,
     },
 
     /// Check syntax without compiling
@@ -135,6 +156,9 @@ fn main() -> Result<()> {
         }
         Commands::Run { file, args, trace, gc_stats } => {
             handle_run(file, args, trace, gc_stats)
+        }
+        Commands::Test { files, verbose, filter, time } => {
+            handle_test(files, verbose, filter, time)
         }
         Commands::Check { files } => {
             handle_check(files)
@@ -993,6 +1017,138 @@ fn handle_run(file: PathBuf, args: Vec<String>, trace: bool, gc_stats: bool) -> 
         println!("\nNote: Program arguments not yet supported: {:?}", args);
     }
     
+    Ok(())
+}
+
+fn handle_test(files: Vec<PathBuf>, verbose: bool, filter: Option<String>, time: bool) -> Result<()> {
+    use vela_compiler::{Compiler, config::Config};
+    use vela_vm::Bytecode;
+
+    println!("Running Vela tests...");
+
+    // Find test files
+    let test_files = if files.is_empty() {
+        // Find all .vela files in tests/ directory
+        let tests_dir = PathBuf::from("tests");
+        if !tests_dir.exists() {
+            anyhow::bail!("No tests/ directory found. Create tests/ directory with test files.");
+        }
+
+        WalkDir::new("tests")
+            .into_iter()
+            .filter_map(|e| e.ok())
+            .filter(|e| e.path().extension().map_or(false, |ext| ext == "vela"))
+            .map(|e| e.path().to_path_buf())
+            .collect::<Vec<_>>()
+    } else {
+        files
+    };
+
+    if test_files.is_empty() {
+        println!("No test files found.");
+        return Ok(());
+    }
+
+    if verbose {
+        println!("Found {} test files:", test_files.len());
+        for file in &test_files {
+            println!("  {}", file.display());
+        }
+        println!();
+    }
+
+    // Create compiler for test execution
+    let config = Config::default();
+    let mut compiler = Compiler::new(config);
+
+    let mut total_tests = 0;
+    let mut passed_tests = 0;
+    let mut failed_tests = 0;
+    let mut total_time = std::time::Duration::new(0, 0);
+
+    // Run each test file
+    for test_file in test_files {
+        if verbose {
+            println!("Running tests in {}...", test_file.display());
+        }
+
+        // Check if file matches filter
+        if let Some(ref pattern) = filter {
+            if !test_file.to_string_lossy().contains(pattern) {
+                continue;
+            }
+        }
+
+        // Compile test file
+        let compile_start = Instant::now();
+        let bytecode_bytes = match compiler.compile_file(&test_file) {
+            Ok(bytecode) => bytecode,
+            Err(e) => {
+                println!("❌ Failed to compile {}: {}", test_file.display(), e);
+                failed_tests += 1;
+                continue;
+            }
+        };
+        let compile_time = compile_start.elapsed();
+
+        // Deserialize bytecode
+        let bytecode = match Bytecode::deserialize(&bytecode_bytes) {
+            Ok(bytecode) => bytecode,
+            Err(e) => {
+                println!("❌ Failed to deserialize bytecode for {}: {}", test_file.display(), e);
+                failed_tests += 1;
+                continue;
+            }
+        };
+
+        // Execute test file
+        let exec_start = Instant::now();
+        let _result = match vela_vm::VirtualMachine::new().execute(&bytecode) {
+            Ok(result) => result,
+            Err(e) => {
+                println!("❌ Failed to execute {}: {}", test_file.display(), e);
+                failed_tests += 1;
+                continue;
+            }
+        };
+        let exec_time = exec_start.elapsed();
+
+        // For now, assume tests pass if execution succeeds
+        // TODO: Implement proper test framework with assertions
+        total_tests += 1;
+        passed_tests += 1;
+
+        if verbose || time {
+            println!("✅ {} passed ({:.2}ms compile + {:.2}ms exec)",
+                    test_file.display(),
+                    compile_time.as_secs_f64() * 1000.0,
+                    exec_time.as_secs_f64() * 1000.0);
+        } else {
+            println!("✅ {}", test_file.display());
+        }
+
+        total_time += compile_time + exec_time;
+    }
+
+    // Print summary
+    println!("\n=== Test Results ===");
+    println!("Tests run: {}", total_tests);
+    println!("Passed: {}", passed_tests);
+    println!("Failed: {}", failed_tests);
+
+    if time && total_tests > 0 {
+        println!("Total time: {:.2}ms", total_time.as_secs_f64() * 1000.0);
+        println!("Average time: {:.2}ms per test",
+                (total_time.as_secs_f64() * 1000.0) / total_tests as f64);
+    }
+
+    if failed_tests > 0 {
+        println!("❌ {} tests failed", failed_tests);
+        std::process::exit(1);
+    } else {
+        println!("✅ All tests passed!");
+    }
+
     Ok(())
 }
 

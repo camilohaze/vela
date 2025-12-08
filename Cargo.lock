@@ -2463,6 +2463,7 @@ dependencies = [
  "tracing-subscriber",
  "vela-compiler",
  "vela-vm",
+ "walkdir",
 ]
 
 [[package]]
