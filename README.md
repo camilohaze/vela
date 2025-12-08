@@ -31,6 +31,8 @@ vela/
 ├── cli/                # Vela CLI tool
 ├── lsp/                # Language Server Protocol implementation
 ├── devtools/           # DevTools (UI Inspector, Signal Graph, Profiler)
+├── i18n/               # Internationalization system for global applications
+├── logging/            # Async logging system with transports and filtering
 ├── docs/               # Documentation
 │   ├── architecture/   # ADRs (Architecture Decision Records)
 │   ├── specifications/ # Formal specifications

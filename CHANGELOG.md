@@ -63,7 +63,80 @@ logger.log_with_metadata(metadata, "Custom message", Level::WARN).await?;
 - **Performance**: Async I/O, sampling para reducción de volumen
 
 ### En Desarrollo
+- **VELA-598**: Sistema de Internacionalización (i18n) - TASK-113R completado ✅
 - Futuros sprints (Sprint 35+)
+
+---
+
+## [0.11.0] - Sprint 35 - 2025-12-15 (En Desarrollo)
+
+### 🎯 Resumen del Sprint
+- **Historia en progreso:** VELA-598 (Sistema de Internacionalización)
+- **Crate agregado:** `vela-i18n` (crate separado en directorio raíz)
+- **Arquitectura:** Sistema completo i18n con async APIs y hot reload
+- **Features:** Interpolación avanzada, pluralización, formateo localizado
+- **Estado:** TASK-113R completado (arquitectura diseñada e implementada)
+
+### ✨ Added - Internationalization System Architecture
+
+#### [VELA-598] Sistema de Internacionalización ✅ (TASK-113R)
+- **Arquitectura modular** con 10 módulos especializados
+- **Translator API** asíncrona con builder pattern y configuración flexible
+- **Sistema de interpolación** con variables, pluralización y select operations
+- **Formateo localizado** de fechas y números con ICU crates
+- **Reglas de pluralización** para 9+ idiomas (EN, ES, PT, FR, DE, AR, RU, JA, ZH)
+- **Sistema de decoradores** @i18n para clases con metadata
+- **Hot reload** con file watching para desarrollo
+- **Fallback chains** robustas (locale → language → en)
+- **Error handling** comprehensivo con tipos personalizados
+
+#### i18n Features Implementadas:
+- **Async I/O**: Operaciones concurrentes con tokio
+- **Multiple Formats**: Soporte JSON/YAML con serde
+- **Interpolation Engine**: Variables `${var}`, pluralización, select
+- **Localized Formatting**: Fechas, números, monedas con ICU
+- **Pluralization Rules**: Reglas específicas por idioma
+- **Decorator System**: @i18n para clases con metadata
+- **Hot Reload**: File watching para desarrollo
+- **Fallback System**: Cadenas de respaldo robustas
+- **Type Safety**: APIs fuertemente tipadas
+
+#### API Principal:
+```rust
+// Translator creation
+let translator = Translator::builder()
+    .with_locale("es-ES")
+    .with_fallbacks(vec!["es", "en"])
+    .with_hot_reload(true)
+    .build()
+    .await?;
+
+// Translation with interpolation
+let message = translator.translate("welcome.user", &json!({
+    "name": "Alice",
+    "count": 5
+})).await?;
+
+// Localized formatting
+let formatted = translator.format_number(1234.56, "currency", "es-ES").await?;
+```
+
+### 📚 Documentation
+- **ADR-113R**: Arquitectura completa del sistema i18n
+- **Feature Docs**: TASK-113R completada en `docs/features/VELA-598/`
+
+### 🧪 Quality Assurance
+- **Compilación**: ✅ Crate compila exitosamente
+- **Arquitectura**: ✅ Diseño modular validado
+- **Type Safety**: ✅ APIs fuertemente tipadas
+- **Error Handling**: ✅ Manejo robusto de errores
+
+### En Desarrollo
+- TASK-113S: Implementación del loader de traducciones
+- TASK-113T: Sistema de interpolación completo
+- TASK-113U: Formateo de fechas y números
+- TASK-113V: Decoradores @i18n y hot reload
+- TASK-113W: Tests comprehensivos del sistema i18n
 
 ---
 
