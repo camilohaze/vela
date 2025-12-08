@@ -50,9 +50,9 @@ enum Commands {
         opt_level: OptLevel,
     },
 
-    /// Run Vela bytecode (.velac) files
+    /// Run Vela source files (.vela) or bytecode (.velac) files
     Run {
-        /// Bytecode file to execute (.velac format)
+        /// Source file (.vela) or bytecode file (.velac) to execute
         #[arg(value_name = "FILE")]
         file: PathBuf,
 
@@ -947,10 +947,11 @@ fn handle_build(input: Vec<PathBuf>, output: Option<PathBuf>, opt_level: OptLeve
 
 fn handle_run(file: PathBuf, args: Vec<String>, trace: bool, gc_stats: bool) -> Result<()> {
     use vela_vm::{Bytecode, VirtualMachine};
+    use vela_compiler::{Compiler, config::Config};
     use std::fs;
     use std::time::Instant;
     
-    // Verify file exists and has .velac extension
+    // Verify file exists
     if !file.exists() {
         anyhow::bail!("File not found: {}", file.display());
     }
@@ -959,20 +960,33 @@ fn handle_run(file: PathBuf, args: Vec<String>, trace: bool, gc_stats: bool) -> 
         .and_then(|s| s.to_str())
         .unwrap_or("");
     
-    if ext != "velac" {
+    let bytecode = if ext == "vela" {
+        // Compile source file to bytecode
+        println!("Compiling {}...", file.display());
+        
+        let source = fs::read_to_string(&file)
+            .with_context(|| format!("Failed to read source file: {}", file.display()))?;
+        
+        let mut compiler = Compiler::new(Config::default());
+        let bytecode_bytes = compiler.compile_string(&source, file.to_string_lossy().as_ref())
+            .with_context(|| "Compilation failed")?;
+        
+        Bytecode::deserialize(&bytecode_bytes)
+            .with_context(|| "Failed to deserialize compiled bytecode")?
+    } else if ext == "velac" {
+        // Load existing bytecode file
+        println!("Loading bytecode from {}...", file.display());
+        let bytecode_bytes = fs::read(&file)
+            .with_context(|| format!("Failed to read bytecode file: {}", file.display()))?;
+        
+        Bytecode::deserialize(&bytecode_bytes)
+            .with_context(|| "Failed to deserialize bytecode (corrupted file?)")?
+    } else {
         anyhow::bail!(
-            "Expected .velac bytecode file, got .{}\nHint: Use 'vela build' to compile source files first",
+            "Unsupported file type: .{}. Expected .vela (source) or .velac (bytecode)",
             ext
         );
-    }
-    
-    // Load bytecode from file
-    println!("Loading bytecode from {}...", file.display());
-    let bytecode_bytes = fs::read(&file)
-        .with_context(|| format!("Failed to read bytecode file: {}", file.display()))?;
-    
-    let bytecode = Bytecode::deserialize(&bytecode_bytes)
-        .with_context(|| "Failed to deserialize bytecode (corrupted file?)")?;
+    };
     
     if trace {
         println!("\n=== Bytecode Disassembly ===");
@@ -1332,3 +1346,6 @@ fn handle_dev(_tool: DevCommands) -> Result<()> {
 
 #[cfg(test)]
 mod test_cli_fmt;
+
+#[cfg(test)]
+mod test_cli_run;
