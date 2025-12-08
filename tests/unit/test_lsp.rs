@@ -523,4 +523,81 @@ fn main() -> void {
             assert_eq!(help.active_parameter, Some(expected_active_param), "Active parameter mismatch at {:?}", position);
         }
     }
+
+    #[test]
+    fn test_analyze_references_symbol() {
+        let server = create_test_server();
+
+        // Test analyzing symbol at position
+        let test_cases = vec![
+            ("fn add(a: Number) {}", Position::new(0, 3), "add"),
+            ("let x: String = \"\"", Position::new(0, 5), "x"),
+            ("state count = 0", Position::new(0, 8), "count"),
+            ("class Person {}", Position::new(0, 7), "Person"),
+            ("interface Drawable {}", Position::new(0, 11), "Drawable"),
+        ];
+
+        for (code, position, expected_symbol) in test_cases {
+            let symbol = server.analyze_references_symbol(code, position);
+            assert!(symbol.is_ok(), "Expected symbol at position {:?}", position);
+            assert_eq!(symbol.unwrap(), expected_symbol, "Symbol mismatch at {:?}", position);
+        }
+    }
+
+    #[test]
+    fn test_find_symbol_references() {
+        let server = create_test_server();
+
+        // Test finding references in document
+        let code = r#"
+fn add(a: Number, b: Number) -> Number {
+    return a + b
+}
+
+fn main() {
+    let result = add(1, 2)
+    let sum = add(3, 4)
+    print(add(5, 6))
+}
+"#;
+
+        let uri = Url::parse("file:///test.vela").unwrap();
+
+        // Find references to "add"
+        let references = server.find_symbol_references(code, "add", uri.clone());
+        assert_eq!(references.len(), 4, "Expected 4 references to 'add'");
+
+        // Check that all references are to the correct symbol
+        for reference in &references {
+            let line = code.lines().nth(reference.range.start.line as usize).unwrap();
+            let symbol_in_line = &line[reference.range.start.character as usize..reference.range.end.character as usize];
+            assert_eq!(symbol_in_line, "add", "Reference should be to 'add'");
+        }
+    }
+
+    #[test]
+    fn test_is_word_boundary() {
+        let server = create_test_server();
+
+        // Test word boundary detection
+        let test_cases = vec![
+            ("fn add(a: Number)", 3, 6, true),   // "add" is a whole word
+            ("let x: String", 4, 5, true),      // "x" is a whole word
+            ("state count =", 6, 11, true),     // "count" is a whole word
+            ("class Person", 6, 12, true),      // "Person" is a whole word
+            ("fn add(a: Number)", 0, 2, true),  // "fn" is a whole word
+            ("let x: String", 0, 3, true),      // "let" is a whole word
+            ("hello world", 0, 5, true),        // "hello" is a whole word
+            ("hello world", 6, 11, true),       // "world" is a whole word
+            ("hello_world", 0, 11, true),       // "hello_world" is a whole word
+            ("hello world", 5, 6, false),       // space is not a word
+            ("hello,world", 5, 6, false),       // comma is not part of word
+            ("hello(world)", 5, 6, false),      // parenthesis is not part of word
+        ];
+
+        for (line, start, end, expected) in test_cases {
+            let result = server.is_word_boundary(line, start, end);
+            assert_eq!(result, expected, "Word boundary check failed for '{}'[{}..{}]", line, start, end);
+        }
+    }
 }

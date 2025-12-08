@@ -10,7 +10,7 @@ use lsp_types::{
     MarkupContent, MarkupKind, GotoDefinitionParams,
     GotoDefinitionResponse, Location, Range, SignatureHelpParams,
     SignatureHelp, SignatureInformation, ParameterInformation,
-    SignatureHelpOptions,
+    SignatureHelpOptions, ReferenceParams, Url,
 };
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
@@ -112,6 +112,7 @@ impl LanguageServer {
             "textDocument/hover" => self.handle_hover(request)?,
             "textDocument/definition" => self.handle_definition(request)?,
             "textDocument/signatureHelp" => self.handle_signature_help(request)?,
+            "textDocument/references" => self.handle_references(request)?,
             _ => {
                 warn!("Unhandled request method: {}", request.method);
                 Response::new_err(
@@ -175,6 +176,7 @@ impl LanguageServer {
                 retrigger_characters: Some(vec![",".to_string()]),
                 ..Default::default()
             }),
+            references_provider: Some(lsp_types::OneOf::Left(true)),
             // TODO: Add more capabilities as we implement them
             ..Default::default()
         };
@@ -249,6 +251,19 @@ impl LanguageServer {
         let signature_help = self.compute_signature_help(&params)?;
 
         let response = Response::new_ok(request.id, signature_help);
+        Ok(response)
+    }
+
+    /// Handle textDocument/references request
+    fn handle_references(&self, request: Request) -> Result<Response> {
+        let params: ReferenceParams = serde_json::from_value(request.params)
+            .map_err(|e| anyhow::anyhow!("Invalid references params: {}", e))?;
+
+        info!("References requested at position: {:?}", params.text_document_position.position);
+
+        let references = self.compute_references(&params)?;
+
+        let response = Response::new_ok(request.id, references);
         Ok(response)
     }
 
@@ -396,6 +411,30 @@ impl LanguageServer {
         let signature_help = self.analyze_signature_help(document, position);
 
         Ok(signature_help)
+    }
+
+    /// Compute references for the symbol at the given position
+    fn compute_references(&self, params: &ReferenceParams) -> Result<Vec<Location>> {
+        let uri = &params.text_document_position.text_document.uri;
+        let position = params.text_document_position.position;
+
+        // Get document content
+        let store = self.document_store.lock().unwrap();
+        let document = match store.get_document(uri) {
+            Some(doc) => doc,
+            None => return Ok(vec![]), // No document found
+        };
+
+        // Find the symbol at the position
+        let symbol = self.analyze_references_symbol(document, position)?;
+        if symbol.is_empty() {
+            return Ok(vec![]);
+        }
+
+        // Find all references to this symbol in the document
+        let references = self.find_symbol_references(document, &symbol, uri.clone());
+
+        Ok(references)
     }
 
     /// Analyze the completion context at the given position
@@ -929,5 +968,86 @@ impl LanguageServer {
         completions.extend(self.type_completions());
         completions.extend(self.function_completions());
         completions
+    }
+
+    /// Analyze the symbol at the given position for references
+    fn analyze_references_symbol(&self, document: &str, position: Position) -> Result<String> {
+        // Convert position to byte offset
+        let lines: Vec<&str> = document.lines().collect();
+        if position.line as usize >= lines.len() {
+            return Err(anyhow::anyhow!("Position out of bounds"));
+        }
+
+        let line = lines[position.line as usize];
+        let char_pos = position.character as usize;
+
+        if char_pos > line.len() {
+            return Err(anyhow::anyhow!("Character position out of bounds"));
+        }
+
+        // Extract word at position
+        let word = self.extract_word_at_position(line, char_pos)
+            .ok_or_else(|| anyhow::anyhow!("No word found at position"))?;
+
+        Ok(word)
+    }
+
+    /// Find all references to a symbol in the document
+    fn find_symbol_references(&self, document: &str, symbol: &str, uri: Url) -> Vec<Location> {
+        let mut references = Vec::new();
+        let lines: Vec<&str> = document.lines().collect();
+
+        for (line_idx, line) in lines.iter().enumerate() {
+            // Find all occurrences of the symbol in this line
+            let mut start = 0;
+            while let Some(pos) = line[start..].find(symbol) {
+                let char_start = start + pos;
+                let char_end = char_start + symbol.len();
+
+                // Check if this is a whole word (not part of another word)
+                let is_word_boundary = self.is_word_boundary(line, char_start, char_end);
+
+                if is_word_boundary {
+                    let start_pos = Position {
+                        line: line_idx as u32,
+                        character: char_start as u32,
+                    };
+                    let end_pos = Position {
+                        line: line_idx as u32,
+                        character: char_end as u32,
+                    };
+
+                    let range = Range { start: start_pos, end: end_pos };
+                    let location = Location { uri: uri.clone(), range };
+
+                    references.push(location);
+                }
+
+                start = char_end;
+            }
+        }
+
+        references
+    }
+
+    /// Check if the symbol at the given range is a whole word
+    fn is_word_boundary(&self, line: &str, start: usize, end: usize) -> bool {
+        let chars: Vec<char> = line.chars().collect();
+
+        // Check character before start
+        let before_ok = if start == 0 {
+            true
+        } else {
+            !chars.get(start - 1).unwrap_or(&' ').is_alphanumeric() && *chars.get(start - 1).unwrap_or(&' ') != '_'
+        };
+
+        // Check character after end
+        let after_ok = if end >= chars.len() {
+            true
+        } else {
+            !chars.get(end).unwrap_or(&' ').is_alphanumeric() && *chars.get(end).unwrap_or(&' ') != '_'
+        };
+
+        before_ok && after_ok
     }
 }

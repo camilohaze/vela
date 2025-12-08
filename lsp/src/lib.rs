@@ -20,6 +20,8 @@ pub fn init() -> anyhow::Result<LanguageServer> {
 
 #[cfg(test)]
 mod tests {
+    use super::init;
+
     #[test]
     fn test_lsp_init() {
         let _server = init().expect("Failed to initialize language server");
