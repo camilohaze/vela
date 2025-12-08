@@ -12,6 +12,7 @@ use std::path::Path;
 use std::time::Instant;
 use walkdir::WalkDir;
 use anyhow::{Context, Result};
+use vela_package::{VelaManifest, DependencyResolver, RegistryClient};
 
 #[derive(Parser)]
 #[command(name = "vela")]
@@ -117,6 +118,21 @@ enum Commands {
         fix: bool,
     },
 
+    /// Install project dependencies from vela.yaml
+    Install {
+        /// Install only production dependencies
+        #[arg(long)]
+        production: bool,
+
+        /// Force reinstall all dependencies
+        #[arg(long)]
+        force: bool,
+
+        /// Install from specific registry
+        #[arg(long, value_name = "URL")]
+        registry: Option<String>,
+    },
+
     /// Language server for IDE integration
     Lsp,
 
@@ -155,7 +171,8 @@ enum ProjectTemplate {
     Module,
 }
 
-fn main() -> Result<()> {
+#[tokio::main]
+async fn main() -> Result<()> {
     let cli = Cli::parse();
 
     match cli.command {
@@ -179,6 +196,9 @@ fn main() -> Result<()> {
         }
         Commands::Doctor { verbose, fix } => {
             handle_doctor(verbose, fix)
+        }
+        Commands::Install { production, force, registry } => {
+            handle_install(production, force, registry).await
         }
         Commands::Lsp => {
             handle_lsp()
@@ -1450,6 +1470,112 @@ fn handle_doctor(verbose: bool, fix: bool) -> Result<()> {
     }
 
     Ok(())
+}
+
+async fn handle_install(production: bool, force: bool, registry: Option<String>) -> Result<()> {
+    println!("📦 Installing Vela project dependencies...");
+
+    // Find vela.yaml in current directory or parent directories
+    let manifest_path = find_manifest_file()?;
+    println!("📄 Found manifest: {}", manifest_path.display());
+
+    // Load and parse manifest
+    let manifest = VelaManifest::from_file(&manifest_path)
+        .with_context(|| format!("Failed to parse manifest at {}", manifest_path.display()))?;
+
+    println!("📋 Project: {}", manifest.name);
+    println!("📋 Version: {}", manifest.version);
+
+    if let Some(description) = &manifest.description {
+        println!("📋 Description: {}", description);
+    }
+
+    // Check if there are dependencies to install
+    let external_deps = manifest.get_external_dependencies();
+    let local_deps = manifest.get_local_dependencies();
+
+    if external_deps.is_empty() && local_deps.is_empty() {
+        println!("✅ No dependencies to install");
+        return Ok(());
+    }
+
+    println!("\n📦 Dependencies to install:");
+    for (name, version) in &external_deps {
+        println!("  📚 {}@{}", name, version);
+    }
+    for (name, path) in &local_deps {
+        println!("  📁 {} -> {}", name, path);
+    }
+
+    // Resolver dependencias
+    println!("\n🔍 Resolving dependencies...");
+    let mut resolver = DependencyResolver::new();
+    let resolved_deps = resolver.resolve_manifest(&manifest)
+        .context("Failed to resolve dependencies")?;
+
+    println!("✅ Dependencies resolved successfully");
+
+    // Configurar cliente del registry
+    let registry_client = if let Some(url) = registry {
+        RegistryClient::new(url, get_cache_dir())
+    } else {
+        RegistryClient::default()
+    };
+
+    // Directorio de instalación
+    let install_dir = get_install_dir(&manifest_path);
+
+    // Instalar dependencias
+    println!("\n⬇️  Installing dependencies...");
+    for dep in &resolved_deps {
+        if registry_client.is_installed(dep, &install_dir) && !force {
+            println!("  ⏭️  {}@{} already installed (use --force to reinstall)", dep.name, dep.version);
+            continue;
+        }
+
+        println!("  📦 Installing {}@{}...", dep.name, dep.version);
+        registry_client.install_dependency(dep, &install_dir).await
+            .with_context(|| format!("Failed to install dependency {}", dep.name))?;
+    }
+
+    println!("\n✅ All dependencies installed successfully!");
+    println!("📁 Dependencies installed in: {}", install_dir.display());
+
+    Ok(())
+}
+
+/// Find vela.yaml file in current directory or parent directories
+fn find_manifest_file() -> Result<PathBuf> {
+    let mut current_dir = std::env::current_dir()?;
+
+    loop {
+        let manifest_path = current_dir.join("vela.yaml");
+        if manifest_path.exists() {
+            return Ok(manifest_path);
+        }
+
+        // Go up one directory
+        if let Some(parent) = current_dir.parent() {
+            current_dir = parent.to_path_buf();
+        } else {
+            break;
+        }
+    }
+
+    Err(anyhow::anyhow!("Could not find vela.yaml in current directory or any parent directory"))
+}
+
+/// Get the cache directory for Vela packages
+fn get_cache_dir() -> PathBuf {
+    dirs::cache_dir()
+        .unwrap_or_else(|| PathBuf::from(".vela-cache"))
+        .join("vela")
+}
+
+/// Get the installation directory for dependencies
+fn get_install_dir(manifest_path: &Path) -> PathBuf {
+    // Install dependencies in vela_modules/ next to the manifest
+    manifest_path.parent().unwrap().join("vela_modules")
 }
 
 fn handle_dev(_tool: DevCommands) -> Result<()> {

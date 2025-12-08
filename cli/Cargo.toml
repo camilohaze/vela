@@ -20,8 +20,11 @@ thiserror.workspace = true
 serde.workspace = true
 walkdir = "2.0"
 regex = "1.10"
+dirs = "5.0"
+tokio = { version = "1.0", features = ["macros", "rt-multi-thread"] }
 vela-vm = { path = "../vm" }
 vela-compiler = { path = "../compiler" }
+vela-package = { path = "../package" }
 
 [dev-dependencies]
 tempfile = "3.0"

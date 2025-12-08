@@ -1,0 +1,25 @@
+[package]
+name = "vela-package"
+version = "0.1.0"
+edition = "2021"
+description = "Vela package manager"
+authors = ["Vela Core Team <hello@velalang.org>"]
+license = "Apache-2.0 OR MIT"
+repository = "https://github.com/velalang/vela"
+homepage = "https://velalang.org"
+documentation = "https://docs.velalang.org"
+
+[lib]
+name = "vela_package"
+path = "src/lib.rs"
+
+[dependencies]
+serde.workspace = true
+serde_yaml.workspace = true
+anyhow.workspace = true
+thiserror.workspace = true
+dirs = "5.0"
+tokio = { version = "1.0", features = ["fs"] }
+
+[dev-dependencies]
+tempfile = "3.0"

@@ -1,0 +1,10 @@
+name: test-project
+version: "1.0.0"
+description: "Proyecto de prueba para el package manager"
+
+dependencies:
+  external:
+    serde: "1.0"
+    anyhow: "1.0"
+  local:
+    local-lib: "../libs/local-lib"

@@ -1,4 +1,4 @@
-"""
+/*!
 Implementación del formato de manifest vela.yaml
 
 Jira: TASK-102
@@ -8,11 +8,12 @@ Fecha: 2025-01-30
 Descripción:
 Implementación completa del parser y estructuras para vela.yaml
 según ADR-102. Incluye validación, serialización y tipos seguros.
-"""
+*/
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::Path;
+use anyhow::bail;
 
 /// Representa un rango de versiones semánticas
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -179,28 +180,28 @@ pub struct VelaManifest {
 
 impl VelaManifest {
     /// Carga un manifest desde un archivo
-    pub fn from_file<P: AsRef<Path>>(path: P) -> Result<Self, Box<dyn std::error::Error>> {
+    pub fn from_file<P: AsRef<Path>>(path: P) -> anyhow::Result<Self> {
         let content = std::fs::read_to_string(path)?;
         Self::from_str(&content)
     }
 
     /// Parsea un manifest desde string
-    pub fn from_str(content: &str) -> Result<Self, Box<dyn std::error::Error>> {
+    pub fn from_str(content: &str) -> anyhow::Result<Self> {
         let manifest: VelaManifest = serde_yaml::from_str(content)?;
         manifest.validate()?;
         Ok(manifest)
     }
 
     /// Valida el manifest
-    pub fn validate(&self) -> Result<(), String> {
+    pub fn validate(&self) -> anyhow::Result<()> {
         // Validar nombre
         if self.name.is_empty() {
-            return Err("El nombre del proyecto no puede estar vacío".to_string());
+            bail!("El nombre del proyecto no puede estar vacío");
         }
 
         // Validar versión semántica básica
         if !self.version.contains('.') {
-            return Err("La versión debe seguir formato semántico (ej: 1.0.0)".to_string());
+            bail!("La versión debe seguir formato semántico (ej: 1.0.0)");
         }
 
         // Validar dependencias locales (deben ser rutas válidas)
@@ -208,7 +209,7 @@ impl VelaManifest {
             if let Some(local) = &deps.local {
                 for path in local.deps.values() {
                     if path.contains("..") && !path.starts_with("../") && !path.starts_with("./") {
-                        return Err(format!("Ruta local inválida: {}", path));
+                        bail!("Ruta local inválida: {}", path);
                     }
                 }
             }
@@ -218,7 +219,7 @@ impl VelaManifest {
     }
 
     /// Serializa el manifest a YAML
-    pub fn to_yaml(&self) -> Result<String, Box<dyn std::error::Error>> {
+    pub fn to_yaml(&self) -> anyhow::Result<String> {
         Ok(serde_yaml::to_string(self)?)
     }
 

@@ -1,0 +1,6 @@
+// Módulo serde v1.0
+// Instalado automáticamente
+
+pub fn version() -> String {
+    "1.0"
+}
