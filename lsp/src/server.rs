@@ -6,7 +6,8 @@ use lsp_types::{
     InitializeParams, InitializeResult, ServerCapabilities, ServerInfo,
     TextDocumentSyncCapability, TextDocumentSyncKind, CompletionParams,
     CompletionList, CompletionItem, CompletionItemKind, Position,
-    CompletionOptions,
+    CompletionOptions, HoverProviderCapability, HoverParams, Hover,
+    MarkupContent, MarkupKind,
 };
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
@@ -98,6 +99,7 @@ impl LanguageServer {
             "initialize" => self.handle_initialize(request)?,
             "shutdown" => self.handle_shutdown(request)?,
             "textDocument/completion" => self.handle_completion(request)?,
+            "textDocument/hover" => self.handle_hover(request)?,
             _ => {
                 warn!("Unhandled request method: {}", request.method);
                 Response::new_err(
@@ -154,6 +156,7 @@ impl LanguageServer {
                 trigger_characters: Some(vec![".".to_string()]),
                 ..Default::default()
             }),
+            hover_provider: Some(HoverProviderCapability::Simple(true)),
             // TODO: Add more capabilities as we implement them
             ..Default::default()
         };
@@ -189,6 +192,19 @@ impl LanguageServer {
         let completions = self.compute_completions(&params)?;
 
         let response = Response::new_ok(request.id, completions);
+        Ok(response)
+    }
+
+    /// Handle textDocument/hover request
+    fn handle_hover(&self, request: Request) -> Result<Response> {
+        let params: HoverParams = serde_json::from_value(request.params)
+            .map_err(|e| anyhow::anyhow!("Invalid hover params: {}", e))?;
+
+        info!("Hover requested at position: {:?}", params.text_document_position_params.position);
+
+        let hover = self.compute_hover(&params)?;
+
+        let response = Response::new_ok(request.id, hover);
         Ok(response)
     }
 
@@ -284,6 +300,24 @@ impl LanguageServer {
         })
     }
 
+    /// Compute hover information based on the current position
+    fn compute_hover(&self, params: &HoverParams) -> Result<Option<Hover>> {
+        let uri = &params.text_document_position_params.text_document.uri;
+        let position = params.text_document_position_params.position;
+
+        // Get document content
+        let store = self.document_store.lock().unwrap();
+        let document = match store.get_document(uri) {
+            Some(doc) => doc,
+            None => return Ok(None), // No document found
+        };
+
+        // Analyze the symbol at position
+        let hover_info = self.analyze_hover_symbol(document, position);
+
+        Ok(hover_info)
+    }
+
     /// Analyze the completion context at the given position
     fn analyze_completion_context(&self, document: &str, position: Position) -> CompletionContext {
         // Simple context analysis - this could be much more sophisticated
@@ -314,6 +348,139 @@ impl LanguageServer {
         } else {
             CompletionContext::Keyword
         }
+    }
+
+    /// Analyze the symbol at the given position for hover information
+    fn analyze_hover_symbol(&self, document: &str, position: Position) -> Option<Hover> {
+        // Convert position to byte offset
+        let lines: Vec<&str> = document.lines().collect();
+        if position.line as usize >= lines.len() {
+            return None;
+        }
+
+        let line = lines[position.line as usize];
+        let char_pos = position.character as usize;
+
+        if char_pos > line.len() {
+            return None;
+        }
+
+        // Extract word at position (simple word boundary detection)
+        let word = self.extract_word_at_position(line, char_pos)?;
+
+        // Generate hover information based on the word
+        self.generate_hover_for_word(&word)
+    }
+
+    /// Extract word at the given character position in a line
+    fn extract_word_at_position(&self, line: &str, char_pos: usize) -> Option<String> {
+        let chars: Vec<char> = line.chars().collect();
+        if char_pos >= chars.len() {
+            return None;
+        }
+
+        // Find word boundaries (simple: alphanumeric and underscore)
+        let mut start = char_pos;
+        while start > 0 && (chars[start - 1].is_alphanumeric() || chars[start - 1] == '_') {
+            start -= 1;
+        }
+
+        let mut end = char_pos;
+        while end < chars.len() && (chars[end].is_alphanumeric() || chars[end] == '_') {
+            end += 1;
+        }
+
+        if start < end {
+            Some(chars[start..end].iter().collect())
+        } else {
+            None
+        }
+    }
+
+    /// Generate hover information for a given word
+    fn generate_hover_for_word(&self, word: &str) -> Option<Hover> {
+        let (content, range) = match word {
+            // Keywords
+            "fn" => (
+                "**fn** - Function declaration\n\nDeclare a function with parameters and return type.\n\n```vela\nfn add(a: Number, b: Number) -> Number {\n  return a + b\n}\n```",
+                None,
+            ),
+            "let" => (
+                "**let** - Variable declaration (deprecated)\n\nNote: Variables are immutable by default in Vela. Use `state` for mutable reactive variables.",
+                None,
+            ),
+            "state" => (
+                "**state** - Reactive state variable\n\nDeclare a mutable variable that triggers reactivity.\n\n```vela\nstate count: Number = 0\ncount = count + 1  // Triggers reactivity\n```",
+                None,
+            ),
+            "if" => (
+                "**if** - Conditional statement\n\nExecute code conditionally.\n\n```vela\nif age >= 18 {\n  \"adult\"\n} else {\n  \"minor\"\n}\n```",
+                None,
+            ),
+            "match" => (
+                "**match** - Pattern matching\n\nExhaustive pattern matching expression.\n\n```vela\nmatch value {\n  1 => \"one\"\n  2 => \"two\"\n  _ => \"other\"\n}\n```",
+                None,
+            ),
+            "class" => (
+                "**class** - Class declaration\n\nDefine a class with methods and properties.\n\n```vela\nclass Person {\n  constructor(name: String) {\n    this.name = name\n  }\n}\n```",
+                None,
+            ),
+            "interface" => (
+                "**interface** - Interface declaration\n\nDefine a contract for types.\n\n```vela\ninterface Drawable {\n  fn draw() -> void\n}\n```",
+                None,
+            ),
+            "public" => (
+                "**public** - Public modifier\n\nMake declarations accessible from other modules.",
+                None,
+            ),
+            "return" => (
+                "**return** - Return statement\n\nReturn a value from a function.",
+                None,
+            ),
+
+            // Types
+            "String" => (
+                "**String** - Text string type\n\nRepresents textual data.\n\n```vela\nname: String = \"Vela\"\nmessage: String = \"Hello, ${name}!\"\n```",
+                None,
+            ),
+            "Number" => (
+                "**Number** - Integer type\n\n64-bit signed integer.\n\n```vela\nage: Number = 37\ncount: Number = 0\n```",
+                None,
+            ),
+            "Float" => (
+                "**Float** - Floating point type\n\n64-bit floating point number.\n\n```vela\nprice: Float = 19.99\npi: Float = 3.14159\n```",
+                None,
+            ),
+            "Bool" => (
+                "**Bool** - Boolean type\n\nTrue or false values.\n\n```vela\nisActive: Bool = true\nhasPermission: Bool = false\n```",
+                None,
+            ),
+            "void" => (
+                "**void** - No return type\n\nIndicates a function returns nothing.",
+                None,
+            ),
+
+            // Functions
+            "print" => (
+                "**print** - Print to console\n\nPrints a value to the console.\n\n```vela\nprint(\"Hello, World!\")\nprint(42)\n```",
+                None,
+            ),
+            "len" => (
+                "**len** - Get collection length\n\nReturns the length of a collection.\n\n```vela\nnumbers = [1, 2, 3]\nlength = len(numbers)  // 3\n```",
+                None,
+            ),
+
+            // Unknown words
+            _ => return None,
+        };
+
+        Some(Hover {
+            contents: lsp_types::HoverContents::Markup(MarkupContent {
+                kind: MarkupKind::Markdown,
+                value: content.to_string(),
+            }),
+            range,
+        })
     }
 
     /// Generate keyword completions
