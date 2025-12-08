@@ -125,12 +125,12 @@ impl I18nDecorator {
             // Temporarily switch locale for this translation
             let mut translator = self.translator.write().await;
             let original_locale = translator.get_locale().await;
-            translator.set_locale(class_info.locale.clone()).await;
+            translator.set_locale(class_info.locale.clone()).await?;
 
             let result = translator.translate(key, variables).await;
 
             // Restore original locale
-            translator.set_locale(original_locale).await;
+            translator.set_locale(original_locale).await?;
 
             result
         } else {

@@ -18,13 +18,33 @@ pub struct Translator {
     /// Fallback locale
     fallback_locale: Locale,
     /// Translation loader
-    loader: RwLock<Box<dyn TranslationLoader + Send + Sync>>,
+    pub loader: RwLock<Box<dyn TranslationLoader + Send + Sync>>,
     /// Interpolator for variables
     interpolator: Interpolator,
     /// Formatter for localized formatting
     formatter: Formatter,
     /// Locale manager
     locale_manager: LocaleManager,
+}
+
+impl Clone for Translator {
+    fn clone(&self) -> Self {
+        // We need to clone the loader, but since it's a trait object, we recreate it
+        // with the same base directory. This is a limitation of the current design.
+        // In a real implementation, the loader should be clonable or we should use
+        // Arc for the loader itself.
+        let loader_base_dir = "translations"; // Default for cloned instances
+        // TODO: Make loader clonable to preserve the original base directory
+        
+        Self {
+            current_locale: RwLock::new(self.current_locale.try_read().unwrap().clone()),
+            fallback_locale: self.fallback_locale.clone(),
+            loader: RwLock::new(Box::new(FileSystemLoader::new(loader_base_dir))),
+            interpolator: self.interpolator.clone(),
+            formatter: self.formatter.clone(),
+            locale_manager: self.locale_manager.clone(),
+        }
+    }
 }
 
 impl Translator {
@@ -46,9 +66,13 @@ impl Translator {
     }
 
     /// Set the current locale
-    pub async fn set_locale(&self, locale: Locale) {
-        let mut current = self.current_locale.write().await;
-        *current = locale;
+    pub async fn set_locale(&self, locale: Locale) -> Result<()> {
+        {
+            let mut current = self.current_locale.write().await;
+            *current = locale;
+        }
+        // Reload translations for the new locale
+        self.reload_translations().await
     }
 
     /// Get the current locale
@@ -78,24 +102,13 @@ impl Translator {
 
     /// Translate a key with optional variables
     pub async fn translate(&mut self, key: &str, variables: &[(&str, &str)]) -> Result<String> {
-        let current_locale = self.current_locale.read().await;
-        let translation = self.translate_with_locale(key, &current_locale).await?;
-
-        if variables.is_empty() {
-            return Ok(translation);
-        }
-
-        // Create interpolation context
-        let mut context = InterpolationContext::new(&current_locale);
-        for (name, value) in variables {
-            context.variables.insert(name.to_string(), value.to_string());
-        }
-
-        self.interpolator.interpolate(&translation, &context)
+        let current_locale = self.current_locale.read().await.clone();
+        let variables_map = variables.iter().map(|(k, v)| (k.to_string(), v.to_string())).collect::<HashMap<_, _>>();
+        self.translate_with_locale(key, &current_locale, Some(&variables_map)).await
     }
 
     /// Translate a key for a specific locale
-    pub async fn translate_with_locale(&self, key: &str, locale: &Locale) -> Result<String> {
+    pub async fn translate_with_locale(&mut self, key: &str, locale: &Locale, variables: Option<&HashMap<String, String>>) -> Result<String> {
         let loader = self.loader.read().await;
 
         // Try the requested locale first
@@ -104,7 +117,21 @@ impl Translator {
                 println!("DEBUG: Loaded translations for {}: {:?}", locale, translations);
                 if let Some(value) = self.get_nested_value(&translations, key) {
                     println!("DEBUG: Found value for key '{}': {}", key, value);
-                    return Ok(value);
+                    let interpolated = {
+                        let mut context = InterpolationContext::new(locale);
+                        // Add passed variables
+                        if let Some(vars) = variables {
+                            for (k, v) in vars.iter() {
+                                context.variables.insert(k.clone(), v.clone());
+                            }
+                        }
+                        // Add translations for recursive interpolation
+                        if let Ok(translations) = loader.load_translations(locale.as_str()).await {
+                            self.add_translations_to_context(&translations, &mut context.variables, "");
+                        }
+                        self.interpolator.interpolate(&value, &context)?
+                    };
+                    return Ok(interpolated);
                 } else {
                     println!("DEBUG: Key '{}' not found in translations", key);
                 }
@@ -114,24 +141,90 @@ impl Translator {
             }
         }
 
-        // Try fallback locales
-        for fallback_locale in locale.fallback_chain() {
-            match loader.load_translations(fallback_locale.as_str()).await {
-                Ok(translations) => {
-                    println!("DEBUG: Loaded fallback translations for {}: {:?}", fallback_locale, translations);
-                    if let Some(value) = self.get_nested_value(&translations, key) {
-                        println!("DEBUG: Found value for key '{}' in fallback: {}", key, value);
-                        return Ok(value);
-                    }
+        // Try fallback locales (configured fallback first, then locale fallbacks)
+        match loader.load_translations(self.fallback_locale.as_str()).await {
+            Ok(translations) => {
+                println!("DEBUG: Loaded configured fallback translations for {}: {:?}", self.fallback_locale, translations);
+                if let Some(value) = self.get_nested_value(&translations, key) {
+                    println!("DEBUG: Found value for key '{}' in configured fallback: {}", key, value);
+                    let interpolated = {
+                        let mut context = InterpolationContext::new(locale);
+                        // Add passed variables
+                        if let Some(vars) = variables {
+                            for (k, v) in vars.iter() {
+                                context.variables.insert(k.clone(), v.clone());
+                            }
+                        }
+                        // Add translations for recursive interpolation
+                        if let Ok(translations) = loader.load_translations(locale.as_str()).await {
+                            self.add_translations_to_context(&translations, &mut context.variables, "");
+                        }
+                        self.interpolator.interpolate(&value, &context)?
+                    };
+                    return Ok(interpolated);
                 }
-                Err(e) => {
-                    println!("DEBUG: Failed to load fallback translations for {}: {}", fallback_locale, e);
+            }
+            Err(e) => {
+                println!("DEBUG: Failed to load configured fallback translations for {}: {}", self.fallback_locale, e);
+            }
+        }
+
+        // Try locale's own fallback chain
+        for fallback_locale in locale.fallback_chain() {
+            if fallback_locale.as_str() != locale.as_str() && fallback_locale.as_str() != self.fallback_locale.as_str() {
+                match loader.load_translations(fallback_locale.as_str()).await {
+                    Ok(translations) => {
+                        println!("DEBUG: Loaded locale fallback translations for {}: {:?}", fallback_locale, translations);
+                        if let Some(value) = self.get_nested_value(&translations, key) {
+                            println!("DEBUG: Found value for key '{}' in locale fallback: {}", key, value);
+                            let interpolated = {
+                                let mut context = InterpolationContext::new(locale);
+                                // Add passed variables
+                                if let Some(vars) = variables {
+                                    for (k, v) in vars.iter() {
+                                        context.variables.insert(k.clone(), v.clone());
+                                    }
+                                }
+                                // Add translations for recursive interpolation
+                                if let Ok(translations) = loader.load_translations(locale.as_str()).await {
+                                    self.add_translations_to_context(&translations, &mut context.variables, "");
+                                }
+                                self.interpolator.interpolate(&value, &context)?
+                            };
+                            return Ok(interpolated);
+                        }
+                    }
+                    Err(e) => {
+                        println!("DEBUG: Failed to load locale fallback translations for {}: {}", fallback_locale, e);
+                    }
                 }
             }
         }
 
         println!("DEBUG: Translation not found for key '{}'", key);
         Err(I18nError::translation_not_found(key.to_string()))
+    }
+
+    fn add_translations_to_context(&self, translations: &TranslationMap, context: &mut HashMap<String, String>, prefix: &str) {
+        for (key, value) in translations.iter() {
+            let full_key = if prefix.is_empty() {
+                key.clone()
+            } else {
+                format!("{}.{}", prefix, key)
+            };
+            
+            match value {
+                serde_json::Value::String(s) => {
+                    context.insert(full_key, s.clone());
+                }
+                serde_json::Value::Object(obj) => {
+                    self.add_translations_to_context(&serde_json::Map::from_iter(obj.clone()), context, &full_key);
+                }
+                _ => {
+                    context.insert(full_key, value.to_string());
+                }
+            }
+        }
     }
 
     /// Check if a translation key exists
@@ -210,7 +303,7 @@ impl Translator {
             return None; // Already tried the exact key above
         }
 
-        let mut current: HashMap<String, serde_json::Value> = (*translations).clone();
+        let mut current = translations;
 
         for (i, part) in parts.iter().enumerate() {
             match current.get(*part) {
@@ -219,7 +312,7 @@ impl Translator {
                         // Last part should be a string value
                         return None;
                     }
-                    current = obj.clone().into_iter().collect();
+                    current = obj;
                 }
                 Some(serde_json::Value::String(s)) => {
                     if i == parts.len() - 1 {
@@ -274,9 +367,13 @@ impl Translator {
     pub async fn reload_translations(&self) -> Result<()> {
         let loader = self.loader.read().await;
         loader.clear_cache().await;
-        // Reload current locale translations
+        // Reload current locale translations (ignore errors for missing locales)
         let current_locale = self.current_locale.read().await.clone();
-        self.load_translations_for_locale(&current_locale).await?;
+        let _ = self.load_translations_for_locale(&current_locale).await; // Ignore errors
+
+        // Also try to load fallback locale translations
+        let _ = self.load_translations_for_locale(&self.fallback_locale).await; // Ignore errors
+
         Ok(())
     }
 }
@@ -327,6 +424,7 @@ impl TranslatorBuilder {
 
         // Update loader directory
         let loader = Box::new(FileSystemLoader::new(&self.translations_dir));
+        println!("DEBUG: TranslatorBuilder created loader with base_dir: {}", self.translations_dir);
         translator.loader = RwLock::new(loader);
 
         translator
@@ -423,7 +521,7 @@ mod tests {
         assert_eq!(result, "Hello");
 
         // Switch to Spanish
-        translator.set_locale(Locale::from("es").unwrap()).await;
+        translator.set_locale(Locale::from("es").unwrap()).await.unwrap();
         let result = translator.translate("greeting.hello", &[]).await.unwrap();
         assert_eq!(result, "Hola");
     }

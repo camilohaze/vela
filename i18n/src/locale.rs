@@ -230,7 +230,7 @@ impl Default for ListFormats {
 }
 
 /// Manager for locale configurations
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct LocaleManager {
     configs: std::collections::HashMap<Locale, LocaleConfig>,
 }

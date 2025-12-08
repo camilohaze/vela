@@ -17,7 +17,7 @@ use crate::error::{I18nError, Result};
 use crate::locale::{Locale, LocaleConfig, LocaleManager};
 
 /// Localized formatter for dates, numbers, and currencies
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Formatter {
     /// Locale manager for configuration
     locale_manager: LocaleManager,

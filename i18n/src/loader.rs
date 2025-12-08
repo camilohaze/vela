@@ -14,7 +14,7 @@ use crate::error::{I18nError, Result};
 use crate::locale::Locale;
 
 /// Type alias for translation maps
-pub type TranslationMap = HashMap<String, serde_json::Value>;
+pub type TranslationMap = serde_json::Map<String, serde_json::Value>;
 
 /// Cache entry with metadata
 #[derive(Debug, Clone)]

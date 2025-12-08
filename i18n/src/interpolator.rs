@@ -43,7 +43,7 @@ impl<'a> InterpolationContext<'a> {
 }
 
 /// Advanced string interpolator with ICU support
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Interpolator {
     /// Variable resolver for ${variable} and {{variable}} syntax
     variable_resolver: VariableResolver,
@@ -56,7 +56,7 @@ pub struct Interpolator {
 }
 
 /// Variable resolver with recursive interpolation support
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct VariableResolver {
     /// Regex for ${variable} syntax
     dollar_syntax: Regex,
@@ -67,13 +67,13 @@ struct VariableResolver {
 }
 
 /// Pluralization engine using basic rules (no ICU for threading compatibility)
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct PluralizationEngine {
     // No ICU dependencies for Send/Sync compatibility
 }
 
 /// Select engine for conditional text selection
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct SelectEngine {
     /// Regex for parsing select patterns
     select_pattern: Regex,

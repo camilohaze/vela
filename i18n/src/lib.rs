@@ -29,7 +29,7 @@ rt.block_on(async {
 
     // Set primary locale
     let locale = Locale::from("en-US").unwrap();
-    translator.set_locale(locale).await;
+    translator.set_locale(locale).await?;
 
     // Load translations
     translator.load_translations_from_dir("translations/").await?;
@@ -68,3 +68,7 @@ pub use error::{I18nError, Result};
 pub use interpolator::{InterpolationContext, Interpolator};
 pub use loader::{TranslationLoader, TranslationMap};
 pub use decorator::I18nDecorator;
+
+// Include comprehensive tests
+#[cfg(test)]
+mod tests;
