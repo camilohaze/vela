@@ -7,8 +7,63 @@ y este proyecto adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 ## [Unreleased]
 
+## [0.10.0] - Sprint 34 - 2025-12-08
+
+### 🎯 Resumen del Sprint
+- **Historia completada:** VELA-597 (Sistema de Logging Estructurado)
+- **Crate agregado:** `vela-logging` (crate separado en directorio raíz)
+- **Tests agregados:** 34 tests unitarios (100% cobertura)
+- **Arquitectura:** Logger<T> genérico con async logging
+- **Features:** JSON structured logging, multiple transports, filtering & sampling
+- **Documentación:** ADR completo + 6 TASK docs + Release Notes
+
+### ✨ Added - Complete Logging System Implementation
+
+#### [VELA-597] Sistema de Logging Estructurado ✅
+- **Logger<T> genérico** con contexto tipado y async logging
+- **LoggerBuilder** para configuración fluida con metadata
+- **LogRecord** con JSON serialization y metadata estructurada
+- **LogTransport trait** extensible (Console, File, HTTP transports)
+- **LogConfig** con filtering avanzado, sampling y rate limiting
+- **34 tests unitarios** con 100% cobertura de código
+
+#### Logging Features Implementadas:
+- **Structured Logging**: JSON output con metadata, timestamps UTC, thread IDs
+- **Multiple Transports**: Console (colored), File (append), HTTP (POST)
+- **Advanced Filtering**: Closures personalizadas, filtros por metadata, sampling rate
+- **Rate Limiting**: Thread-safe rate limiting (logs por segundo)
+- **Configurations**: Predefinidas para desarrollo y producción
+- **Async I/O**: Non-blocking writes con tokio
+- **Type Safety**: Generic contexts, strong typing en toda la API
+
+#### API Principal:
+```rust
+// Logger creation
+let logger = Logger::new("app", config, context);
+
+// Builder pattern
+let logger = LoggerBuilder::new("app", config, context)
+    .add_metadata("version", "1.0.0")
+    .build();
+
+// Structured logging
+logger.info("User login successful").await?;
+logger.log_with_metadata(metadata, "Custom message", Level::WARN).await?;
+```
+
+### 📚 Documentation
+- **ADR-113L**: Arquitectura completa del sistema de logging
+- **Release Notes**: `docs/releases/sprint-34.md`
+- **Feature Docs**: 6 TASK completadas en `docs/features/VELA-597/`
+
+### 🧪 Quality Assurance
+- **Test Coverage**: 100% (34 unit tests)
+- **Thread Safety**: Atomic operations, Arc sharing
+- **Error Handling**: Result types en toda la API
+- **Performance**: Async I/O, sampling para reducción de volumen
+
 ### En Desarrollo
-- Futuros sprints (Sprint 11+)
+- Futuros sprints (Sprint 35+)
 
 ---
 
