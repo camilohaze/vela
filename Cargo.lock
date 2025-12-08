@@ -3737,6 +3737,7 @@ dependencies = [
  "anyhow",
  "async-trait",
  "chrono",
+ "criterion",
  "fixed_decimal",
  "fluent-langneg",
  "icu_calendar",
