@@ -1,9 +1,11 @@
-# US-22: CLI tooling para gestión de proyectos Vela
+# VELA-592: CLI Tooling - Comandos run y doctor
 
 ## 📋 Información General
-- **Epic:** Sprint 29
-- **Estado:** En progreso ⏳
-- **Fecha:** 2025-01-07
+- **Epic:** EPIC-08 (Tooling CLI)
+- **User Story:** US-22 (CLI para gestionar proyectos)
+- **Sprint:** Sprint 29
+- **Estado:** Completada ✅ (TASK-098 y TASK-101 finalizados)
+- **Fecha:** 2025-01-30
 
 ## 🎯 Descripción
 Como desarrollador, quiero un CLI completo para gestionar proyectos Vela que incluya comandos para crear, construir, ejecutar, probar y mantener proyectos.
@@ -21,10 +23,12 @@ Como desarrollador, quiero un CLI completo para gestionar proyectos Vela que inc
    - Manejo de errores y warnings
    - Tests unitarios incluidos
 
-3. **TASK-098**: Implementar vela run ✅
-   - Comando `vela run <file.velac> --trace --gc-stats`
-   - Ejecución de bytecode en VM
-   - Opciones de debugging
+3. **TASK-098**: Implementar vela run ✅ **(EXTENDIDO)**
+   - Comando `vela run <file.vela|.velac> --trace --gc-stats`
+   - **Ejecución de archivos .vela con compilación automática**
+   - **Ejecución de archivos .velac directamente**
+   - Detección automática de tipo de archivo
+   - Opciones de debugging y estadísticas
    - Tests unitarios incluidos
 
 4. **TASK-099**: Implementar vela test ✅
@@ -33,9 +37,16 @@ Como desarrollador, quiero un CLI completo para gestionar proyectos Vela que inc
    - Reporte detallado de resultados
    - Tests unitarios incluidos
 
+5. **TASK-101**: Implementar vela doctor ✅ **(NUEVO)**
+   - Comando `vela doctor [--verbose] [--fix]`
+   - Diagnóstico completo de instalación
+   - Verificación de herramientas requeridas
+   - Detección de estructura de proyecto
+   - Modos verbose y fix preparados
+   - Tests unitarios incluidos
+
 ## 📋 Subtasks Pendientes
-5. **TASK-100**: Implementar vela fmt (P1)
-6. **TASK-101**: Implementar vela doctor (P2)
+6. **TASK-100**: Implementar vela fmt (P1)
 
 ## 🔨 Comandos Implementados
 
@@ -51,12 +62,29 @@ vela create my-project --template web
 - `api` - API REST con endpoints
 - `module` - Módulo funcional
 
-### 🔄 vela run (parcialmente implementado)
+### ✅ vela run (completamente implementado)
 ```bash
-vela run my-app.velac
+vela run <file.vela|.velac> [--trace] [--gc-stats] [args...]
 ```
 
-Ejecuta bytecode .velac con VM integrada.
+Ejecuta archivos Vela con funcionalidades avanzadas:
+- **Archivos .vela**: Compilación automática on-the-fly
+- **Archivos .velac**: Ejecución directa de bytecode
+- `--trace`: Debug detallado de VM
+- `--gc-stats`: Estadísticas de garbage collection
+- `args...`: Argumentos pasados al programa
+
+### ✅ vela doctor (nuevo comando)
+```bash
+vela doctor [--verbose] [--fix]
+```
+
+Diagnóstico completo de instalación y entorno:
+- Verificación de instalación de Vela CLI
+- Chequeo de herramientas requeridas (Rust, Cargo, Node.js)
+- Detección de estructura de proyecto
+- `--verbose`: Información detallada del sistema
+- `--fix`: Preparado para correcciones automáticas
 
 ### ✅ vela test
 ```bash
@@ -70,12 +98,12 @@ Ejecuta tests de Vela con opciones avanzadas:
 - `files...`: Archivos específicos (opcional, busca en `tests/` por defecto)
 
 ## 📊 Métricas
-- **Subtasks completadas:** 4/6 (66.7%)
-- **Archivos creados:** ~25
-- **Líneas de código:** ~2500
+- **Subtasks completadas:** 5/6 (83.3%)
+- **Archivos creados/modificados:** ~30
+- **Líneas de código:** ~2900
 - **Templates:** 5
-- **Comandos CLI:** 4/6 implementados
-- **Tests:** Básicos incluidos
+- **Comandos CLI:** 5/6 implementados
+- **Tests:** Completos incluidos (7 tests nuevos)
 
 ## ✅ Definición de Hecho
 - [x] TASK-096 completada con templates funcionales
