@@ -45,6 +45,8 @@ pub mod schema;
 pub mod decorator;
 pub mod errors;
 pub mod integration;
+#[cfg(test)]
+pub mod integration_tests;
 
 pub use error::{ValidationError, ValidationResult};
 pub use validators::*;
