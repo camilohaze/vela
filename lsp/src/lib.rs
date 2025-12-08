@@ -14,7 +14,7 @@ pub mod completion;
 pub use server::LanguageServer;
 
 /// Initialize the language server
-pub fn init() -> LanguageServer {
+pub fn init() -> anyhow::Result<LanguageServer> {
     LanguageServer::new()
 }
 
@@ -22,7 +22,7 @@ pub fn init() -> LanguageServer {
 mod tests {
     #[test]
     fn test_lsp_init() {
-        let _server = init();
+        let _server = init().expect("Failed to initialize language server");
         // TODO: Add more tests
     }
 }

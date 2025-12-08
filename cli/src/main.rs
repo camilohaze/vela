@@ -196,6 +196,15 @@ enum ProjectTemplate {
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    // Initialize tracing subscriber for logging
+    // Use a file appender to avoid interfering with LSP stdio communication
+    let file_appender = tracing_appender::rolling::never(".", "vela.log");
+    let (non_blocking, _guard) = tracing_appender::non_blocking(file_appender);
+    tracing_subscriber::fmt()
+        .with_writer(non_blocking)
+        .with_max_level(tracing::Level::DEBUG)
+        .init();
+
     let cli = Cli::parse();
 
     match cli.command {
@@ -1394,7 +1403,13 @@ fn fix_indentation(content: &str) -> String {
 
 fn handle_lsp() -> Result<()> {
     println!("Starting Vela Language Server...");
-    // TODO: Implement LSP
+
+    let server = vela_lsp::init()
+        .context("Failed to initialize language server")?;
+
+    server.run()
+        .context("Language server encountered an error")?;
+
     Ok(())
 }
 
