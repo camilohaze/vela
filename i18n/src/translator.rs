@@ -25,6 +25,8 @@ pub struct Translator {
     formatter: Formatter,
     /// Locale manager
     locale_manager: LocaleManager,
+    /// Cache of valid translations per locale (for error recovery)
+    translation_cache: RwLock<HashMap<String, TranslationMap>>,
 }
 
 impl Clone for Translator {
@@ -43,6 +45,7 @@ impl Clone for Translator {
             interpolator: self.interpolator.clone(),
             formatter: self.formatter.clone(),
             locale_manager: self.locale_manager.clone(),
+            translation_cache: RwLock::new(HashMap::new()), // Start with empty cache for clones
         }
     }
 }
@@ -62,6 +65,7 @@ impl Translator {
             interpolator: Interpolator::new().unwrap(),
             formatter: Formatter::new(),
             locale_manager: LocaleManager::new(),
+            translation_cache: RwLock::new(HashMap::new()),
         }
     }
 
@@ -86,17 +90,37 @@ impl Translator {
     }
 
     /// Load translations from a directory
-    pub async fn load_translations_from_dir<P: AsRef<Path>>(&self, _dir: P) -> Result<()> {
-        // TODO: Implement directory loading through the loader trait
-        // For now, this is a placeholder
+    pub async fn load_translations_from_dir<P: AsRef<Path>>(&self, dir: P) -> Result<()> {
+        let dir = dir.as_ref();
+        let loader = self.loader.read().await;
+        
+        // Try to load common locales
+        let locales = ["en", "es", "pt", "fr", "de", "it", "ja", "zh", "ru"];
+        
+        for locale_str in &locales {
+            if let Ok(locale) = Locale::from(*locale_str) {
+                // Try to load translations for this locale - ignore errors for missing files
+                let _ = loader.load_translations(locale_str).await;
+                // If successful, store in cache
+                if let Ok(translations) = loader.load_translations(locale_str).await {
+                    let mut cache = self.translation_cache.write().await;
+                    cache.insert(locale_str.to_string(), translations);
+                }
+            }
+        }
+        
         Ok(())
     }
 
     /// Load translations for a specific locale
     pub async fn load_translations_for_locale(&self, locale: &Locale) -> Result<()> {
         let loader = self.loader.read().await;
-        let _translations = loader.load_translations(locale.as_str()).await?;
-        // TODO: Store the loaded translations
+        let translations = loader.load_translations(locale.as_str()).await?;
+        
+        // Store in cache
+        let mut cache = self.translation_cache.write().await;
+        cache.insert(locale.as_str().to_string(), translations);
+        
         Ok(())
     }
 
@@ -109,16 +133,63 @@ impl Translator {
 
     /// Translate a key for a specific locale
     pub async fn translate_with_locale(&mut self, key: &str, locale: &Locale, variables: Option<&HashMap<String, String>>) -> Result<String> {
-        let loader = self.loader.read().await;
+        let cache = self.translation_cache.read().await;
 
-        // Try the requested locale first
-        match loader.load_translations(locale.as_str()).await {
-            Ok(translations) => {
-                println!("DEBUG: Loaded translations for {}: {:?}", locale, translations);
-                if let Some(value) = self.get_nested_value(&translations, key) {
-                    println!("DEBUG: Found value for key '{}': {}", key, value);
+        // Try the requested locale first (from cache)
+        if let Some(translations) = cache.get(locale.as_str()) {
+            println!("DEBUG: Using cached translations for {}: {:?}", locale, translations);
+            if let Some(value) = self.get_nested_value(translations, key) {
+                println!("DEBUG: Found value for key '{}': {}", key, value);
+                let interpolated = {
+                    let mut context = InterpolationContext::new(locale);
+                    // Add passed variables
+                    if let Some(vars) = variables {
+                        for (k, v) in vars.iter() {
+                            context.variables.insert(k.clone(), v.clone());
+                        }
+                    }
+                    // Add translations for recursive interpolation
+                    self.add_translations_to_context(translations, &mut context.variables, "");
+                    self.interpolator.interpolate(&value, &context)?
+                };
+                return Ok(interpolated);
+            } else {
+                println!("DEBUG: Key '{}' not found in cached translations for {}", key, locale);
+            }
+        } else {
+            println!("DEBUG: No cached translations found for {}", locale);
+        }
+
+        // Try configured fallback locale (from cache)
+        if let Some(translations) = cache.get(self.fallback_locale.as_str()) {
+            println!("DEBUG: Using cached configured fallback translations for {}: {:?}", self.fallback_locale, translations);
+            if let Some(value) = self.get_nested_value(translations, key) {
+                println!("DEBUG: Found value for key '{}' in configured fallback: {}", key, value);
+                let interpolated = {
+                    let mut context = InterpolationContext::new(&self.fallback_locale);
+                    // Add passed variables
+                    if let Some(vars) = variables {
+                        for (k, v) in vars.iter() {
+                            context.variables.insert(k.clone(), v.clone());
+                        }
+                    }
+                    // Add translations for recursive interpolation
+                    self.add_translations_to_context(translations, &mut context.variables, "");
+                    self.interpolator.interpolate(&value, &context)?
+                };
+                return Ok(interpolated);
+            }
+        }
+
+        // Try locale fallback chain
+        let fallback_chain = locale.fallback_chain();
+        for fallback_locale in fallback_chain {
+            if let Some(translations) = cache.get(fallback_locale.as_str()) {
+                println!("DEBUG: Using cached fallback translations for {}: {:?}", fallback_locale, translations);
+                if let Some(value) = self.get_nested_value(translations, key) {
+                    println!("DEBUG: Found value for key '{}' in fallback {}: {}", key, fallback_locale, value);
                     let interpolated = {
-                        let mut context = InterpolationContext::new(locale);
+                        let mut context = InterpolationContext::new(&fallback_locale);
                         // Add passed variables
                         if let Some(vars) = variables {
                             for (k, v) in vars.iter() {
@@ -126,83 +197,16 @@ impl Translator {
                             }
                         }
                         // Add translations for recursive interpolation
-                        if let Ok(translations) = loader.load_translations(locale.as_str()).await {
-                            self.add_translations_to_context(&translations, &mut context.variables, "");
-                        }
-                        self.interpolator.interpolate(&value, &context)?
-                    };
-                    return Ok(interpolated);
-                } else {
-                    println!("DEBUG: Key '{}' not found in translations", key);
-                }
-            }
-            Err(e) => {
-                println!("DEBUG: Failed to load translations for {}: {}", locale, e);
-            }
-        }
-
-        // Try fallback locales (configured fallback first, then locale fallbacks)
-        match loader.load_translations(self.fallback_locale.as_str()).await {
-            Ok(translations) => {
-                println!("DEBUG: Loaded configured fallback translations for {}: {:?}", self.fallback_locale, translations);
-                if let Some(value) = self.get_nested_value(&translations, key) {
-                    println!("DEBUG: Found value for key '{}' in configured fallback: {}", key, value);
-                    let interpolated = {
-                        let mut context = InterpolationContext::new(locale);
-                        // Add passed variables
-                        if let Some(vars) = variables {
-                            for (k, v) in vars.iter() {
-                                context.variables.insert(k.clone(), v.clone());
-                            }
-                        }
-                        // Add translations for recursive interpolation
-                        if let Ok(translations) = loader.load_translations(locale.as_str()).await {
-                            self.add_translations_to_context(&translations, &mut context.variables, "");
-                        }
+                        self.add_translations_to_context(translations, &mut context.variables, "");
                         self.interpolator.interpolate(&value, &context)?
                     };
                     return Ok(interpolated);
                 }
             }
-            Err(e) => {
-                println!("DEBUG: Failed to load configured fallback translations for {}: {}", self.fallback_locale, e);
-            }
         }
 
-        // Try locale's own fallback chain
-        for fallback_locale in locale.fallback_chain() {
-            if fallback_locale.as_str() != locale.as_str() && fallback_locale.as_str() != self.fallback_locale.as_str() {
-                match loader.load_translations(fallback_locale.as_str()).await {
-                    Ok(translations) => {
-                        println!("DEBUG: Loaded locale fallback translations for {}: {:?}", fallback_locale, translations);
-                        if let Some(value) = self.get_nested_value(&translations, key) {
-                            println!("DEBUG: Found value for key '{}' in locale fallback: {}", key, value);
-                            let interpolated = {
-                                let mut context = InterpolationContext::new(locale);
-                                // Add passed variables
-                                if let Some(vars) = variables {
-                                    for (k, v) in vars.iter() {
-                                        context.variables.insert(k.clone(), v.clone());
-                                    }
-                                }
-                                // Add translations for recursive interpolation
-                                if let Ok(translations) = loader.load_translations(locale.as_str()).await {
-                                    self.add_translations_to_context(&translations, &mut context.variables, "");
-                                }
-                                self.interpolator.interpolate(&value, &context)?
-                            };
-                            return Ok(interpolated);
-                        }
-                    }
-                    Err(e) => {
-                        println!("DEBUG: Failed to load locale fallback translations for {}: {}", fallback_locale, e);
-                    }
-                }
-            }
-        }
-
-        println!("DEBUG: Translation not found for key '{}'", key);
-        Err(I18nError::translation_not_found(key.to_string()))
+        // If we get here, the key was not found in any locale
+        Err(I18nError::TranslationNotFound { key: key.to_string() })
     }
 
     fn add_translations_to_context(&self, translations: &TranslationMap, context: &mut HashMap<String, String>, prefix: &str) {
@@ -367,12 +371,34 @@ impl Translator {
     pub async fn reload_translations(&self) -> Result<()> {
         let loader = self.loader.read().await;
         loader.clear_cache().await;
-        // Reload current locale translations (ignore errors for missing locales)
-        let current_locale = self.current_locale.read().await.clone();
-        let _ = self.load_translations_for_locale(&current_locale).await; // Ignore errors
 
-        // Also try to load fallback locale translations
-        let _ = self.load_translations_for_locale(&self.fallback_locale).await; // Ignore errors
+        let current_locale = self.current_locale.read().await.clone();
+
+        // Try to reload current locale translations
+        match loader.load_translations(current_locale.as_str()).await {
+            Ok(new_translations) => {
+                // Success: update cache
+                let mut cache = self.translation_cache.write().await;
+                cache.insert(current_locale.as_str().to_string(), new_translations);
+                println!("DEBUG: Successfully reloaded translations for {}", current_locale);
+            }
+            Err(e) => {
+                // Failure: keep existing cached translations
+                println!("DEBUG: Failed to reload translations for {}: {:?}, keeping cached versions", current_locale, e);
+            }
+        }
+
+        // Try to reload fallback locale translations
+        match loader.load_translations(self.fallback_locale.as_str()).await {
+            Ok(new_translations) => {
+                let mut cache = self.translation_cache.write().await;
+                cache.insert(self.fallback_locale.as_str().to_string(), new_translations);
+                println!("DEBUG: Successfully reloaded fallback translations for {}", self.fallback_locale);
+            }
+            Err(e) => {
+                println!("DEBUG: Failed to reload fallback translations for {}: {:?}, keeping cached versions", self.fallback_locale, e);
+            }
+        }
 
         Ok(())
     }
