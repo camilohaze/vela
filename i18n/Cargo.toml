@@ -36,8 +36,8 @@ icu_list = "1.5"
 icu_casemap = "1.5"
 icu_provider = "1.5"
 fixed_decimal = "0.5"
+notify = { version = "6.1", default-features = false, features = ["macos_fsevent"] }
 
 [dev-dependencies]
 tokio-test = "0.4"
 tempfile = "3.10"
-notify = { version = "6.1", default-features = false, features = ["macos_fsevent"] }

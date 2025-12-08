@@ -4,16 +4,19 @@ Decorator system for i18n classes and hot reload functionality.
 
 use std::collections::HashMap;
 use std::path::Path;
+use std::sync::Arc;
+use std::time::{Duration, Instant};
 use tokio::sync::RwLock;
+use notify::{RecommendedWatcher, RecursiveMode, Watcher, Config};
+use tokio::sync::mpsc::{channel, Receiver, Sender};
 use crate::error::{I18nError, Result};
 use crate::locale::Locale;
 use crate::translator::Translator;
 
 /// I18n decorator for classes that need translation capabilities
-#[derive(Debug)]
 pub struct I18nDecorator {
     /// Translator instance
-    translator: Translator,
+    translator: Arc<RwLock<Translator>>,
     /// Hot reload watcher
     hot_reload: Option<HotReloadManager>,
     /// Decorated classes registry
@@ -21,7 +24,7 @@ pub struct I18nDecorator {
 }
 
 /// Information about a decorated class
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct DecoratedClassInfo {
     /// Class name
     pub class_name: String,
@@ -37,7 +40,7 @@ pub struct DecoratedClassInfo {
 
 impl I18nDecorator {
     /// Create a new i18n decorator
-    pub fn new(translator: Translator) -> Self {
+    pub fn new(translator: Arc<RwLock<Translator>>) -> Self {
         Self {
             translator,
             hot_reload: None,
@@ -46,13 +49,30 @@ impl I18nDecorator {
     }
 
     /// Create a new i18n decorator with hot reload
-    pub async fn with_hot_reload(translator: Translator, watch_paths: &[&Path]) -> Result<Self> {
+    pub async fn with_hot_reload(translator: Arc<RwLock<Translator>>, watch_paths: &[&Path]) -> Result<Self> {
         let hot_reload = HotReloadManager::new(watch_paths).await?;
-        Ok(Self {
-            translator,
+
+        let decorator = Self {
+            translator: translator.clone(),
             hot_reload: Some(hot_reload),
             decorated_classes: RwLock::new(HashMap::new()),
-        })
+        };
+
+        // Set up hot reload callback to reload translations
+        if let Some(ref hr) = decorator.hot_reload {
+            let translator_clone = decorator.translator.clone();
+            hr.set_on_change(move || {
+                let translator = translator_clone.clone();
+                tokio::spawn(async move {
+                    let mut translator = translator.write().await;
+                    if let Err(e) = translator.reload_translations().await {
+                        eprintln!("Failed to reload translations: {:?}", e);
+                    }
+                });
+            }).await;
+        }
+
+        Ok(decorator)
     }
 
     /// Decorate a class with i18n capabilities
@@ -103,13 +123,14 @@ impl I18nDecorator {
             }
 
             // Temporarily switch locale for this translation
-            let original_locale = self.translator.get_locale().await;
-            self.translator.set_locale(class_info.locale.clone()).await;
+            let mut translator = self.translator.write().await;
+            let original_locale = translator.get_locale().await;
+            translator.set_locale(class_info.locale.clone()).await;
 
-            let result = self.translator.translate(key, variables).await;
+            let result = translator.translate(key, variables).await;
 
             // Restore original locale
-            self.translator.set_locale(original_locale).await;
+            translator.set_locale(original_locale).await;
 
             result
         } else {
@@ -132,15 +153,15 @@ impl I18nDecorator {
     }
 
     /// Start hot reload monitoring
-    pub async fn start_hot_reload(&self) -> Result<()> {
-        if let Some(ref hot_reload) = self.hot_reload {
+    pub async fn start_hot_reload(&mut self) -> Result<()> {
+        if let Some(ref mut hot_reload) = self.hot_reload {
             hot_reload.start().await?;
         }
         Ok(())
     }
 
     /// Stop hot reload monitoring
-    pub async fn stop_hot_reload(&self) -> Result<()> {
+    pub async fn stop_hot_reload(&mut self) -> Result<()> {
         if let Some(ref hot_reload) = self.hot_reload {
             hot_reload.stop().await?;
         }
@@ -148,34 +169,67 @@ impl I18nDecorator {
     }
 
     /// Get the underlying translator
-    pub fn translator(&self) -> &Translator {
+    pub fn translator(&self) -> &Arc<RwLock<Translator>> {
         &self.translator
     }
 
     /// Get a mutable reference to the translator
-    pub fn translator_mut(&mut self) -> &mut Translator {
+    pub fn translator_mut(&mut self) -> &mut Arc<RwLock<Translator>> {
         &mut self.translator
     }
 }
 
 /// Hot reload manager for translation files
-#[derive(Debug)]
 pub struct HotReloadManager {
     /// File watcher
-    watcher: RwLock<Option<notify::RecommendedWatcher>>,
+    _watcher: RecommendedWatcher,
     /// Paths being watched
     watch_paths: Vec<std::path::PathBuf>,
+    /// Debounce duration to avoid excessive reloads
+    debounce_duration: Duration,
+    /// Last reload time for debouncing
+    last_reload: Arc<RwLock<Instant>>,
+    /// Channel for file change events
+    event_tx: Sender<notify::Event>,
+    /// Channel receiver for processing events
+    event_rx: Arc<RwLock<Option<Receiver<notify::Event>>>>,
     /// Callback for when files change
-    on_change: RwLock<Option<Box<dyn Fn() + Send + Sync>>>,
+    on_change: Arc<RwLock<Option<Box<dyn Fn() + Send + Sync>>>>,
+    /// Whether hot reload is active
+    is_active: Arc<RwLock<bool>>,
 }
 
 impl HotReloadManager {
     /// Create a new hot reload manager
     pub async fn new(watch_paths: &[&Path]) -> Result<Self> {
+        let (tx, rx) = channel(100);
+        let tx_clone = tx.clone();
+
+        let watcher = RecommendedWatcher::new(
+            move |res: std::result::Result<notify::Event, notify::Error>| {
+                match res {
+                    Ok(event) => {
+                        // Send event through channel for async processing
+                        let _ = tx_clone.send(event);
+                    }
+                    Err(e) => eprintln!("Watch error: {:?}", e),
+                }
+            },
+            Config::default(),
+        ).map_err(|e| I18nError::IoError {
+            message: format!("Failed to create file watcher: {}", e),
+            source: std::io::Error::new(std::io::ErrorKind::Other, "notify error"),
+        })?;
+
         Ok(Self {
-            watcher: RwLock::new(None),
+            _watcher: watcher,
             watch_paths: watch_paths.iter().map(|p| p.to_path_buf()).collect(),
-            on_change: RwLock::new(None),
+            debounce_duration: Duration::from_millis(300), // 300ms debounce
+            last_reload: Arc::new(RwLock::new(Instant::now() - Duration::from_secs(1))),
+            event_tx: tx,
+            event_rx: Arc::new(RwLock::new(Some(rx))),
+            on_change: Arc::new(RwLock::new(None)),
+            is_active: Arc::new(RwLock::new(false)),
         })
     }
 
@@ -189,23 +243,95 @@ impl HotReloadManager {
     }
 
     /// Start watching for file changes
-    pub async fn start(&self) -> Result<()> {
-        // In a real implementation, this would set up file watching
-        // For now, this is a placeholder
+    pub async fn start(&mut self) -> Result<()> {
+        let mut is_active = self.is_active.write().await;
+        if *is_active {
+            return Ok(()); // Already started
+        }
+
+        // Watch all paths
+        for path in &self.watch_paths {
+            self._watcher.watch(path, RecursiveMode::Recursive)
+                .map_err(|e| I18nError::IoError {
+                    message: format!("Failed to watch path: {}", e),
+                    source: std::io::Error::new(std::io::ErrorKind::Other, "notify error"),
+                })?;
+        }
+
+        *is_active = true;
+
+        // Start event processing task
+        let event_rx = self.event_rx.write().await.take();
+        if let Some(mut rx) = event_rx {
+            let on_change = self.on_change.clone();
+            let last_reload = self.last_reload.clone();
+            let debounce_duration = self.debounce_duration;
+            let is_active = self.is_active.clone();
+
+            tokio::spawn(async move {
+                while let Some(event) = rx.recv().await {
+                    // Check if still active
+                    if !*is_active.read().await {
+                        break;
+                    }
+
+                    // Check if event is relevant (JSON/YAML files)
+                    if Self::is_relevant_event(&event) {
+                        // Debounce: check time since last reload
+                        let now = Instant::now();
+                        let last = *last_reload.read().await;
+                        if now.duration_since(last) >= debounce_duration {
+                            // Update last reload time
+                            *last_reload.write().await = now;
+
+                            // Call callback if set
+                            if let Some(ref callback) = *on_change.read().await {
+                                callback();
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
         Ok(())
     }
 
     /// Stop watching for file changes
     pub async fn stop(&self) -> Result<()> {
-        let mut watcher = self.watcher.write().await;
-        *watcher = None;
+        let mut is_active = self.is_active.write().await;
+        *is_active = false;
+
+        // The watcher will be dropped when HotReloadManager is dropped
         Ok(())
     }
 
     /// Check if files have changed (for polling-based implementations)
     pub async fn check_for_changes(&self) -> Result<bool> {
-        // Placeholder implementation
+        // With async file watching, this is not needed
+        // Changes are detected automatically
         Ok(false)
+    }
+
+    /// Check if an event is relevant for translation reloading
+    fn is_relevant_event(event: &notify::Event) -> bool {
+        // Only care about JSON and YAML files
+        event.paths.iter().any(|path| {
+            if let Some(ext) = path.extension() {
+                ext == "json" || ext == "yaml" || ext == "yml"
+            } else {
+                false
+            }
+        }) && matches!(
+            event.kind,
+            notify::EventKind::Create(_) | notify::EventKind::Modify(_) | notify::EventKind::Remove(_)
+        )
+    }
+
+    /// Set debounce duration
+    pub fn with_debounce_duration(mut self, duration: Duration) -> Self {
+        self.debounce_duration = duration;
+        self
     }
 }
 
@@ -241,11 +367,10 @@ pub trait I18nClass: Send + Sync {
     fn translation_keys(&self) -> &[String];
 
     /// Translate a key for this class
-    fn translate(&self, decorator: &I18nDecorator, key: &str, variables: &[(&str, &str)]) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<String>> + Send + '_>>;
+    fn translate<'a>(&'a self, decorator: &'a I18nDecorator, key: String, variables: Vec<(String, String)>) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<String>> + Send + 'a>>;
 }
 
 /// Wrapper for i18n-decorated classes
-#[derive(Debug)]
 pub struct I18nClassWrapper {
     pub class_name: String,
     pub locale: Locale,
@@ -297,12 +422,11 @@ impl I18nClass for MessageService {
         &self.translation_keys
     }
 
-    fn translate(&self, decorator: &I18nDecorator, key: &str, variables: &[(&str, &str)]) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<String>> + Send + '_>> {
-        let key = key.to_string();
-        let variables = variables.iter().map(|(k, v)| (*k, *v)).collect::<Vec<_>>();
+    fn translate<'a>(&'a self, decorator: &'a I18nDecorator, key: String, variables: Vec<(String, String)>) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<String>> + Send + 'a>> {
+        let class_name = self.class_name.to_string();
 
         Box::pin(async move {
-            decorator.translate_for_class(&self.class_name, &key, &variables).await
+            decorator.translate_for_class(&class_name, &key, &variables.iter().map(|(k, v)| (k.as_str(), v.as_str())).collect::<Vec<_>>()).await
         })
     }
 }
@@ -316,27 +440,26 @@ mod tests {
 
     async fn create_test_decorator() -> I18nDecorator {
         let temp_dir = tempdir().unwrap();
+        let temp_path = temp_dir.into_path(); // Convert to PathBuf to prevent auto-deletion
 
         // Create test translation files
         let en_translations = r#"{
-            "welcome": {
-                "message": "Welcome to our app!"
-            },
+            "welcome.message": "Welcome to our app!",
             "error": {
                 "not_found": "Item not found"
             }
         }"#;
 
-        write(temp_dir.path().join("en.json"), en_translations).await.unwrap();
+        write(temp_path.join("en.json"), en_translations).await.unwrap();
 
         let translator = TranslatorBuilder::new()
             .with_locale(Locale::from("en").unwrap())
-            .with_translations_dir(temp_dir.path().to_string_lossy().to_string())
+            .with_translations_dir(temp_path.to_string_lossy().to_string())
             .build();
 
-        translator.load_translations_from_dir(temp_dir.path()).await.unwrap();
+        translator.load_translations_from_dir(&temp_path).await.unwrap();
 
-        I18nDecorator::new(translator)
+        I18nDecorator::new(Arc::new(RwLock::new(translator)))
     }
 
     #[tokio::test]

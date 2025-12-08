@@ -53,6 +53,11 @@ impl Locale {
         self.langid.region.as_ref().map(|r| r.as_str())
     }
 
+    /// Get the string representation of this locale
+    pub fn as_str(&self) -> &str {
+        &self.string_repr
+    }
+
     /// Get the base locale (language only, without region)
     pub fn base_locale(&self) -> Self {
         let mut base_langid = self.langid.clone();
@@ -218,7 +223,7 @@ pub struct ListFormats {
 impl Default for ListFormats {
     fn default() -> Self {
         Self {
-            and_separator: ", ".to_string(),
+            and_separator: " and ".to_string(),
             or_separator: " or ".to_string(),
         }
     }
@@ -244,18 +249,18 @@ impl LocaleManager {
     }
 
     /// Get locale configuration, falling back to default if not found
-    pub fn get_config(&self, locale: &Locale) -> &LocaleConfig {
-        self.configs.get(locale).unwrap_or(&LocaleConfig::default())
+    pub fn get_config(&self, locale: &Locale) -> LocaleConfig {
+        self.configs.get(locale).cloned().unwrap_or_else(LocaleConfig::default)
     }
 
     /// Get configuration for locale with fallback chain
-    pub fn get_config_with_fallback(&self, locale: &Locale) -> &LocaleConfig {
+    pub fn get_config_with_fallback(&self, locale: &Locale) -> LocaleConfig {
         for fallback_locale in locale.fallback_chain() {
             if let Some(config) = self.configs.get(&fallback_locale) {
-                return config;
+                return config.clone();
             }
         }
-        &LocaleConfig::default()
+        LocaleConfig::default()
     }
 }
 

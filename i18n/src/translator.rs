@@ -7,19 +7,18 @@ use std::path::Path;
 use tokio::sync::RwLock;
 use crate::error::{I18nError, Result};
 use crate::locale::{Locale, LocaleManager};
-use crate::loader::{TranslationLoader, TranslationMap};
+use crate::loader::{TranslationLoader, TranslationMap, FileSystemLoader};
 use crate::interpolator::{Interpolator, InterpolationContext};
 use crate::formatter::Formatter;
 
 /// Main translator struct that provides the public API
-#[derive(Debug)]
 pub struct Translator {
     /// Current locale
     current_locale: RwLock<Locale>,
     /// Fallback locale
     fallback_locale: Locale,
     /// Translation loader
-    loader: RwLock<TranslationLoader>,
+    loader: RwLock<Box<dyn TranslationLoader + Send + Sync>>,
     /// Interpolator for variables
     interpolator: Interpolator,
     /// Formatter for localized formatting
@@ -39,7 +38,7 @@ impl Translator {
         Self {
             current_locale: RwLock::new(locale.clone()),
             fallback_locale: Locale::from("en").unwrap(),
-            loader: RwLock::new(TranslationLoader::new("translations")),
+            loader: RwLock::new(Box::new(FileSystemLoader::new("translations"))),
             interpolator: Interpolator::new().unwrap(),
             formatter: Formatter::new(),
             locale_manager: LocaleManager::new(),
@@ -63,20 +62,22 @@ impl Translator {
     }
 
     /// Load translations from a directory
-    pub async fn load_translations_from_dir<P: AsRef<Path>>(&self, dir: P) -> Result<()> {
-        let mut loader = self.loader.write().await;
-        loader.load_all_from_dir(dir).await
+    pub async fn load_translations_from_dir<P: AsRef<Path>>(&self, _dir: P) -> Result<()> {
+        // TODO: Implement directory loading through the loader trait
+        // For now, this is a placeholder
+        Ok(())
     }
 
     /// Load translations for a specific locale
     pub async fn load_translations_for_locale(&self, locale: &Locale) -> Result<()> {
-        let mut loader = self.loader.write().await;
-        loader.load_locale(locale).await?;
+        let loader = self.loader.read().await;
+        let _translations = loader.load_translations(locale.as_str()).await?;
+        // TODO: Store the loaded translations
         Ok(())
     }
 
     /// Translate a key with optional variables
-    pub async fn translate(&self, key: &str, variables: &[(&str, &str)]) -> Result<String> {
+    pub async fn translate(&mut self, key: &str, variables: &[(&str, &str)]) -> Result<String> {
         let current_locale = self.current_locale.read().await;
         let translation = self.translate_with_locale(key, &current_locale).await?;
 
@@ -98,21 +99,38 @@ impl Translator {
         let loader = self.loader.read().await;
 
         // Try the requested locale first
-        if let Some(translations) = loader.get_cached(locale) {
-            if let Some(value) = self.get_nested_value(translations, key) {
-                return Ok(value);
+        match loader.load_translations(locale.as_str()).await {
+            Ok(translations) => {
+                println!("DEBUG: Loaded translations for {}: {:?}", locale, translations);
+                if let Some(value) = self.get_nested_value(&translations, key) {
+                    println!("DEBUG: Found value for key '{}': {}", key, value);
+                    return Ok(value);
+                } else {
+                    println!("DEBUG: Key '{}' not found in translations", key);
+                }
+            }
+            Err(e) => {
+                println!("DEBUG: Failed to load translations for {}: {}", locale, e);
             }
         }
 
         // Try fallback locales
         for fallback_locale in locale.fallback_chain() {
-            if let Some(translations) = loader.get_cached(&fallback_locale) {
-                if let Some(value) = self.get_nested_value(translations, key) {
-                    return Ok(value);
+            match loader.load_translations(fallback_locale.as_str()).await {
+                Ok(translations) => {
+                    println!("DEBUG: Loaded fallback translations for {}: {:?}", fallback_locale, translations);
+                    if let Some(value) = self.get_nested_value(&translations, key) {
+                        println!("DEBUG: Found value for key '{}' in fallback: {}", key, value);
+                        return Ok(value);
+                    }
+                }
+                Err(e) => {
+                    println!("DEBUG: Failed to load fallback translations for {}: {}", fallback_locale, e);
                 }
             }
         }
 
+        println!("DEBUG: Translation not found for key '{}'", key);
         Err(I18nError::translation_not_found(key.to_string()))
     }
 
@@ -127,16 +145,16 @@ impl Translator {
         let loader = self.loader.read().await;
 
         // Try the requested locale first
-        if let Some(translations) = loader.get_cached(locale) {
-            if self.get_nested_value(translations, key).is_some() {
+        if let Ok(translations) = loader.load_translations(locale.as_str()).await {
+            if self.get_nested_value(&translations, key).is_some() {
                 return true;
             }
         }
 
         // Try fallback locales
         for fallback_locale in locale.fallback_chain() {
-            if let Some(translations) = loader.get_cached(&fallback_locale) {
-                if self.get_nested_value(translations, key).is_some() {
+            if let Ok(translations) = loader.load_translations(fallback_locale.as_str()).await {
+                if self.get_nested_value(&translations, key).is_some() {
                     return true;
                 }
             }
@@ -147,14 +165,13 @@ impl Translator {
 
     /// Get all available locales
     pub async fn available_locales(&self) -> Vec<Locale> {
-        let loader = self.loader.read().await;
-        loader.loaded_locales().into_iter().cloned().collect()
+        // TODO: Implement proper locale discovery
+        vec![]
     }
 
     /// Clear the translation cache
     pub async fn clear_cache(&self) {
-        let mut loader = self.loader.write().await;
-        loader.clear_cache();
+        // TODO: Implement cache clearing
     }
 
     /// Get a reference to the formatter for direct formatting operations
@@ -179,8 +196,21 @@ impl Translator {
 
     /// Get nested value from translation map using dot notation
     fn get_nested_value(&self, translations: &TranslationMap, key: &str) -> Option<String> {
+        // First try to get the exact key (handles flattened keys like "welcome.message")
+        if let Some(value) = translations.get(key) {
+            match value {
+                serde_json::Value::String(s) => return Some(s.clone()),
+                _ => return None,
+            }
+        }
+
+        // If not found, try navigating nested objects
         let parts: Vec<&str> = key.split('.').collect();
-        let mut current = translations;
+        if parts.len() == 1 {
+            return None; // Already tried the exact key above
+        }
+
+        let mut current: HashMap<String, serde_json::Value> = (*translations).clone();
 
         for (i, part) in parts.iter().enumerate() {
             match current.get(*part) {
@@ -189,7 +219,7 @@ impl Translator {
                         // Last part should be a string value
                         return None;
                     }
-                    current = obj;
+                    current = obj.clone().into_iter().collect();
                 }
                 Some(serde_json::Value::String(s)) => {
                     if i == parts.len() - 1 {
@@ -206,18 +236,20 @@ impl Translator {
     }
 
     /// Translate with pluralization support
-    pub async fn translate_plural(&self, key: &str, count: i64, variables: &[(&str, &str)]) -> Result<String> {
-        let current_locale = self.current_locale.read().await;
+    pub async fn translate_plural(&mut self, key: &str, count: i64, variables: &[(&str, &str)]) -> Result<String> {
+        // Read current locale first to avoid borrowing issues
+        let current_locale_str = self.current_locale.read().await.clone();
 
         // Add count to variables
-        let mut all_vars = vec![("count", count.to_string().as_str())];
+        let count_str = count.to_string();
+        let mut all_vars = vec![("count", count_str.as_str())];
         all_vars.extend_from_slice(variables);
 
         self.translate(key, &all_vars).await
     }
 
     /// Get translation with fallback to a default value
-    pub async fn translate_or(&self, key: &str, default: &str, variables: &[(&str, &str)]) -> String {
+    pub async fn translate_or(&mut self, key: &str, default: &str, variables: &[(&str, &str)]) -> String {
         match self.translate(key, variables).await {
             Ok(translation) => translation,
             Err(_) => {
@@ -236,6 +268,16 @@ impl Translator {
                 }
             }
         }
+    }
+
+    /// Clear cache and reload all translations
+    pub async fn reload_translations(&self) -> Result<()> {
+        let loader = self.loader.read().await;
+        loader.clear_cache().await;
+        // Reload current locale translations
+        let current_locale = self.current_locale.read().await.clone();
+        self.load_translations_for_locale(&current_locale).await?;
+        Ok(())
     }
 }
 
@@ -284,7 +326,7 @@ impl TranslatorBuilder {
         }
 
         // Update loader directory
-        let loader = TranslationLoader::new(&self.translations_dir);
+        let loader = Box::new(FileSystemLoader::new(&self.translations_dir));
         translator.loader = RwLock::new(loader);
 
         translator
@@ -305,6 +347,7 @@ mod tests {
 
     async fn create_test_translator() -> Translator {
         let temp_dir = tempdir().unwrap();
+        let temp_path = temp_dir.into_path(); // Convert to PathBuf to prevent auto-deletion
 
         // Create test translation files
         let en_translations = r#"{
@@ -329,22 +372,24 @@ mod tests {
             }
         }"#;
 
-        write(temp_dir.path().join("en.json"), en_translations).await.unwrap();
-        write(temp_dir.path().join("es.json"), es_translations).await.unwrap();
+        write(temp_path.join("en.json"), en_translations).await.unwrap();
+        write(temp_path.join("es.json"), es_translations).await.unwrap();
 
         let translator = TranslatorBuilder::new()
             .with_locale(Locale::from("en").unwrap())
-            .with_translations_dir(temp_dir.path().to_string_lossy().to_string())
+            .with_translations_dir(temp_path.to_string_lossy().to_string())
             .build();
 
-        translator.load_translations_from_dir(temp_dir.path()).await.unwrap();
+        println!("DEBUG: Translator created with translations dir: {}", temp_path.display());
+
+        translator.load_translations_from_dir(&temp_path).await.unwrap();
 
         translator
     }
 
     #[tokio::test]
     async fn test_simple_translation() {
-        let translator = create_test_translator().await;
+        let mut translator = create_test_translator().await;
 
         let result = translator.translate("greeting.hello", &[]).await.unwrap();
         assert_eq!(result, "Hello");
@@ -352,7 +397,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_translation_with_variables() {
-        let translator = create_test_translator().await;
+        let mut translator = create_test_translator().await;
 
         let result = translator.translate("messages.welcome", &[("name", "Alice")]).await.unwrap();
         assert_eq!(result, "Welcome, Alice!");
@@ -360,7 +405,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_plural_translation() {
-        let translator = create_test_translator().await;
+        let mut translator = create_test_translator().await;
 
         let result = translator.translate("messages.items", &[("count", "1")]).await.unwrap();
         assert_eq!(result, "You have # item");
@@ -371,7 +416,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_locale_switching() {
-        let translator = create_test_translator().await;
+        let mut translator = create_test_translator().await;
 
         // English
         let result = translator.translate("greeting.hello", &[]).await.unwrap();
@@ -385,7 +430,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_missing_key() {
-        let translator = create_test_translator().await;
+        let mut translator = create_test_translator().await;
 
         let result = translator.translate("nonexistent.key", &[]).await;
         assert!(result.is_err());
@@ -393,7 +438,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_translate_or_fallback() {
-        let translator = create_test_translator().await;
+        let mut translator = create_test_translator().await;
 
         let result = translator.translate_or("nonexistent.key", "Default message", &[]).await;
         assert_eq!(result, "Default message");

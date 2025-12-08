@@ -1,33 +1,33 @@
 {
-  "greeting": {
-    "hello": "Olá",
-    "goodbye": "Adeus",
-    "welcome": "Bem-vindo à nossa aplicação"
-  },
-  "messages": {
-    "error": "Ocorreu um erro",
-    "success": "Operação concluída com sucesso",
-    "loading": "Carregando...",
-    "items": "Você tem {{count, plural, one{# item} other{# itens}}}",
-    "user_greeting": "Olá, {{name}}! Bem-vindo de volta."
-  },
-  "buttons": {
-    "save": "Salvar",
-    "cancel": "Cancelar",
-    "delete": "Excluir",
-    "edit": "Editar",
-    "add": "Adicionar"
-  },
-  "validation": {
-    "required": "Este campo é obrigatório",
-    "email": "Por favor insira um endereço de e-mail válido",
-    "min_length": "O comprimento mínimo é de {{min}} caracteres",
-    "max_length": "O comprimento máximo é de {{max}} caracteres"
-  },
-  "dates": {
-    "today": "Hoje",
-    "yesterday": "Ontem",
-    "tomorrow": "Amanhã",
-    "date_format": "DD/MM/YYYY"
-  }
+    "greeting": {
+        "hello": "Olá",
+        "goodbye": "Adeus",
+        "welcome": "Bem-vindo à nossa aplicação"
+    },
+    "messages": {
+        "error": "Ocorreu um erro",
+        "success": "Operação concluída com sucesso",
+        "loading": "Carregando...",
+        "items": "Você tem {{count, plural, one{# item} other{# itens}}}",
+        "user_greeting": "Olá, {{name}}! Bem-vindo de volta."
+    },
+    "buttons": {
+        "save": "Salvar",
+        "cancel": "Cancelar",
+        "delete": "Excluir",
+        "edit": "Editar",
+        "add": "Adicionar"
+    },
+    "validation": {
+        "required": "Este campo é obrigatório",
+        "email": "Por favor insira um endereço de e-mail válido",
+        "min_length": "O comprimento mínimo é de {{min}} caracteres",
+        "max_length": "O comprimento máximo é de {{max}} caracteres"
+    },
+    "dates": {
+        "today": "Hoje",
+        "yesterday": "Ontem",
+        "tomorrow": "Amanhã",
+        "date_format": "DD/MM/YYYY"
+    }
 }

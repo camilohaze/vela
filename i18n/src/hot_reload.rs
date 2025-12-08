@@ -13,7 +13,6 @@ use crate::error::{I18nError, Result};
 use crate::locale::Locale;
 
 /// Hot reload manager for monitoring translation file changes
-#[derive(Debug)]
 pub struct HotReloadManager {
     /// Paths being watched
     watch_paths: Vec<PathBuf>,
@@ -162,7 +161,7 @@ impl HotReloadManager {
                 }
             } else if path.is_dir() {
                 // Recursively scan subdirectories
-                self.scan_directory_for_files(&path, mod_times).await?;
+                Box::pin(self.scan_directory_for_files(&path, mod_times)).await?;
             }
         }
 
@@ -346,7 +345,15 @@ mod tests {
     #[tokio::test]
     async fn test_force_reload() {
         let temp_dir = tempdir().unwrap();
+
+        // Create a test translation file
+        let file_path = temp_dir.path().join("en.json");
+        tokio::fs::write(&file_path, r#"{"test": "value"}"#).await.unwrap();
+
         let manager = HotReloadManager::new(&[temp_dir.path()]);
+
+        // Start the manager first
+        manager.start().await.unwrap();
 
         let notified = Arc::clone(&manager.change_notify);
         let notify_task = tokio::spawn(async move {

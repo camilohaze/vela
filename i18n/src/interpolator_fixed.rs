@@ -6,10 +6,11 @@ use std::collections::HashMap;
 use regex::Regex;
 use crate::error::{I18nError, Result};
 use crate::locale::Locale;
-use icu_plurals::PluralRuleType;
+use icu_plurals::{PluralRules, PluralRuleType};
 use icu_locid::Locale as IcuLocale;
 use icu_decimal::FixedDecimalFormatter;
-use fixed_decimal::FixedDecimal;
+use icu_datetime::DateTimeFormatter;
+use std::sync::Arc;
 
 /// Context for interpolation operations
 #[derive(Debug, Clone)]
@@ -66,10 +67,15 @@ struct VariableResolver {
     formatted_syntax: Regex,
 }
 
-/// Pluralization engine using basic rules (no ICU for threading compatibility)
+/// Pluralization engine using ICU plural rules
 #[derive(Debug)]
 struct PluralizationEngine {
-    // No ICU dependencies for Send/Sync compatibility
+    /// ICU plural rules for cardinal numbers
+    cardinal_rules: HashMap<String, Arc<PluralRules>>,
+    /// ICU plural rules for ordinal numbers
+    ordinal_rules: HashMap<String, Arc<PluralRules>>,
+    /// Regex for parsing plural patterns
+    plural_pattern: Regex,
 }
 
 /// Select engine for conditional text selection
@@ -98,21 +104,13 @@ impl Interpolator {
     }
 
     /// Interpolate a string with the given context
-    pub fn interpolate(&mut self, template: &str, context: &InterpolationContext) -> Result<String> {
-        self.interpolate_with_depth_immutable(template, context, 0)
+    pub fn interpolate(&self, template: &str, context: &InterpolationContext) -> Result<String> {
+        self.interpolate_with_depth(template, context, 0)
     }
 
-    /// Internal interpolation with recursion depth tracking (immutable version for recursive calls)
-    fn interpolate_with_depth_immutable(&mut self, template: &str, context: &InterpolationContext, depth: usize) -> Result<String> {
-        let mut visited = std::collections::HashSet::new();
-        self.interpolate_with_visited(template, context, depth, &mut visited)
-    }
-
-    /// Internal interpolation with visited set for cycle detection
-    fn interpolate_with_visited(&mut self, template: &str, context: &InterpolationContext, depth: usize, visited: &mut std::collections::HashSet<String>) -> Result<String> {
-        println!("Depth: {}, Template: {}", depth, template);
+    /// Internal interpolation with recursion depth tracking
+    fn interpolate_with_depth(&self, template: &str, context: &InterpolationContext, depth: usize) -> Result<String> {
         if depth > self.max_recursion_depth {
-            println!("Max depth exceeded: {} > {}", depth, self.max_recursion_depth);
             return Err(I18nError::interpolation_error(
                 format!("Maximum interpolation recursion depth ({}) exceeded", self.max_recursion_depth)
             ));
@@ -120,10 +118,10 @@ impl Interpolator {
 
         let mut result = template.to_string();
 
-        // Process in order: select -> variables -> plural (most specific first)
+        // Process in order: select -> plural -> variables (most specific first)
         result = self.select_engine.interpolate(&result, context)?;
-        result = self.variable_resolver.interpolate_with_visited(&result, context, depth, visited)?;
         result = self.pluralization_engine.interpolate(&result, context)?;
+        result = self.variable_resolver.interpolate(&result, context, depth, self)?;
 
         Ok(result)
     }
@@ -143,70 +141,52 @@ impl VariableResolver {
     }
 
     /// Interpolate variables in the template
-    fn interpolate_with_visited(&self, template: &str, context: &InterpolationContext, depth: usize, visited: &mut std::collections::HashSet<String>) -> Result<String> {
+    fn interpolate(&self, template: &str, context: &InterpolationContext, depth: usize, interpolator: &Interpolator) -> Result<String> {
         let mut result = template.to_string();
 
         // Handle formatted syntax first (more specific)
-        result = self.interpolate_formatted_with_visited(&result, context, depth, visited)?;
+        result = self.interpolate_formatted(&result, context, depth, interpolator)?;
 
         // Handle dollar syntax ${variable}
-        result = self.interpolate_dollar_syntax_with_visited(&result, context, depth, visited)?;
+        result = self.interpolate_dollar_syntax(&result, context, depth, interpolator)?;
 
         // Handle brace syntax {{variable}}
-        result = self.interpolate_brace_syntax_with_visited(&result, context, depth, visited)?;
+        result = self.interpolate_brace_syntax(&result, context, depth, interpolator)?;
 
         Ok(result)
     }
 
-    /// Interpolate ${variable} syntax with visited tracking
-    fn interpolate_dollar_syntax_with_visited(&self, template: &str, context: &InterpolationContext, depth: usize, visited: &mut std::collections::HashSet<String>) -> Result<String> {
-        let mut result = template.to_string();
-        for cap in self.dollar_syntax.captures_iter(template) {
-            let var_expr = &cap[1];
-            match self.resolve_variable(var_expr, context, depth, visited) {
-                Ok(value) => {
-                    let placeholder = format!("${{{}}}", var_expr);
-                    result = result.replace(&placeholder, &value);
-                }
-                Err(e) if e.to_string().contains("recursion") => return Err(e),
-                Err(_) => {
-                    // Keep the placeholder for other errors
-                }
-            }
-        }
-        Ok(result)
+    /// Interpolate ${variable} syntax
+    fn interpolate_dollar_syntax(&self, template: &str, context: &InterpolationContext, depth: usize, interpolator: &Interpolator) -> Result<String> {
+        let result = self.dollar_syntax.replace_all(template, |caps: &regex::Captures| {
+            let var_expr = &caps[1];
+            self.resolve_variable(var_expr, context, depth, interpolator)
+                .unwrap_or_else(|_| format!("${{{}}}", var_expr))
+        });
+        Ok(result.to_string())
     }
 
-    /// Interpolate {{variable}} syntax with visited tracking
-    fn interpolate_brace_syntax_with_visited(&self, template: &str, context: &InterpolationContext, depth: usize, visited: &mut std::collections::HashSet<String>) -> Result<String> {
-        let mut result = template.to_string();
-        for cap in self.brace_syntax.captures_iter(template) {
-            let var_expr = &cap[1];
+    /// Interpolate {{variable}} syntax
+    fn interpolate_brace_syntax(&self, template: &str, context: &InterpolationContext, depth: usize, interpolator: &Interpolator) -> Result<String> {
+        let result = self.brace_syntax.replace_all(template, |caps: &regex::Captures| {
+            let var_expr = &caps[1];
             // Skip if it's a formatted expression (handled separately)
             if var_expr.contains(',') {
-                continue;
+                return format!("{{{{{}}}}}", var_expr);
             }
-            match self.resolve_variable(var_expr, context, depth, visited) {
-                Ok(value) => {
-                    let placeholder = format!("{{{{{}}}}}", var_expr);
-                    result = result.replace(&placeholder, &value);
-                }
-                Err(e) if e.to_string().contains("recursion") => return Err(e),
-                Err(_) => {
-                    // Keep the placeholder for other errors
-                }
-            }
-        }
-        Ok(result)
+            self.resolve_variable(var_expr, context, depth, interpolator)
+                .unwrap_or_else(|_| format!("{{{{{}}}}}", var_expr))
+        });
+        Ok(result.to_string())
     }
 
-    /// Interpolate {{variable, format}} syntax with visited tracking
-    fn interpolate_formatted_with_visited(&self, template: &str, context: &InterpolationContext, depth: usize, visited: &mut std::collections::HashSet<String>) -> Result<String> {
+    /// Interpolate {{variable, format}} syntax
+    fn interpolate_formatted(&self, template: &str, context: &InterpolationContext, depth: usize, interpolator: &Interpolator) -> Result<String> {
         let result = self.formatted_syntax.replace_all(template, |caps: &regex::Captures| {
             let var_name = caps[1].trim();
             let format_spec = caps[2].trim();
 
-            match self.resolve_variable(var_name, context, depth, visited) {
+            match self.resolve_variable(var_name, context, depth, interpolator) {
                 Ok(value) => self.apply_format(&value, format_spec, context),
                 Err(_) => format!("{{{{{}, {}}}}}", var_name, format_spec),
             }
@@ -215,31 +195,13 @@ impl VariableResolver {
     }
 
     /// Resolve a variable expression (supports dot notation and array access)
-    fn resolve_variable(&self, var_expr: &str, context: &InterpolationContext, depth: usize, visited: &mut std::collections::HashSet<String>) -> Result<String> {
-        println!("Resolving variable: {}, depth: {}", var_expr, depth);
-        // Check for recursion
-        if visited.contains(var_expr) {
-            println!("Circular reference detected: {}", var_expr);
-            return Err(I18nError::interpolation_error(
-                format!("Circular variable reference detected: {}", var_expr)
-            ));
-        }
-
+    fn resolve_variable(&self, var_expr: &str, context: &InterpolationContext, depth: usize, interpolator: &Interpolator) -> Result<String> {
         // Handle nested property access like user.name or items[0]
         let parts: Vec<&str> = var_expr.split('.').collect();
-        let base_var = parts[0];
+        let mut current_value = self.get_base_variable(parts[0], context)?;
 
-        // Add to visited set
-        visited.insert(base_var.to_string());
-
-        let mut current_value = self.get_base_variable(base_var, context)?;
-        println!("Base value for {}: {}", base_var, current_value);
-
-        // Add recursive interpolation
-        current_value = self.interpolate_recursive(&current_value, context, depth + 1, visited)?;
-
-        // Remove from visited set
-        visited.remove(base_var);
+        // Recursively interpolate the base value first
+        current_value = interpolator.interpolate_with_depth(&current_value, context, depth + 1)?;
 
         // Navigate through properties
         for &part in &parts[1..] {
@@ -247,69 +209,6 @@ impl VariableResolver {
         }
 
         Ok(current_value)
-    }
-
-    /// Interpolate recursively without using the main interpolator
-    fn interpolate_recursive(&self, template: &str, context: &InterpolationContext, depth: usize, visited: &mut std::collections::HashSet<String>) -> Result<String> {
-        println!("Recursive interpolate depth: {}, template: {}", depth, template);
-        if depth > 1 { // Prevent infinite recursion
-            println!("Recursive depth exceeded: {} > 1", depth);
-            return Err(I18nError::interpolation_error(
-                format!("Maximum interpolation recursion depth ({}) exceeded", 1)
-            ));
-        }
-
-        let mut result = template.to_string();
-
-        // Handle dollar syntax ${variable}
-        result = self.interpolate_dollar_syntax_recursive(&result, context, depth, visited)?;
-
-        // Handle brace syntax {{variable}}
-        result = self.interpolate_brace_syntax_recursive(&result, context, depth, visited)?;
-
-        Ok(result)
-    }
-
-    /// Interpolate ${variable} syntax recursively
-    fn interpolate_dollar_syntax_recursive(&self, template: &str, context: &InterpolationContext, depth: usize, visited: &mut std::collections::HashSet<String>) -> Result<String> {
-        let mut result = template.to_string();
-        for cap in self.dollar_syntax.captures_iter(template) {
-            let var_expr = &cap[1];
-            match self.resolve_variable(var_expr, context, depth, visited) {
-                Ok(value) => {
-                    let placeholder = format!("${{{}}}", var_expr);
-                    result = result.replace(&placeholder, &value);
-                }
-                Err(e) if e.to_string().contains("recursion") => return Err(e),
-                Err(_) => {
-                    // Keep the placeholder for other errors
-                }
-            }
-        }
-        Ok(result)
-    }
-
-    /// Interpolate {{variable}} syntax recursively
-    fn interpolate_brace_syntax_recursive(&self, template: &str, context: &InterpolationContext, depth: usize, visited: &mut std::collections::HashSet<String>) -> Result<String> {
-        let mut result = template.to_string();
-        for cap in self.brace_syntax.captures_iter(template) {
-            let var_expr = &cap[1];
-            // Skip if it's a formatted expression (handled separately)
-            if var_expr.contains(',') {
-                continue;
-            }
-            match self.resolve_variable(var_expr, context, depth, visited) {
-                Ok(value) => {
-                    let placeholder = format!("{{{{{}}}}}", var_expr);
-                    result = result.replace(&placeholder, &value);
-                }
-                Err(e) if e.to_string().contains("recursion") => return Err(e),
-                Err(_) => {
-                    // Keep the placeholder for other errors
-                }
-            }
-        }
-        Ok(result)
     }
 
     /// Get the base variable value
@@ -382,19 +281,13 @@ impl VariableResolver {
     fn format_number(&self, value: &str, locale: &Locale) -> String {
         if let Ok(num) = value.parse::<f64>() {
             // Use ICU decimal formatter
-            if let Ok(icu_locale) = IcuLocale::try_from_bytes(locale.as_str().as_bytes()) {
+            if let Ok(icu_locale) = IcuLocale::try_from_bytes(locale.id.as_bytes()) {
                 if let Ok(formatter) = FixedDecimalFormatter::try_new(&icu_locale.into(), Default::default()) {
-                    // Create FixedDecimal from integer part and fractional part
-                    let integer_part = num.trunc() as i64;
-                    let fractional_part = (num.fract() * 1_000_000_000.0) as i64; // 9 decimal places
-                    
-                    let fixed_decimal = FixedDecimal::from(integer_part);
-                    if fractional_part > 0 {
-                        // This is a simplified approach - in practice, you'd need more sophisticated handling
-                        // For now, just return the string representation
-                        return num.to_string();
+                    if let Ok(decimal) = rust_decimal::Decimal::try_from(num) {
+                        if let Ok(fixed_decimal) = icu_decimal::FixedDecimal::try_from(decimal) {
+                            return formatter.format(&fixed_decimal).to_string();
+                        }
                     }
-                    return formatter.format(&fixed_decimal).to_string();
                 }
             }
         }
@@ -424,39 +317,34 @@ impl VariableResolver {
 }
 
 impl PluralizationEngine {
-    /// Create a new pluralization engine
+    /// Create a new pluralization engine with ICU support
     fn new() -> Result<Self> {
-        Ok(Self {})
+        Ok(Self {
+            cardinal_rules: HashMap::new(),
+            ordinal_rules: HashMap::new(),
+            plural_pattern: Regex::new(r"\{\{([^,]+),\s*plural,\s*([^}]+)\}\}")
+                .map_err(|e| I18nError::interpolation_error(format!("Invalid plural regex: {}", e)))?,
+        })
     }
 
-    /// Ensure plural rules are loaded for the given locale
-    fn ensure_plural_rules(&mut self, _locale: &Locale, _rule_type: PluralRuleType) {
-        // No-op: using basic plural rules
-    }
-
-    /// Interpolate plural patterns using basic rules
-    fn interpolate(&mut self, template: &str, context: &InterpolationContext) -> Result<String> {
-        // Basic plural pattern: {{count, plural, zero{no items} one{1 item} other{# items}}}
-        let plural_pattern = Regex::new(r"\{\{([^,]+),\s*plural,\s*(.+)\}\}")
-            .map_err(|e| I18nError::interpolation_error(format!("Invalid plural regex: {}", e)))?;
-
-        let mut result = template.to_string();
-
-        for caps in plural_pattern.captures_iter(&result.clone()) {
+    /// Interpolate plural patterns using ICU rules
+    fn interpolate(&self, template: &str, context: &InterpolationContext) -> Result<String> {
+        let result = self.plural_pattern.replace_all(template, |caps: &regex::Captures| {
             let var_expr = caps[1].trim();
             let plural_spec = caps[2].trim();
 
-            // Get count value
+            // Get the count value (supporting expressions)
             let count = self.resolve_count(var_expr, context);
+
+            // Get plural category using ICU
             let plural_category = self.get_plural_category(count, context.locale, PluralRuleType::Cardinal);
 
-            if let Some(replacement) = self.extract_plural_form(plural_spec, &plural_category) {
-                let full_match = caps[0].to_string();
-                result = result.replace(&full_match, &replacement);
-            }
-        }
+            // Extract the appropriate plural form
+            self.extract_plural_form(plural_spec, &plural_category)
+                .unwrap_or_else(|| format!("{{{{{}}}}}", &caps[0]))
+        });
 
-        Ok(result)
+        Ok(result.to_string())
     }
 
     /// Resolve count value from variable expression
@@ -473,14 +361,46 @@ impl PluralizationEngine {
         0 // Default fallback
     }
 
-    /// Get plural category for a count (basic implementation without ICU)
-    fn get_plural_category(&self, count: i64, _locale: &Locale, _rule_type: PluralRuleType) -> String {
-        // Basic English plural rules (fallback when ICU is not available)
-        match count {
-            0 => "zero".to_string(),
-            1 => "one".to_string(),
-            _ => "other".to_string(),
+    /// Get plural category using ICU plural rules
+    fn get_plural_category(&self, count: i64, locale: &Locale, rule_type: PluralRuleType) -> String {
+        let locale_key = locale.id.clone();
+
+        let rules = match rule_type {
+            PluralRuleType::Cardinal => {
+                if !self.cardinal_rules.contains_key(&locale_key) {
+                    if let Ok(icu_locale) = IcuLocale::try_from_bytes(locale.id.as_bytes()) {
+                        if let Ok(rules) = PluralRules::try_new(&icu_locale.into(), rule_type) {
+                            self.cardinal_rules.insert(locale_key.clone(), Arc::new(rules));
+                        }
+                    }
+                }
+                self.cardinal_rules.get(&locale_key)
+            }
+            PluralRuleType::Ordinal => {
+                if !self.ordinal_rules.contains_key(&locale_key) {
+                    if let Ok(icu_locale) = IcuLocale::try_from_bytes(locale.id.as_bytes()) {
+                        if let Ok(rules) = PluralRules::try_new(&icu_locale.into(), rule_type) {
+                            self.ordinal_rules.insert(locale_key.clone(), Arc::new(rules));
+                        }
+                    }
+                }
+                self.ordinal_rules.get(&locale_key)
+            }
+        };
+
+        if let Some(rules) = rules {
+            if let Ok(category) = rules.category_for(count as u64) {
+                return format!("{:?}", category).to_lowercase();
+            }
         }
+
+        // Fallback to basic English rules
+        match count {
+            0 => "zero",
+            1 => "one",
+            2 => "two",
+            _ => "other",
+        }.to_string()
     }
 
     /// Extract the appropriate plural form from specification
@@ -518,13 +438,13 @@ impl SelectEngine {
     /// Create a new select engine
     fn new() -> Result<Self> {
         Ok(Self {
-            select_pattern: Regex::new(r"\{\{([^,]+),\s*select,\s*(.+)\}\}")
+            select_pattern: Regex::new(r"\{\{([^,]+),\s*select,\s*([^}]+)\}\}")
                 .map_err(|e| I18nError::interpolation_error(format!("Invalid select regex: {}", e)))?,
         })
     }
 
     /// Interpolate select patterns
-    fn interpolate(&mut self, template: &str, context: &InterpolationContext) -> Result<String> {
+    fn interpolate(&self, template: &str, context: &InterpolationContext) -> Result<String> {
         let result = self.select_pattern.replace_all(template, |caps: &regex::Captures| {
             let var_expr = caps[1].trim();
             let select_spec = caps[2].trim();
@@ -582,6 +502,76 @@ impl SelectEngine {
     }
 }
 
+    /// Get the plural form for a count in the given locale
+    fn get_plural_form(&self, count: i64, _locale: &Locale) -> String {
+        // Simplified plural rules - in a real implementation, this would use
+        // the intl_pluralrules crate for proper locale-specific rules
+        match count {
+            0 => "zero".to_string(),
+            1 => "one".to_string(),
+            2 => "two".to_string(),
+            _ => "other".to_string(),
+        }
+    }
+
+    /// Extract the appropriate option from a plural specification
+    fn extract_plural_option(&self, plural_spec: &str, plural_form: &str) -> Option<String> {
+        // Parse patterns like: one{# item} other{# items}
+        let option_pattern = Regex::new(r"(\w+)\{([^}]*)\}").ok()?;
+
+        for cap in option_pattern.captures_iter(plural_spec) {
+            let form = &cap[1];
+            let text = &cap[2];
+
+            if form == plural_form {
+                return Some(text.to_string());
+            }
+        }
+
+        // Fallback to "other" if available
+        if plural_form != "other" {
+            for cap in option_pattern.captures_iter(plural_spec) {
+                let form = &cap[1];
+                let text = &cap[2];
+
+                if form == "other" {
+                    return Some(text.to_string());
+                }
+            }
+        }
+
+        None
+    }
+
+    /// Extract the appropriate option from a select specification
+    fn extract_select_option(&self, select_spec: &str, selector: &str) -> Option<String> {
+        // Parse patterns like: male{él} female{ella} other{elle}
+        let option_pattern = Regex::new(r"(\w+)\{([^}]*)\}").ok()?;
+
+        for cap in option_pattern.captures_iter(select_spec) {
+            let key = &cap[1];
+            let text = &cap[2];
+
+            if key == selector {
+                return Some(text.to_string());
+            }
+        }
+
+        // Fallback to "other" if available
+        if selector != "other" {
+            for cap in option_pattern.captures_iter(select_spec) {
+                let key = &cap[1];
+                let text = &cap[2];
+
+                if key == "other" {
+                    return Some(text.to_string());
+                }
+            }
+        }
+
+        None
+    }
+
 impl Default for Interpolator {
     fn default() -> Self {
         Self::new().unwrap()
@@ -602,7 +592,7 @@ mod tests {
 
     #[test]
     fn test_simple_variable_interpolation() {
-        let mut interpolator = Interpolator::new().unwrap();
+        let interpolator = Interpolator::new().unwrap();
         let locale = Locale::from("en").unwrap();
         let context = create_test_context(&locale);
 
@@ -614,7 +604,7 @@ mod tests {
 
     #[test]
     fn test_dollar_syntax_interpolation() {
-        let mut interpolator = Interpolator::new().unwrap();
+        let interpolator = Interpolator::new().unwrap();
         let locale = Locale::from("en").unwrap();
         let context = create_test_context(&locale);
 
@@ -625,8 +615,8 @@ mod tests {
     }
 
     #[test]
-    fn test_dollar_variable_interpolation() {
-        let mut interpolator = Interpolator::new().unwrap();
+    fn test_formatted_variable_interpolation() {
+        let interpolator = Interpolator::new().unwrap();
         let locale = Locale::from("en").unwrap();
         let context = InterpolationContext::new(&locale)
             .with_variable("price", "29.99");
@@ -639,7 +629,7 @@ mod tests {
 
     #[test]
     fn test_plural_interpolation() {
-        let mut interpolator = Interpolator::new().unwrap();
+        let interpolator = Interpolator::new().unwrap();
         let locale = Locale::from("en").unwrap();
 
         // Test singular
@@ -660,7 +650,7 @@ mod tests {
 
     #[test]
     fn test_select_interpolation() {
-        let mut interpolator = Interpolator::new().unwrap();
+        let interpolator = Interpolator::new().unwrap();
         let locale = Locale::from("en").unwrap();
         let context = create_test_context(&locale);
 
@@ -672,7 +662,7 @@ mod tests {
 
     #[test]
     fn test_missing_variable() {
-        let mut interpolator = Interpolator::new().unwrap();
+        let interpolator = Interpolator::new().unwrap();
         let locale = Locale::from("en").unwrap();
         let context = InterpolationContext::new(&locale);
 
@@ -685,7 +675,7 @@ mod tests {
 
     #[test]
     fn test_complex_interpolation() {
-        let mut interpolator = Interpolator::new().unwrap();
+        let interpolator = Interpolator::new().unwrap();
         let locale = Locale::from("en").unwrap();
         let context = InterpolationContext::new(&locale)
             .with_variable("name", "Alice")
@@ -700,7 +690,7 @@ mod tests {
 
     #[test]
     fn test_nested_property_access() {
-        let mut interpolator = Interpolator::new().unwrap();
+        let interpolator = Interpolator::new().unwrap();
         let locale = Locale::from("en").unwrap();
         let context = InterpolationContext::new(&locale)
             .with_variable("user", r#"{"name": "Alice", "profile": {"age": 30}}"#);
@@ -713,7 +703,7 @@ mod tests {
 
     #[test]
     fn test_format_capitalize() {
-        let mut interpolator = Interpolator::new().unwrap();
+        let interpolator = Interpolator::new().unwrap();
         let locale = Locale::from("en").unwrap();
         let context = InterpolationContext::new(&locale)
             .with_variable("name", "alice");
@@ -726,7 +716,7 @@ mod tests {
 
     #[test]
     fn test_recursion_prevention() {
-        let mut interpolator = Interpolator::with_max_recursion_depth(1).unwrap();
+        let interpolator = Interpolator::with_max_recursion_depth(2).unwrap();
         let locale = Locale::from("en").unwrap();
         let context = InterpolationContext::new(&locale)
             .with_variable("a", "{{b}}")
@@ -735,7 +725,7 @@ mod tests {
 
         let template = "{{a}}";
         let result = interpolator.interpolate(template, &context);
-        println!("Final result: {:?}", result);
+
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("recursion depth"));
     }

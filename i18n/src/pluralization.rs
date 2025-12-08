@@ -37,7 +37,6 @@ impl PluralCategory {
 }
 
 /// Pluralization rules engine
-#[derive(Debug)]
 pub struct PluralizationRules {
     /// Rules for different locales
     rules: HashMap<String, Box<dyn PluralRule + Send + Sync>>,
@@ -96,8 +95,10 @@ impl PluralizationRules {
         }
 
         // Try language-only match
-        if let Some(rule) = self.rules.get(locale.language()) {
-            return rule.category(count);
+        if let lang = locale.language() {
+            if let Some(rule) = self.rules.get(lang) {
+                return rule.category(count);
+            }
         }
 
         // Fallback to English rules

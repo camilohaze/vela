@@ -19,20 +19,31 @@ formatting.
 ```rust
 use vela_i18n::{Translator, Locale};
 
-// Create translator with English as primary locale
-let mut translator = Translator::new(Locale::from("en-US"));
+// Create a runtime for async operations
+let rt = tokio::runtime::Runtime::new().unwrap();
 
-// Load translations
-translator.load_translations_from_dir("translations/").await?;
+// Execute async operations in the runtime
+rt.block_on(async {
+    // Create translator
+    let mut translator = Translator::new();
 
-// Simple translation
-let greeting = translator.translate("greeting.hello", &[])?;
+    // Set primary locale
+    let locale = Locale::from("en-US").unwrap();
+    translator.set_locale(locale).await;
 
-// Translation with variables
-let welcome = translator.translate("welcome.user", &[
-    ("name", "Alice"),
-    ("count", "5")
-])?;
+    // Load translations
+    translator.load_translations_from_dir("translations/").await?;
+
+    // Simple translation
+    let greeting = translator.translate("greeting.hello", &[]).await?;
+
+    // Translation with variables
+    let welcome = translator.translate("messages.user_greeting", &[
+        ("name", "Alice")
+    ]).await?;
+
+    Ok::<(), Box<dyn std::error::Error>>(())
+})?;
 # Ok::<(), Box<dyn std::error::Error>>(())
 ```
 */

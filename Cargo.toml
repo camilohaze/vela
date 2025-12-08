@@ -15,6 +15,7 @@ members = [
     "tooling",
     "package",
     "logging",
+    "i18n",
 ]
 exclude = [
     "examples",
