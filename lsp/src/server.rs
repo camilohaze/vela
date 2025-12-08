@@ -8,7 +8,9 @@ use lsp_types::{
     CompletionList, CompletionItem, CompletionItemKind, Position,
     CompletionOptions, HoverProviderCapability, HoverParams, Hover,
     MarkupContent, MarkupKind, GotoDefinitionParams,
-    GotoDefinitionResponse, Location, Range,
+    GotoDefinitionResponse, Location, Range, SignatureHelpParams,
+    SignatureHelp, SignatureInformation, ParameterInformation,
+    SignatureHelpOptions,
 };
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
@@ -18,6 +20,13 @@ use tracing::{error, info, warn};
 #[derive(Debug, Default)]
 pub struct DocumentStore {
     documents: HashMap<lsp_types::Url, String>,
+}
+
+/// Context information for a function call
+#[derive(Debug)]
+struct FunctionCallContext {
+    function_name: String,
+    active_parameter: usize,
 }
 
 impl DocumentStore {
@@ -102,6 +111,7 @@ impl LanguageServer {
             "textDocument/completion" => self.handle_completion(request)?,
             "textDocument/hover" => self.handle_hover(request)?,
             "textDocument/definition" => self.handle_definition(request)?,
+            "textDocument/signatureHelp" => self.handle_signature_help(request)?,
             _ => {
                 warn!("Unhandled request method: {}", request.method);
                 Response::new_err(
@@ -160,6 +170,11 @@ impl LanguageServer {
             }),
             hover_provider: Some(HoverProviderCapability::Simple(true)),
             definition_provider: Some(lsp_types::OneOf::Left(true)),
+            signature_help_provider: Some(SignatureHelpOptions {
+                trigger_characters: Some(vec!["(".to_string()]),
+                retrigger_characters: Some(vec![",".to_string()]),
+                ..Default::default()
+            }),
             // TODO: Add more capabilities as we implement them
             ..Default::default()
         };
@@ -221,6 +236,19 @@ impl LanguageServer {
         let definition = self.compute_definition(&params)?;
 
         let response = Response::new_ok(request.id, definition);
+        Ok(response)
+    }
+
+    /// Handle textDocument/signatureHelp request
+    fn handle_signature_help(&self, request: Request) -> Result<Response> {
+        let params: SignatureHelpParams = serde_json::from_value(request.params)
+            .map_err(|e| anyhow::anyhow!("Invalid signatureHelp params: {}", e))?;
+
+        info!("Signature help requested at position: {:?}", params.text_document_position_params.position);
+
+        let signature_help = self.compute_signature_help(&params)?;
+
+        let response = Response::new_ok(request.id, signature_help);
         Ok(response)
     }
 
@@ -350,6 +378,24 @@ impl LanguageServer {
         let definition_location = self.analyze_definition_symbol(document, position, uri);
 
         Ok(definition_location.map(GotoDefinitionResponse::Scalar))
+    }
+
+    /// Compute signature help based on the current position
+    fn compute_signature_help(&self, params: &SignatureHelpParams) -> Result<Option<SignatureHelp>> {
+        let uri = &params.text_document_position_params.text_document.uri;
+        let position = params.text_document_position_params.position;
+
+        // Get document content
+        let store = self.document_store.lock().unwrap();
+        let document = match store.get_document(uri) {
+            Some(doc) => doc,
+            None => return Ok(None), // No document found
+        };
+
+        // Analyze the function call at position
+        let signature_help = self.analyze_signature_help(document, position);
+
+        Ok(signature_help)
     }
 
     /// Analyze the completion context at the given position
@@ -625,6 +671,120 @@ impl LanguageServer {
 
         // Symbol not found in document
         None
+    }
+
+    /// Analyze the function call at the given position for signature help
+    fn analyze_signature_help(&self, document: &str, position: Position) -> Option<SignatureHelp> {
+        // Convert position to byte offset
+        let lines: Vec<&str> = document.lines().collect();
+        if position.line as usize >= lines.len() {
+            return None;
+        }
+
+        let line = lines[position.line as usize];
+        let char_pos = position.character as usize;
+
+        if char_pos > line.len() {
+            return None;
+        }
+
+        // Find the function call context around the position
+        let function_call = self.extract_function_call_context(line, char_pos)?;
+
+        // Get signature information for the function
+        let signatures = self.get_function_signatures(&function_call.function_name)?;
+
+        // Determine active parameter based on position in call
+        let active_parameter = self.calculate_active_parameter(&function_call, char_pos);
+
+        Some(SignatureHelp {
+            signatures,
+            active_signature: Some(0), // We only provide one signature for now
+            active_parameter: Some(active_parameter),
+        })
+    }
+
+    /// Extract function call context from line at position
+    fn extract_function_call_context(&self, line: &str, char_pos: usize) -> Option<FunctionCallContext> {
+        // Find the opening parenthesis before the cursor
+        let before_cursor = &line[..char_pos];
+        let open_paren_pos = before_cursor.rfind('(')?;
+
+        // Find the function name before the opening parenthesis
+        let before_paren = &before_cursor[..open_paren_pos];
+        let function_name = self.extract_word_at_position(before_paren, before_paren.len())?;
+
+        // Count commas to determine active parameter
+        let after_open = &line[open_paren_pos..char_pos];
+        let comma_count = after_open.chars().filter(|&c| c == ',').count();
+
+        Some(FunctionCallContext {
+            function_name,
+            active_parameter: comma_count,
+        })
+    }
+
+    /// Get signature information for a function
+    fn get_function_signatures(&self, function_name: &str) -> Option<Vec<SignatureInformation>> {
+        let signature = match function_name {
+            "print" => {
+                let parameters = vec![
+                    ParameterInformation {
+                        label: lsp_types::ParameterLabel::Simple("value".to_string()),
+                        documentation: Some(lsp_types::Documentation::String("The value to print".to_string())),
+                    },
+                ];
+
+                SignatureInformation {
+                    label: "print(value: any) -> void".to_string(),
+                    documentation: Some(lsp_types::Documentation::String("Print a value to the console".to_string())),
+                    parameters: Some(parameters),
+                    active_parameter: None,
+                }
+            }
+            "len" => {
+                let parameters = vec![
+                    ParameterInformation {
+                        label: lsp_types::ParameterLabel::Simple("collection".to_string()),
+                        documentation: Some(lsp_types::Documentation::String("The collection to get length of".to_string())),
+                    },
+                ];
+
+                SignatureInformation {
+                    label: "len(collection) -> Number".to_string(),
+                    documentation: Some(lsp_types::Documentation::String("Get the length of a collection".to_string())),
+                    parameters: Some(parameters),
+                    active_parameter: None,
+                }
+            }
+            "add" => {
+                let parameters = vec![
+                    ParameterInformation {
+                        label: lsp_types::ParameterLabel::Simple("a: Number".to_string()),
+                        documentation: Some(lsp_types::Documentation::String("First number".to_string())),
+                    },
+                    ParameterInformation {
+                        label: lsp_types::ParameterLabel::Simple("b: Number".to_string()),
+                        documentation: Some(lsp_types::Documentation::String("Second number".to_string())),
+                    },
+                ];
+
+                SignatureInformation {
+                    label: "add(a: Number, b: Number) -> Number".to_string(),
+                    documentation: Some(lsp_types::Documentation::String("Add two numbers".to_string())),
+                    parameters: Some(parameters),
+                    active_parameter: None,
+                }
+            }
+            _ => return None, // Unknown function
+        };
+
+        Some(vec![signature])
+    }
+
+    /// Calculate which parameter is active based on cursor position
+    fn calculate_active_parameter(&self, function_call: &FunctionCallContext, char_pos: usize) -> u32 {
+        function_call.active_parameter as u32
     }
 
     /// Generate keyword completions

@@ -389,4 +389,138 @@ class Person {
             }
         }
     }
+
+    #[test]
+    fn test_extract_function_call_context() {
+        let server = create_test_server();
+
+        // Test cases for function call context extraction
+        let test_cases = vec![
+            ("print(", 6, Some(("print".to_string(), 0))),
+            ("add(a, ", 7, Some(("add".to_string(), 1))),
+            ("len(collection", 4, Some(("len".to_string(), 0))),
+            ("fn test(", 7, None), // Not a function call
+            ("let x = func(", 12, Some(("func".to_string(), 0))),
+            ("call(param1, param2, ", 21, Some(("call".to_string(), 2))),
+        ];
+
+        for (line, pos, expected) in test_cases {
+            let result = server.extract_function_call_context(line, pos);
+            match expected {
+                Some((expected_name, expected_param)) => {
+                    assert!(result.is_some(), "Expected function call context for line: '{}', pos: {}", line, pos);
+                    let context = result.unwrap();
+                    assert_eq!(context.function_name, expected_name, "Function name mismatch for line: '{}'", line);
+                    assert_eq!(context.active_parameter, expected_param, "Active parameter mismatch for line: '{}'", line);
+                }
+                None => {
+                    assert!(result.is_none(), "Expected no function call context for line: '{}', pos: {}", line, pos);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn test_get_function_signatures() {
+        let server = create_test_server();
+
+        // Test getting signatures for known functions
+        let test_cases = vec![
+            ("print", Some("print(value: any) -> void")),
+            ("len", Some("len(collection) -> Number")),
+            ("add", Some("add(a: Number, b: Number) -> Number")),
+            ("unknown", None),
+        ];
+
+        for (function_name, expected_label) in test_cases {
+            let signatures = server.get_function_signatures(function_name);
+            match expected_label {
+                Some(expected) => {
+                    assert!(signatures.is_some(), "Expected signatures for function: {}", function_name);
+                    let sigs = signatures.unwrap();
+                    assert_eq!(sigs.len(), 1, "Expected exactly one signature for: {}", function_name);
+                    assert_eq!(sigs[0].label, expected, "Signature label mismatch for: {}", function_name);
+                }
+                None => {
+                    assert!(signatures.is_none(), "Expected no signatures for unknown function: {}", function_name);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn test_calculate_active_parameter() {
+        let server = create_test_server();
+
+        let context = vela_lsp::server::FunctionCallContext {
+            function_name: "test".to_string(),
+            active_parameter: 2,
+        };
+
+        let active_param = server.calculate_active_parameter(&context, 10);
+        assert_eq!(active_param, 2, "Active parameter should match context");
+    }
+
+    #[test]
+    fn test_analyze_signature_help() {
+        let server = create_test_server();
+
+        // Test signature help analysis on sample code
+        let code = r#"fn add(a: Number, b: Number) -> Number {
+  return a + b
+}
+
+fn main() -> void {
+  let result = add(1, 2)
+  print("Result: ")
+  print(result)
+}
+"#;
+
+        let test_cases = vec![
+            (Position { line: 5, character: 18 }, Some(("add", 0))), // add(1, 2) - first param
+            (Position { line: 5, character: 20 }, Some(("add", 1))), // add(1, 2) - second param
+            (Position { line: 6, character: 8 }, Some(("print", 0))), // print("Result: ") - first param
+            (Position { line: 7, character: 8 }, Some(("print", 0))), // print(result) - first param
+            (Position { line: 0, character: 10 }, None), // Not in function call
+        ];
+
+        for (position, expected) in test_cases {
+            let signature_help = server.analyze_signature_help(code, position);
+            match expected {
+                Some((expected_func, expected_param)) => {
+                    assert!(signature_help.is_some(), "Expected signature help at position {:?}", position);
+                    let help = signature_help.unwrap();
+                    assert_eq!(help.signatures.len(), 1, "Expected one signature");
+                    assert_eq!(help.active_signature, Some(0), "Expected active signature 0");
+                    assert_eq!(help.active_parameter, Some(expected_param as u32), "Active parameter mismatch");
+                    assert!(help.signatures[0].label.contains(expected_func), "Signature should contain function name");
+                }
+                None => {
+                    assert!(signature_help.is_none(), "Expected no signature help at position {:?}", position);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn test_signature_help_with_multiple_parameters() {
+        let server = create_test_server();
+
+        let code = "let result = add(a, b, c)";
+
+        // Test different positions in the function call
+        let test_cases = vec![
+            (Position { line: 0, character: 15 }, 0), // add(a, b, c) - first param 'a'
+            (Position { line: 0, character: 18 }, 1), // add(a, b, c) - second param 'b'
+            (Position { line: 0, character: 21 }, 2), // add(a, b, c) - third param 'c'
+        ];
+
+        for (position, expected_active_param) in test_cases {
+            let signature_help = server.analyze_signature_help(code, position);
+            assert!(signature_help.is_some(), "Expected signature help at position {:?}", position);
+            let help = signature_help.unwrap();
+            assert_eq!(help.active_parameter, Some(expected_active_param), "Active parameter mismatch at {:?}", position);
+        }
+    }
 }
