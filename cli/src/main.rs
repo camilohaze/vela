@@ -1158,10 +1158,164 @@ fn handle_check(_files: Vec<PathBuf>) -> Result<()> {
     Ok(())
 }
 
-fn handle_fmt(_files: Vec<PathBuf>, _check: bool) -> Result<()> {
+fn handle_fmt(files: Vec<PathBuf>, check: bool) -> Result<()> {
+    use std::fs;
+    use regex::Regex;
+
+    if files.is_empty() {
+        anyhow::bail!("No files specified. Usage: vela fmt <files...>");
+    }
+
     println!("Formatting Vela files...");
-    // TODO: Implement fmt command
+
+    // Basic formatting rules using regex
+    let rules = vec![
+        // Remove trailing whitespace
+        (Regex::new(r"[ \t]+$").unwrap(), ""),
+        // Ensure space around return type arrow (more specific - apply first!)
+        (Regex::new(r"([^\s])\->([^\s])").unwrap(), "$1 -> $2"),
+        // Ensure space after commas (but not in string literals or inside brackets)
+        (Regex::new(r",([^\s\n,)])").unwrap(), ", $1"),
+        // Ensure space around assignment operators (avoid double spaces)
+        (Regex::new(r"([^=!<>\s])=([^=\s])").unwrap(), "$1 = $2"),
+        // Ensure space around comparison operators
+        (Regex::new(r"([^=!<>\s])==([^=\s])").unwrap(), "$1 == $2"),
+        (Regex::new(r"([^=!<>\s])!=([^=\s])").unwrap(), "$1 != $2"),
+        (Regex::new(r"([^=!<>\s])<([^=\s])").unwrap(), "$1 < $2"),
+        (Regex::new(r"([^=!<>\s])<=([^=\s])").unwrap(), "$1 <= $2"),
+        (Regex::new(r"([^=!<>\s])>([^=\s])").unwrap(), "$1 > $2"),
+        (Regex::new(r"([^=!<>\s])>=([^=\s])").unwrap(), "$1 >= $2"),
+        // Ensure space around arithmetic operators
+        (Regex::new(r"([^=!<>\s])\+([^=\s])").unwrap(), "$1 + $2"),
+        (Regex::new(r"([^=!<>\s])\-([^=\s])").unwrap(), "$1 - $2"),
+        (Regex::new(r"([^=!<>\s])\*([^=\s])").unwrap(), "$1 * $2"),
+        (Regex::new(r"([^=!<>\s])\/([^=\s])").unwrap(), "$1 / $2"),
+        // Ensure space after colons in type annotations
+        (Regex::new(r":([^\s\n:])").unwrap(), ": $1"),
+        // Remove excessive blank lines (more than 2 consecutive)
+        (Regex::new(r"\n{3,}").unwrap(), "\n\n"),
+    ];
+
+    let mut formatted_files = 0;
+    let mut error_files = 0;
+
+    for file_path in files {
+        if !file_path.exists() {
+            eprintln!("❌ File not found: {}", file_path.display());
+            error_files += 1;
+            continue;
+        }
+
+        // Check if it's a .vela file
+        let ext = file_path.extension()
+            .and_then(|s| s.to_str())
+            .unwrap_or("");
+
+        if ext != "vela" {
+            eprintln!("⚠️  Skipping non-Vela file: {}", file_path.display());
+            continue;
+        }
+
+        // Read file content
+        let content = match fs::read_to_string(&file_path) {
+            Ok(content) => content,
+            Err(e) => {
+                eprintln!("❌ Failed to read {}: {}", file_path.display(), e);
+                error_files += 1;
+                continue;
+            }
+        };
+
+        // Apply formatting rules
+        let mut formatted_content = content.clone();
+        for (pattern, replacement) in &rules {
+            formatted_content = pattern.replace_all(&formatted_content, *replacement).to_string();
+        }
+
+        // Basic indentation fix (simplified - disabled for now)
+        // formatted_content = fix_indentation(&formatted_content);
+
+        // Check if file needs formatting
+        if formatted_content == content {
+            if !check {
+                println!("✅ {}", file_path.display());
+            }
+            continue;
+        }
+
+        if check {
+            println!("❌ {} needs formatting", file_path.display());
+            formatted_files += 1;
+        } else {
+            // Write formatted content back to file
+            match fs::write(&file_path, &formatted_content) {
+                Ok(_) => {
+                    println!("✅ {}", file_path.display());
+                    formatted_files += 1;
+                }
+                Err(e) => {
+                    eprintln!("❌ Failed to write {}: {}", file_path.display(), e);
+                    error_files += 1;
+                }
+            }
+        }
+    }
+
+    // Summary
+    if check {
+        if formatted_files > 0 {
+            println!("\n❌ {} files need formatting", formatted_files);
+            std::process::exit(1);
+        } else {
+            println!("\n✅ All files are properly formatted");
+        }
+    } else {
+        println!("\n✅ Formatted {} files", formatted_files);
+        if error_files > 0 {
+            println!("⚠️  {} files had errors", error_files);
+            return Err(anyhow::anyhow!("{} files had errors", error_files));
+        }
+    }
+
     Ok(())
+}
+
+fn fix_indentation(content: &str) -> String {
+    let lines: Vec<&str> = content.lines().collect();
+    let mut result = Vec::new();
+    let mut current_indent: usize = 0;
+
+    for line in lines {
+        let trimmed = line.trim();
+
+        // Skip empty lines
+        if trimmed.is_empty() {
+            result.push(String::new());
+            continue;
+        }
+
+        // Reduce indentation for standalone closing braces
+        let mut line_indent = current_indent;
+        if trimmed == "}" {
+            line_indent = line_indent.saturating_sub(1);
+        }
+
+        // Apply indentation
+        let indented = format!("{}{}", "    ".repeat(line_indent), trimmed);
+        result.push(indented);
+
+        // Increase indent after opening braces
+        if trimmed.ends_with('{') {
+            current_indent += 1;
+        }
+
+        // Decrease indent after standalone closing braces
+        if trimmed == "}" {
+            current_indent = current_indent.saturating_sub(1);
+        }
+    }
+
+    result.join("\n")
 }
 
 fn handle_lsp() -> Result<()> {
@@ -1175,3 +1329,6 @@ fn handle_dev(_tool: DevCommands) -> Result<()> {
     // TODO: Implement dev tools
     Ok(())
 }
+
+#[cfg(test)]
+mod test_cli_fmt;

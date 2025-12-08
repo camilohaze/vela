@@ -2456,6 +2456,7 @@ dependencies = [
  "assert_cmd",
  "clap",
  "predicates",
+ "regex",
  "serde",
  "tempfile",
  "thiserror",

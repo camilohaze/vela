@@ -19,6 +19,7 @@ anyhow.workspace = true
 thiserror.workspace = true
 serde.workspace = true
 walkdir = "2.0"
+regex = "1.10"
 vela-vm = { path = "../vm" }
 vela-compiler = { path = "../compiler" }
 

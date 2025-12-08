@@ -1,0 +1,12 @@
+fn add(a: Number, b: Number) -> Number {
+    if a > 0 {
+        return a + b
+        } else {
+            return 0
+        }
+    }
+
+    fn multiply(x: Number, y: Number) -> Number {
+        result: Number = x * y
+        return result
+    }
