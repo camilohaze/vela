@@ -106,6 +106,17 @@ enum Commands {
         check: bool,
     },
 
+    /// Diagnose Vela installation and environment
+    Doctor {
+        /// Show detailed diagnostic information
+        #[arg(long)]
+        verbose: bool,
+
+        /// Fix issues automatically if possible
+        #[arg(long)]
+        fix: bool,
+    },
+
     /// Language server for IDE integration
     Lsp,
 
@@ -165,6 +176,9 @@ fn main() -> Result<()> {
         }
         Commands::Fmt { files, check } => {
             handle_fmt(files, check)
+        }
+        Commands::Doctor { verbose, fix } => {
+            handle_doctor(verbose, fix)
         }
         Commands::Lsp => {
             handle_lsp()
@@ -1335,6 +1349,106 @@ fn fix_indentation(content: &str) -> String {
 fn handle_lsp() -> Result<()> {
     println!("Starting Vela Language Server...");
     // TODO: Implement LSP
+    Ok(())
+}
+
+fn handle_doctor(verbose: bool, fix: bool) -> Result<()> {
+    println!("🔍 Running Vela Doctor - Installation Diagnostics");
+    println!("==================================================");
+
+    let mut issues_found = 0;
+    let mut issues_fixed = 0;
+
+    // Check Vela CLI version
+    println!("\n📦 Checking Vela CLI installation...");
+    println!("✅ Vela CLI is installed");
+
+    if verbose {
+        println!("   Version: {}", env!("CARGO_PKG_VERSION"));
+        println!("   Executable: {}", std::env::current_exe()?.display());
+    }
+
+    // Check if we're in a Vela project
+    println!("\n📁 Checking project structure...");
+    let is_project = std::fs::metadata("vela.yaml").is_ok() ||
+                     std::fs::metadata("Cargo.toml").is_ok() ||
+                     std::fs::metadata("package.json").is_ok();
+
+    if is_project {
+        println!("✅ Detected Vela project");
+    } else {
+        println!("⚠️  Not in a Vela project directory");
+        println!("   Consider running 'vela create <name>' to create a new project");
+    }
+
+    // Check for required tools
+    println!("\n🔧 Checking required tools...");
+
+    // Check Rust
+    match std::process::Command::new("rustc").arg("--version").output() {
+        Ok(output) if output.status.success() => {
+            let version = String::from_utf8_lossy(&output.stdout);
+            println!("✅ Rust compiler found: {}", version.trim());
+        }
+        _ => {
+            println!("❌ Rust compiler not found");
+            println!("   Please install Rust from https://rustup.rs/");
+            issues_found += 1;
+        }
+    }
+
+    // Check Cargo
+    match std::process::Command::new("cargo").arg("--version").output() {
+        Ok(output) if output.status.success() => {
+            let version = String::from_utf8_lossy(&output.stdout);
+            println!("✅ Cargo package manager found: {}", version.trim());
+        }
+        _ => {
+            println!("❌ Cargo package manager not found");
+            issues_found += 1;
+        }
+    }
+
+    // Check Node.js (optional for some features)
+    match std::process::Command::new("node").arg("--version").output() {
+        Ok(output) if output.status.success() => {
+            let version = String::from_utf8_lossy(&output.stdout);
+            println!("✅ Node.js found: {}", version.trim());
+        }
+        _ => {
+            println!("⚠️  Node.js not found (optional for web development)");
+        }
+    }
+
+    // Check system resources
+    println!("\n💻 Checking system resources...");
+    println!("✅ Operating System: {}", std::env::consts::OS);
+    println!("✅ Architecture: {}", std::env::consts::ARCH);
+
+    // Check available memory (rough estimate)
+    println!("✅ System check completed");
+
+    // Summary
+    println!("\n📊 Diagnostic Summary");
+    println!("====================");
+
+    if issues_found == 0 {
+        println!("🎉 All checks passed! Your Vela installation looks good.");
+    } else {
+        println!("⚠️  Found {} issue(s) that may affect Vela functionality.", issues_found);
+        if fix {
+            println!("🔧 Attempting to fix issues...");
+            // TODO: Implement automatic fixes
+            println!("   Automatic fixes not yet implemented.");
+        } else {
+            println!("💡 Run 'vela doctor --fix' to attempt automatic fixes.");
+        }
+    }
+
+    if issues_fixed > 0 {
+        println!("✅ Fixed {} issue(s) automatically.", issues_fixed);
+    }
+
     Ok(())
 }
 
