@@ -37,7 +37,14 @@ Como desarrollador, quiero un CLI completo para gestionar proyectos Vela que inc
    - Reporte detallado de resultados
    - Tests unitarios incluidos
 
-5. **TASK-101**: Implementar vela doctor ✅ **(NUEVO)**
+5. **TASK-100**: Implementar vela fmt ✅
+   - Comando `vela fmt [--check] [files...]`
+   - Formateo automático de código Vela
+   - Modo check para validación en CI/CD
+   - Reglas de estilo consistentes
+   - Tests unitarios incluidos
+
+6. **TASK-101**: Implementar vela doctor ✅ **(NUEVO)**
    - Comando `vela doctor [--verbose] [--fix]`
    - Diagnóstico completo de instalación
    - Verificación de herramientas requeridas
@@ -46,7 +53,7 @@ Como desarrollador, quiero un CLI completo para gestionar proyectos Vela que inc
    - Tests unitarios incluidos
 
 ## 📋 Subtasks Pendientes
-6. **TASK-100**: Implementar vela fmt (P1)
+**NINGUNA** - Todas las subtasks completadas ✅
 
 ## 🔨 Comandos Implementados
 
@@ -98,12 +105,12 @@ Ejecuta tests de Vela con opciones avanzadas:
 - `files...`: Archivos específicos (opcional, busca en `tests/` por defecto)
 
 ## 📊 Métricas
-- **Subtasks completadas:** 5/6 (83.3%)
-- **Archivos creados/modificados:** ~30
-- **Líneas de código:** ~2900
+- **Subtasks completadas:** 6/6 (100%)
+- **Archivos creados/modificados:** ~35
+- **Líneas de código:** ~3200
 - **Templates:** 5
-- **Comandos CLI:** 5/6 implementados
-- **Tests:** Completos incluidos (7 tests nuevos)
+- **Comandos CLI:** 6/6 implementados
+- **Tests:** Completos incluidos (11 tests totales)
 
 ## ✅ Definición de Hecho
 - [x] TASK-096 completada con templates funcionales

@@ -1,9 +1,9 @@
 # TASK-100: Implementar comando vela fmt
 
 ## 📋 Información General
-- **Historia:** VELA-561
+- **Historia:** VELA-592
 - **Estado:** Completada ✅
-- **Fecha:** 2024-01-15
+- **Fecha:** 2025-01-30
 
 ## 🎯 Objetivo
 Implementar el comando `vela fmt` para formatear código Vela con reglas de estilo consistentes, incluyendo modo check para validación en CI/CD.
