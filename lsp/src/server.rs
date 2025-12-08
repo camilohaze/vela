@@ -7,7 +7,8 @@ use lsp_types::{
     TextDocumentSyncCapability, TextDocumentSyncKind, CompletionParams,
     CompletionList, CompletionItem, CompletionItemKind, Position,
     CompletionOptions, HoverProviderCapability, HoverParams, Hover,
-    MarkupContent, MarkupKind,
+    MarkupContent, MarkupKind, GotoDefinitionParams,
+    GotoDefinitionResponse, Location, Range,
 };
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
@@ -100,6 +101,7 @@ impl LanguageServer {
             "shutdown" => self.handle_shutdown(request)?,
             "textDocument/completion" => self.handle_completion(request)?,
             "textDocument/hover" => self.handle_hover(request)?,
+            "textDocument/definition" => self.handle_definition(request)?,
             _ => {
                 warn!("Unhandled request method: {}", request.method);
                 Response::new_err(
@@ -157,6 +159,7 @@ impl LanguageServer {
                 ..Default::default()
             }),
             hover_provider: Some(HoverProviderCapability::Simple(true)),
+            definition_provider: Some(lsp_types::OneOf::Left(true)),
             // TODO: Add more capabilities as we implement them
             ..Default::default()
         };
@@ -205,6 +208,19 @@ impl LanguageServer {
         let hover = self.compute_hover(&params)?;
 
         let response = Response::new_ok(request.id, hover);
+        Ok(response)
+    }
+
+    /// Handle textDocument/definition request
+    fn handle_definition(&self, request: Request) -> Result<Response> {
+        let params: GotoDefinitionParams = serde_json::from_value(request.params)
+            .map_err(|e| anyhow::anyhow!("Invalid definition params: {}", e))?;
+
+        info!("Definition requested at position: {:?}", params.text_document_position_params.position);
+
+        let definition = self.compute_definition(&params)?;
+
+        let response = Response::new_ok(request.id, definition);
         Ok(response)
     }
 
@@ -316,6 +332,24 @@ impl LanguageServer {
         let hover_info = self.analyze_hover_symbol(document, position);
 
         Ok(hover_info)
+    }
+
+    /// Compute definition location based on the current position
+    fn compute_definition(&self, params: &GotoDefinitionParams) -> Result<Option<GotoDefinitionResponse>> {
+        let uri = &params.text_document_position_params.text_document.uri;
+        let position = params.text_document_position_params.position;
+
+        // Get document content
+        let store = self.document_store.lock().unwrap();
+        let document = match store.get_document(uri) {
+            Some(doc) => doc,
+            None => return Ok(None), // No document found
+        };
+
+        // Analyze the symbol at position and find its definition
+        let definition_location = self.analyze_definition_symbol(document, position, uri);
+
+        Ok(definition_location.map(GotoDefinitionResponse::Scalar))
     }
 
     /// Analyze the completion context at the given position
@@ -481,6 +515,116 @@ impl LanguageServer {
             }),
             range,
         })
+    }
+
+    /// Analyze the symbol at the given position and find its definition location
+    fn analyze_definition_symbol(&self, document: &str, position: Position, uri: &lsp_types::Url) -> Option<Location> {
+        // Convert position to byte offset
+        let lines: Vec<&str> = document.lines().collect();
+        if position.line as usize >= lines.len() {
+            return None;
+        }
+
+        let line = lines[position.line as usize];
+        let char_pos = position.character as usize;
+
+        if char_pos > line.len() {
+            return None;
+        }
+
+        // Extract word at position
+        let word = self.extract_word_at_position(line, char_pos)?;
+
+        // For built-in symbols, we can't provide definitions
+        // For user-defined symbols, search for their definition in the document
+        self.find_symbol_definition(document, &word, uri)
+    }
+
+    /// Find the definition location of a symbol in the document
+    fn find_symbol_definition(&self, document: &str, symbol: &str, uri: &lsp_types::Url) -> Option<Location> {
+        let lines: Vec<&str> = document.lines().collect();
+
+        // Simple pattern matching for function definitions
+        // fn function_name(...) -> ...
+        let fn_pattern = format!("fn {}", symbol);
+
+        // Simple pattern matching for variable declarations
+        // let variable_name: Type = ...
+        // state variable_name: Type = ...
+        let let_pattern = format!("let {}:", symbol);
+        let state_pattern = format!("state {}:", symbol);
+
+        // Simple pattern matching for class definitions
+        // class ClassName ...
+        let class_pattern = format!("class {}", symbol);
+
+        // Simple pattern matching for interface definitions
+        // interface InterfaceName ...
+        let interface_pattern = format!("interface {}", symbol);
+
+        for (line_idx, line) in lines.iter().enumerate() {
+            let trimmed = line.trim();
+
+            // Check for function definition
+            if trimmed.starts_with(&fn_pattern) {
+                let char_start = line.find(&fn_pattern).unwrap_or(0);
+                let char_end = char_start + fn_pattern.len();
+
+                return Some(Location {
+                    uri: uri.clone(),
+                    range: Range {
+                        start: Position { line: line_idx as u32, character: char_start as u32 },
+                        end: Position { line: line_idx as u32, character: char_end as u32 },
+                    },
+                });
+            }
+
+            // Check for variable declarations
+            if trimmed.starts_with(&let_pattern) || trimmed.starts_with(&state_pattern) {
+                let pattern = if trimmed.starts_with(&let_pattern) { &let_pattern } else { &state_pattern };
+                let char_start = line.find(pattern).unwrap_or(0);
+                let char_end = char_start + pattern.len();
+
+                return Some(Location {
+                    uri: uri.clone(),
+                    range: Range {
+                        start: Position { line: line_idx as u32, character: char_start as u32 },
+                        end: Position { line: line_idx as u32, character: char_end as u32 },
+                    },
+                });
+            }
+
+            // Check for class definition
+            if trimmed.starts_with(&class_pattern) {
+                let char_start = line.find(&class_pattern).unwrap_or(0);
+                let char_end = char_start + class_pattern.len();
+
+                return Some(Location {
+                    uri: uri.clone(),
+                    range: Range {
+                        start: Position { line: line_idx as u32, character: char_start as u32 },
+                        end: Position { line: line_idx as u32, character: char_end as u32 },
+                    },
+                });
+            }
+
+            // Check for interface definition
+            if trimmed.starts_with(&interface_pattern) {
+                let char_start = line.find(&interface_pattern).unwrap_or(0);
+                let char_end = char_start + interface_pattern.len();
+
+                return Some(Location {
+                    uri: uri.clone(),
+                    range: Range {
+                        start: Position { line: line_idx as u32, character: char_start as u32 },
+                        end: Position { line: line_idx as u32, character: char_end as u32 },
+                    },
+                });
+            }
+        }
+
+        // Symbol not found in document
+        None
     }
 
     /// Generate keyword completions

@@ -190,4 +190,203 @@ if count > 0 {
             }
         }
     }
+
+    #[test]
+    fn test_find_symbol_definition_function() {
+        let server = create_test_server();
+
+        // Test finding function definitions
+        let code = r#"fn add(a: Number, b: Number) -> Number {
+  return a + b
+}
+
+fn main() -> void {
+  let result = add(1, 2)
+}
+"#;
+
+        let uri = Url::parse("file:///test.vela").unwrap();
+
+        // Test finding 'add' function definition
+        let location = server.find_symbol_definition(code, "add", &uri);
+        assert!(location.is_some(), "Should find definition for 'add'");
+        let location = location.unwrap();
+        assert_eq!(location.range.start.line, 0);
+        assert_eq!(location.range.start.character, 0);
+        assert_eq!(location.range.end.character, 6); // "fn add" length
+
+        // Test finding 'main' function definition
+        let location = server.find_symbol_definition(code, "main", &uri);
+        assert!(location.is_some(), "Should find definition for 'main'");
+        let location = location.unwrap();
+        assert_eq!(location.range.start.line, 4);
+        assert_eq!(location.range.start.character, 0);
+        assert_eq!(location.range.end.character, 7); // "fn main" length
+    }
+
+    #[test]
+    fn test_find_symbol_definition_variable() {
+        let server = create_test_server();
+
+        // Test finding variable definitions
+        let code = r#"state count: Number = 0
+let name: String = "Vela"
+
+fn increment() -> void {
+  count = count + 1
+}
+"#;
+
+        let uri = Url::parse("file:///test.vela").unwrap();
+
+        // Test finding 'count' state variable definition
+        let location = server.find_symbol_definition(code, "count", &uri);
+        assert!(location.is_some(), "Should find definition for 'count'");
+        let location = location.unwrap();
+        assert_eq!(location.range.start.line, 0);
+        assert_eq!(location.range.start.character, 0);
+        assert_eq!(location.range.end.character, 13); // "state count:" length
+
+        // Test finding 'name' let variable definition
+        let location = server.find_symbol_definition(code, "name", &uri);
+        assert!(location.is_some(), "Should find definition for 'name'");
+        let location = location.unwrap();
+        assert_eq!(location.range.start.line, 1);
+        assert_eq!(location.range.start.character, 0);
+        assert_eq!(location.range.end.character, 10); // "let name:" length
+    }
+
+    #[test]
+    fn test_find_symbol_definition_class() {
+        let server = create_test_server();
+
+        // Test finding class definitions
+        let code = r#"class Person {
+  constructor(name: String) {
+    this.name = name
+  }
+}
+
+class Animal {
+  fn speak() -> String {
+    return "Hello"
+  }
+}
+"#;
+
+        let uri = Url::parse("file:///test.vela").unwrap();
+
+        // Test finding 'Person' class definition
+        let location = server.find_symbol_definition(code, "Person", &uri);
+        assert!(location.is_some(), "Should find definition for 'Person'");
+        let location = location.unwrap();
+        assert_eq!(location.range.start.line, 0);
+        assert_eq!(location.range.start.character, 0);
+        assert_eq!(location.range.end.character, 12); // "class Person" length
+
+        // Test finding 'Animal' class definition
+        let location = server.find_symbol_definition(code, "Animal", &uri);
+        assert!(location.is_some(), "Should find definition for 'Animal'");
+        let location = location.unwrap();
+        assert_eq!(location.range.start.line, 6);
+        assert_eq!(location.range.start.character, 0);
+        assert_eq!(location.range.end.character, 12); // "class Animal" length
+    }
+
+    #[test]
+    fn test_find_symbol_definition_interface() {
+        let server = create_test_server();
+
+        // Test finding interface definitions
+        let code = r#"interface Drawable {
+  fn draw() -> void
+}
+
+interface Printable {
+  fn print() -> String
+}
+"#;
+
+        let uri = Url::parse("file:///test.vela").unwrap();
+
+        // Test finding 'Drawable' interface definition
+        let location = server.find_symbol_definition(code, "Drawable", &uri);
+        assert!(location.is_some(), "Should find definition for 'Drawable'");
+        let location = location.unwrap();
+        assert_eq!(location.range.start.line, 0);
+        assert_eq!(location.range.start.character, 0);
+        assert_eq!(location.range.end.character, 17); // "interface Drawable" length
+
+        // Test finding 'Printable' interface definition
+        let location = server.find_symbol_definition(code, "Printable", &uri);
+        assert!(location.is_some(), "Should find definition for 'Printable'");
+        let location = location.unwrap();
+        assert_eq!(location.range.start.line, 4);
+        assert_eq!(location.range.start.character, 0);
+        assert_eq!(location.range.end.character, 18); // "interface Printable" length
+    }
+
+    #[test]
+    fn test_find_symbol_definition_not_found() {
+        let server = create_test_server();
+
+        // Test symbols that don't exist
+        let code = r#"fn add(a: Number, b: Number) -> Number {
+  return a + b
+}
+"#;
+
+        let uri = Url::parse("file:///test.vela").unwrap();
+
+        // Test finding non-existent symbol
+        let location = server.find_symbol_definition(code, "multiply", &uri);
+        assert!(location.is_none(), "Should not find definition for 'multiply'");
+
+        let location = server.find_symbol_definition(code, "unknown", &uri);
+        assert!(location.is_none(), "Should not find definition for 'unknown'");
+    }
+
+    #[test]
+    fn test_analyze_definition_symbol() {
+        let server = create_test_server();
+
+        // Test definition analysis on sample code
+        let code = r#"fn add(a: Number, b: Number) -> Number {
+  return a + b
+}
+
+state count: Number = 0
+
+class Person {
+  constructor(name: String) {
+    this.name = name
+  }
+}
+"#;
+
+        let uri = Url::parse("file:///test.vela").unwrap();
+
+        let test_cases = vec![
+            (Position { line: 0, character: 3 }, Some("add")), // "fn" keyword, should find "add"
+            (Position { line: 0, character: 6 }, Some("add")), // function name "add"
+            (Position { line: 2, character: 6 }, Some("count")), // state variable "count"
+            (Position { line: 4, character: 6 }, Some("Person")), // class name "Person"
+            (Position { line: 10, character: 0 }, None), // Out of bounds
+        ];
+
+        for (position, expected_symbol) in test_cases {
+            let location = server.analyze_definition_symbol(code, position, &uri);
+            match expected_symbol {
+                Some(symbol) => {
+                    assert!(location.is_some(), "Expected definition location at position {:?}", position);
+                    let location = location.unwrap();
+                    // Verify the location points to the definition
+                    assert!(location.range.start.line <= position.line, "Definition should be before or at cursor position");
+                }
+                None => {
+                    assert!(location.is_none(), "Expected no definition at position {:?}", position);
+                }
+            }
+        }
+    }
 }
