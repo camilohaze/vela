@@ -22,6 +22,7 @@ pub mod display_widgets;
 pub mod text_style;
 pub mod style;
 pub mod navigation;
+pub mod connect;
 
 // Reactive modules (enabled with "reactive" feature)
 #[cfg(feature = "reactive")]
@@ -66,6 +67,9 @@ pub use reactive_context::ReactiveBuildContext;
 #[cfg(feature = "reactive")]
 pub use widget_invalidator::{
     WidgetInvalidator
+};
+pub use connect::{
+    ConnectedWidget
 };
 
 /// Initialize the UI framework

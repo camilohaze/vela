@@ -21,7 +21,7 @@ use crate::context::BuildContext;
 use crate::reactive_widgets::WidgetId;
 
 #[cfg(feature = "reactive")]
-use vela_reactive::{Signal, Computed};
+use reactive::{Signal, Computed};
 
 /// Reactive build context for automatic dependency tracking
 #[cfg(feature = "reactive")]
