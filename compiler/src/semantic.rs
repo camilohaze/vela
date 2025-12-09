@@ -400,9 +400,6 @@ impl SemanticAnalyzer {
 
     /// Type check de variable
     fn type_check_variable(&mut self, var: &VariableDeclaration) -> CompileResult<()> {
-        // Declarar la variable en el scope actual
-        self.declare_variable(var)?;
-
         // Type check del initializer si existe
         if let (Some(type_ann), Some(init)) = (&var.type_annotation, &var.initializer) {
             let declared_ty = self.type_annotation_to_semantic_type(type_ann)?;

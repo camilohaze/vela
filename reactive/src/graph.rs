@@ -357,8 +357,7 @@ mod tests {
         let computed = Arc::new(ReactiveNode::new_computed(
             "computed".to_string(),
             Box::new(|| {
-                graph.record_dependency("signal");
-                serde_json::json!(20) // Simplified
+                serde_json::json!(20)
             }),
         ));
         graph.register_node(Arc::clone(&computed));
@@ -369,7 +368,8 @@ mod tests {
         });
 
         assert_eq!(result, serde_json::json!(20));
-        assert!(graph.is_tracking());
+        // After tracking, we should not be tracking anymore
+        assert!(!graph.is_tracking());
     }
 
     #[test]

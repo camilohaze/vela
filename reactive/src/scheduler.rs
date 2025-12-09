@@ -282,8 +282,9 @@ mod tests {
 
         scheduler.schedule_update(Arc::clone(&node));
 
-        // Check that node is scheduled
-        assert!(scheduler.has_pending_updates());
+        // For Sync priority, updates are flushed automatically
+        // So there should be no pending updates
+        assert!(!scheduler.has_pending_updates());
     }
 
     #[test]
@@ -311,10 +312,22 @@ mod tests {
         let scheduler = ReactiveScheduler::new();
         let node = Arc::new(ReactiveNode::new_signal("test".to_string(), serde_json::json!(1)));
 
-        scheduler.schedule_update(Arc::clone(&node));
-        assert!(scheduler.has_pending_updates());
+        // Use batch to prevent auto-flush
+        scheduler.batch(|| {
+            scheduler.schedule_update(Arc::clone(&node));
+            assert!(scheduler.has_pending_updates());
+        });
 
-        scheduler.clear();
+        // After batch ends, updates should be flushed automatically
         assert!(!scheduler.has_pending_updates());
+
+        // Now test clear with pending updates
+        scheduler.batch(|| {
+            scheduler.schedule_update(Arc::clone(&node));
+            assert!(scheduler.has_pending_updates());
+
+            scheduler.clear();
+            assert!(!scheduler.has_pending_updates());
+        });
     }
 }

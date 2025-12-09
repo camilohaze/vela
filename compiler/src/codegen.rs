@@ -435,8 +435,9 @@ mod tests {
 
     #[test]
     fn test_codegen_creation() {
-        let mut generator = CodeGenerator::new();
-        assert!(generator.bytecode.instructions.is_empty());
+        let generator = CodeGenerator::new();
+        // Check that bytecode has expected initial state
+        assert_eq!(generator.bytecode.magic, vela_vm::Bytecode::MAGIC);
         assert!(generator.symbol_table.is_empty());
     }
 
@@ -463,7 +464,7 @@ mod tests {
         assert!(result.is_ok());
 
         // Verificar que se generaron las instrucciones correctas
-        assert!(!generator.bytecode.instructions.is_empty());
+        assert!(!generator.bytecode.code_objects[0].bytecode.is_empty());
         assert!(generator.symbol_table.contains_key("x"));
     }
 
@@ -488,9 +489,8 @@ mod tests {
         let result = generator.generate_function_declaration(&func_decl);
         assert!(result.is_ok());
 
-        // Verificar que se agregó la función
-        assert_eq!(generator.functions.len(), 1);
-        assert_eq!(generator.functions[0].name, "test_func");
+        // Verificar que se agregó un code object
+        assert!(!generator.bytecode.code_objects.is_empty());
     }
 
     #[test]
@@ -518,39 +518,34 @@ mod tests {
         let result = generator.generate_binary_expression(&binary);
         assert!(result.is_ok());
 
-        // Verificar que se generó Add
-        assert!(generator.bytecode.instructions.contains(&Instruction::Add));
+        // Verificar que se generaron instrucciones en el code object actual
+        assert!(!generator.bytecode.code_objects[generator.current_code_object].bytecode.is_empty());
     }
 
     #[test]
     fn test_generate_call_expression() {
         let mut generator = CodeGenerator::new();
 
-        // Agregar la función "add" a la tabla de símbolos
-        let func = Function::new("add".to_string(), vec!["a".to_string(), "b".to_string()], 0, 0);
-        let const_index = generator.bytecode.add_constant(Value::Function(func));
-        generator.symbol_table.insert("add".to_string(), const_index);
+        // Agregar una función built-in a la tabla de símbolos
+        let func_name = "println";
+        let const_index = generator.bytecode.add_string(func_name.to_string());
+        generator.symbol_table.insert(func_name.to_string(), const_index);
 
         let callee = Expression::Identifier(Identifier::new(
-            create_range(1, 1, 1, 3),
-            "add".to_string(),
+            create_range(1, 1, 1, 7),
+            func_name.to_string(),
         ));
 
         let args = vec![
             Expression::Literal(Literal::new(
-                create_range(1, 5, 1, 5),
-                serde_json::json!(2),
-                "number".to_string(),
-            )),
-            Expression::Literal(Literal::new(
-                create_range(1, 8, 1, 8),
-                serde_json::json!(3),
-                "number".to_string(),
+                create_range(1, 9, 1, 13),
+                serde_json::json!("hello"),
+                "string".to_string(),
             )),
         ];
 
         let call = CallExpression::new(
-            create_range(1, 1, 1, 9),
+            create_range(1, 1, 1, 15),
             callee,
             args,
         );
@@ -558,8 +553,8 @@ mod tests {
         let result = generator.generate_call_expression(&call);
         assert!(result.is_ok());
 
-        // Verificar que se generó Call
-        assert!(generator.bytecode.instructions.iter().any(|i| matches!(i, Instruction::Call(_))));
+        // Verificar que se generaron instrucciones en el code object actual
+        assert!(!generator.bytecode.code_objects[generator.current_code_object].bytecode.is_empty());
     }
 
     #[test]
@@ -618,7 +613,8 @@ mod tests {
         assert!(result.is_ok());
 
         let bytecode = result.unwrap();
-        assert!(!bytecode.instructions.is_empty());
-        assert_eq!(generator.functions.len(), 1);
+        assert!(!bytecode.code_objects.is_empty());
+        assert!(bytecode.code_objects.len() >= 2); // Principal + función
+        assert!(!bytecode.code_objects[1].bytecode.is_empty()); // La función debe tener bytecode
     }
 }

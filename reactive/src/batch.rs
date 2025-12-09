@@ -111,12 +111,15 @@ mod tests {
         let call_count = Arc::new(AtomicUsize::new(0));
         let call_count_clone = Arc::clone(&call_count);
 
+        let call_count1 = Arc::clone(&call_count);
+        let call_count2 = Arc::clone(&call_count);
+
         // Subscribe to both signals
-        signal1.subscribe(move |_| {
-            call_count_clone.fetch_add(1, Ordering::SeqCst);
+        signal1.subscribe(move |_, _| {
+            call_count1.fetch_add(1, Ordering::SeqCst);
         });
-        signal2.subscribe(move |_| {
-            call_count_clone.fetch_add(1, Ordering::SeqCst);
+        signal2.subscribe(move |_, _| {
+            call_count2.fetch_add(1, Ordering::SeqCst);
         });
 
         // Batch updates

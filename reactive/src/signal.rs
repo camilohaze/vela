@@ -25,7 +25,7 @@ use uuid::Uuid;
 use crate::graph::ReactiveGraph;
 
 /// Type alias for subscriber callback function
-pub type SubscriberFn<T> = Box<dyn Fn(T, T) + Send + Sync>;
+pub type SubscriberFn<T> = Box<dyn Fn(&T, &T) + Send + Sync>;
 
 /// Type alias for subscriber ID
 pub type SubscriberId = Uuid;
@@ -62,6 +62,22 @@ impl<T: Clone + 'static> Signal<T> {
         }
     }
 
+    /// Create a new signal with custom equality function
+    pub fn with_equals<F>(initial: T, equals_fn: F) -> Self
+    where
+        F: Fn(&T, &T) -> bool + Send + Sync + 'static,
+    {
+        Signal {
+            value: Arc::new(parking_lot::RwLock::new(initial)),
+            id: format!("signal-{}", Uuid::new_v4()),
+            graph: Arc::new(ReactiveGraph::new()), // TODO: Use shared graph
+            equals_fn: Some(Box::new(equals_fn)),
+            subscribers: Arc::new(Mutex::new(HashMap::new())),
+            next_subscriber_id: Arc::new(Mutex::new(Uuid::new_v4())),
+            disposed: Arc::new(parking_lot::RwLock::new(false)),
+        }
+    }
+
     /// Get current value (reactive)
     pub fn get(&self) -> T {
         // TODO: Record dependency in graph
@@ -75,11 +91,24 @@ impl<T: Clone + 'static> Signal<T> {
         }
 
         let old_value = self.peek();
-        {
-            let mut guard = self.value.write();
-            *guard = new_value.clone();
+        
+        // Check if values are equal using custom equality function or default
+        let values_equal = if let Some(ref equals_fn) = self.equals_fn {
+            equals_fn(&old_value, &new_value)
+        } else {
+            // For types without PartialEq, we can't compare, so always notify
+            // This is a limitation - custom equality function should be used
+            false
+        };
+        
+        if !values_equal {
+            {
+                let mut guard = self.value.write();
+                *guard = new_value.clone();
+            }
+            self.notify_subscribers(new_value, old_value);
         }
-        self.notify_subscribers(new_value, old_value);
+        
         Ok(())
     }
 
@@ -92,7 +121,7 @@ impl<T: Clone + 'static> Signal<T> {
     /// Subscribe to value changes
     pub fn subscribe<F>(&self, callback: F) -> Box<dyn Fn() + Send + Sync>
     where
-        F: Fn(T, T) + Send + Sync + 'static,
+        F: Fn(&T, &T) + Send + Sync + 'static,
     {
         let id = {
             let mut next_id = self.next_subscriber_id.lock().unwrap();
@@ -120,6 +149,21 @@ impl<T: Clone + 'static> Signal<T> {
         *self.disposed.read()
     }
 
+    /// Dispose this signal (unsubscribe all, prevent further changes)
+    pub fn dispose(&self) {
+        let mut disposed_guard = self.disposed.write();
+        *disposed_guard = true;
+        
+        // Clear all subscribers
+        let mut subs = self.subscribers.lock().unwrap();
+        subs.clear();
+    }
+
+    /// Get signal ID
+    pub fn id(&self) -> &str {
+        &self.id
+    }
+
     /// Update value using a function
     pub fn update<F>(&self, updater: F) -> Result<(), String>
     where
@@ -138,7 +182,7 @@ impl<T: Clone + 'static> Signal<T> {
         for callback in callbacks {
             // Use catch_unwind to prevent subscriber panics from crashing
             let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                callback(new_value.clone(), old_value.clone());
+                callback(&new_value, &old_value);
             }));
 
             if result.is_err() {
@@ -188,13 +232,11 @@ impl<T: Clone + fmt::Display + 'static> fmt::Display for Signal<T> {
 }
 
 // Clone implementation
-impl<T: Clone> Clone for Signal<T> {
+impl<T: Clone + 'static> Clone for Signal<T> {
     fn clone(&self) -> Self {
-        // Note: Cloning creates a new signal with same initial value
-        // but it's not the same signal in the graph
-        // For now, we can't properly clone without Serialize bounds
-        // TODO: Store initial value to enable proper cloning
-        panic!("Signal<T> clone requires T: Serialize + Deserialize for proper implementation")
+        // Create a new signal with the current value but new ID
+        let current_value = self.get();
+        Signal::new(current_value)
     }
 }
 
@@ -243,8 +285,8 @@ mod tests {
         let call_count_clone = Arc::clone(&call_count);
 
         let unsubscribe = signal.subscribe(move |new, old| {
-            assert_eq!(old, 0);
-            assert_eq!(new, 5);
+            assert_eq!(*old, 0);
+            assert_eq!(*new, 5);
             call_count_clone.fetch_add(1, Ordering::SeqCst);
         });
 
@@ -293,7 +335,8 @@ mod tests {
         let cloned = signal.clone();
 
         assert_eq!(signal.get(), cloned.get());
-        assert_eq!(signal.id(), cloned.id());
+        // Cloned signal should have different ID
+        assert_ne!(signal.id(), cloned.id());
     }
 
     #[test]

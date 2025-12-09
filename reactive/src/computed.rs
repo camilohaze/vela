@@ -138,11 +138,12 @@ mod tests {
     #[test]
     fn test_computed_with_signal_dependency() {
         let signal = Arc::new(Signal::new(10));
-        let computed = Computed::new(move || signal.get() * 2);
+        let signal_clone = Arc::clone(&signal);
+        let computed = Computed::new(move || signal_clone.get() * 2);
 
         assert_eq!(computed.get(), 20);
 
-        signal.set(15);
+        signal.set(15).unwrap();
         // In a full implementation, this would trigger recomputation
         // For now, we test the basic functionality
         assert_eq!(computed.get(), 20); // Still cached
