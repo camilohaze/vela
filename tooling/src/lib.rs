@@ -5,7 +5,7 @@ Complete toolchain for the Vela programming language, including:
 
 - **CLI Tools**: Command-line interface for project management
 - **Build System**: Incremental compilation with dependency tracking
-- **Package Manager**: Dependency resolution and version management
+- **LSP Server**: Language server for IDE integration
 
 ## Quick Start
 
@@ -29,15 +29,11 @@ vela add http@^2.0
 
 ```rust
 use vela_tooling::build::{BuildExecutor, BuildConfig};
-use vela_tooling::package::Manifest;
-
-// Load project manifest
-let manifest = Manifest::from_file("Vela.toml")?;
 
 // Execute build
 let config = BuildConfig::default();
 let executor = BuildExecutor::new(config);
-let result = executor.execute(&manifest)?;
+let result = executor.execute()?;
 
 println!("Build successful: {} modules compiled", result.modules_count);
 ```
@@ -56,13 +52,6 @@ Incremental build system with:
 - Parallel compilation using `rayon`
 - Smart caching with SHA-256 hashing
 
-### Package Module
-
-Package management with:
-- Semantic versioning support
-- Dependency resolution (PubGrub algorithm)
-- Registry client for package downloads
-
 ## Performance
 
 | Operation | Target | Actual |
@@ -70,15 +59,15 @@ Package management with:
 | CLI startup | < 50ms | TBD |
 | Clean build (1K LOC) | < 500ms | TBD |
 | Incremental rebuild | < 100ms | TBD |
-| Dependency resolution | < 200ms | TBD |
+| LSP response | < 50ms | TBD |
 
 ## Examples
 
 See `examples/` directory for complete examples:
 
 - `simple_build.rs` - Basic build workflow
-- `dependency_resolution.rs` - Package management
 - `incremental_build.rs` - Incremental compilation
+- `lsp_server.rs` - Language server integration
 
 ## Testing
 
@@ -96,13 +85,13 @@ cargo bench -p vela-tooling
 // Re-export main modules
 pub mod cli;
 pub mod build;
-pub mod package;
+pub mod lsp;
 pub mod common;
 
 // Re-export commonly used types
 pub use cli::{Cli, Commands};
 pub use build::{BuildExecutor, BuildConfig, BuildResult};
-pub use package::{Manifest, DependencyResolver, Registry};
+pub use lsp::LanguageServer;
 pub use common::{Error, Result};
 
 #[cfg(test)]

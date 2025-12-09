@@ -3,20 +3,17 @@
 //! Runtime de ejecución modular para el lenguaje Vela.
 //!
 //! Este crate proporciona el núcleo de ejecución con:
-//! - Async runtime (Tokio-based)
-//! - Channels para comunicación asíncrona
-//! - Concurrencia (actores)
+//! - Concurrencia (actores, async, channels)
+//! - Sistema reactivo (signals, computed, effects)
 //! - DI container
-//! - Event system
 //! - HTTP framework
+//! - Event system
 
-pub mod core;
-pub mod r#async;
-pub mod channels;
-pub mod concurrency;
-pub mod di;
-pub mod event;
-pub mod http;
+pub use concurrency as concurrency;
+pub use reactive as reactive;
+pub use http as http;
+pub use events as events;
+pub use di as di;
 
 /// Resultado común para operaciones del runtime
 pub type RuntimeResult<T> = Result<T, RuntimeError>;
