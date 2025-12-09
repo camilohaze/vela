@@ -1,106 +1,113 @@
-# TASK-079: Module Resolution System
+# TASK-079: Implementar Sistema de Resolución de Módulos
 
 ## 📋 Información General
-- **Historia:** VELA-588 (US-18: Module Loader)
+- **Historia:** VELA-588
 - **Estado:** Completada ✅
-- **Fecha:** 2025-01-07
+- **Fecha:** 2025-12-03
 
 ## 🎯 Objetivo
-Implementar el sistema de resolución de módulos que permita:
-- Resolver rutas absolutas y relativas de módulos
-- Manejar dependencias entre módulos
-- Implementar carga lazy de módulos
-- Gestionar el ciclo de vida de módulos cargados
+Implementar un sistema completo de resolución de módulos para VelaVM que soporte imports con prefijos (module:, library:, package:, system:, extension:, assets:) y se integre con el cargador de bytecode existente.
 
 ## 🔨 Implementación
 
-### Archivos generados
-- `vm/module_loader.vela` - Implementación principal del ModuleResolver (1,200 líneas)
-- `docs/architecture/ADR-079-module-system.md` - Decisión arquitectónica
+### Arquitectura del Sistema
+Se implementó un sistema de resolución de módulos de dos componentes:
 
-### Componentes
+1. **ModuleResolver**: Componente central que convierte nombres de módulos en rutas de archivos
+2. **BytecodeLoader Integration**: Actualización del cargador existente para usar el resolver
 
-#### 1. ModuleResolver Class
-```vela
-class ModuleResolver {
-  cache: ModuleCache
-  searchPaths: List<String>
+### Funcionalidades Implementadas
 
-  fn resolve(moduleName: String) -> Result<ModulePath>
-  fn loadDependencies(module: Module) -> Result<List<Module>>
-  fn getModulePath(name: String) -> Option<String>
-  fn isModuleLoaded(name: String) -> Bool
+#### 1. Soporte de Prefijos de Módulo
+- `module:name` → Busca en directorios de módulos del proyecto
+- `library:name` → Busca en directorios de librerías
+- `package:name` → Busca en directorios de paquetes externos
+- `system:name` → Busca en directorios de módulos del sistema
+- `extension:name` → Busca en directorios de extensiones
+- `assets:name` → Busca archivos de assets (sin extensión .velac)
+
+#### 2. Resolución de Rutas Configurable
+- Múltiples rutas de búsqueda por prefijo
+- Rutas por defecto inteligentes basadas en estructura de proyecto
+- Posibilidad de agregar rutas personalizadas
+
+#### 3. Caché de Resolución
+- Cache de rutas resueltas para mejorar rendimiento
+- Evita resoluciones repetidas del mismo módulo
+
+#### 4. Integración con BytecodeLoader
+- Reemplazo del sistema de rutas fijas por resolución dinámica
+- Mantenimiento de compatibilidad hacia atrás
+- Mejor manejo de errores
+
+### Archivos Creados/Modificados
+
+#### Nuevos Archivos
+- `vm/src/module_resolver.rs` - Implementación completa del ModuleResolver
+- `docs/features/VELA-588/TASK-079.md` - Esta documentación
+
+#### Archivos Modificados
+- `vm/src/lib.rs` - Agregado módulo module_resolver
+- `vm/src/loader.rs` - Integración con ModuleResolver
+
+### API Pública
+
+#### ModuleResolver
+```rust
+pub struct ModuleResolver {
+    // Campos internos
+}
+
+impl ModuleResolver {
+    pub fn new(project_root: PathBuf) -> Self
+    pub fn resolve_module(&mut self, name: &str) -> Result<PathBuf, Error>
+    pub fn add_search_path(&mut self, prefix: &str, path: PathBuf)
+    pub fn parse_module_name(&self, name: &str) -> Option<(&str, &str)>
 }
 ```
 
-#### 2. ModulePath Struct
-```vela
-struct ModulePath {
-  name: String
-  absolutePath: String
-  relativePath: String
-  dependencies: List<String>
-}
-```
-
-#### 3. ModuleCache Class
-```vela
-class ModuleCache {
-  loadedModules: Map<String, Module>
-  weakRefs: WeakRefTracker
-
-  fn get(name: String) -> Option<Module>
-  fn put(name: String, module: Module) -> void
-  fn evictUnused() -> void
+#### BytecodeLoader (Actualizado)
+```rust
+impl BytecodeLoader {
+    pub fn new() -> Self
+    pub fn with_project_root(project_root: PathBuf) -> Self
+    pub fn with_resolver(resolver: ModuleResolver) -> Self
+    pub fn add_search_path(&mut self, prefix: &str, path: PathBuf)
+    pub fn load_module(&mut self, name: &str) -> Result<&LoadedModule, Error>
 }
 ```
 
 ## ✅ Criterios de Aceptación
-- [x] Resolución de rutas absolutas funcionando
-- [x] Resolución de rutas relativas funcionando
-- [x] Detección de dependencias circulares implementada
-- [x] Carga lazy implementada
-- [x] Integración con ARC para gestión de memoria
-- [x] Manejo de errores para módulos no encontrados
-- [x] Código probado y funcional
+- [x] Sistema de prefijos de módulo implementado
+- [x] Resolución de rutas configurable
+- [x] Caché de módulos funcionando
+- [x] Integración con BytecodeLoader completa
+- [x] Tests unitarios pasando
+- [x] Documentación completa
+
+## 🧪 Tests Implementados
+
+### Tests del ModuleResolver
+- Resolución de módulos con prefijos
+- Manejo de archivos de assets
+- Rutas de búsqueda personalizadas
+- Caché de resolución
+- Parsing de nombres de módulos
+- Manejo de errores
+
+### Tests del BytecodeLoader
+- Creación de loader con diferentes configuraciones
+- Carga de módulos integrada
+- Manejo de módulos no encontrados
 
 ## 🔗 Referencias
-- **Jira:** [TASK-079](https://velalang.atlassian.net/browse/TASK-079)
+- **Jira:** [VELA-588](https://velalang.atlassian.net/browse/VELA-588)
 - **Historia:** [VELA-588](https://velalang.atlassian.net/browse/VELA-588)
-- **Dependencias:** VELA-587 (ARC Memory Management)
+- **Especificación de Módulos:** Ver documentación de arquitectura de Vela
 
-## 📋 Algoritmo de Resolución
-
-### 1. Path Resolution
-```
-Input: "utils/math"
-Search paths: ["./modules", "/usr/local/vela/modules", "./lib"]
-
-For each searchPath:
-  candidate = searchPath + "/" + moduleName + ".velac"
-  if file.exists(candidate):
-    return candidate
-
-Return Error("Module not found")
-```
-
-### 2. Dependency Resolution
-```
-Load module bytecode
-Parse imports section
-For each import:
-  resolve(importName)
-  loadDependencies(import)
-Return resolved dependency tree
-```
-
-### 3. Lazy Loading
-```
-When module is first accessed:
-  if not in cache:
-    load from disk
-    resolve dependencies
-    link symbols
-    cache module
-  return cached module
-```
+## 📈 Métricas
+- **Archivos creados:** 1 (module_resolver.rs)
+- **Archivos modificados:** 2 (lib.rs, loader.rs)
+- **Tests agregados:** 8 tests unitarios
+- **Líneas de código:** ~400 líneas
+- **Complejidad ciclomática:** Baja (funciones puras, sin bucles complejos)

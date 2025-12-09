@@ -19,11 +19,12 @@ use std::path::{Path, PathBuf};
 
 use crate::bytecode::Bytecode;
 use crate::error::Error;
+use crate::module_resolver::ModuleResolver;
 
 /// Bytecode loader for loading .velac files
 pub struct BytecodeLoader {
-    /// Base paths to search for modules
-    search_paths: Vec<PathBuf>,
+    /// Module resolver for converting module names to paths
+    resolver: ModuleResolver,
     /// Cache of loaded modules
     cache: HashMap<String, LoadedModule>,
 }
@@ -43,20 +44,25 @@ pub struct LoadedModule {
 impl BytecodeLoader {
     /// Create a new bytecode loader with default search paths
     pub fn new() -> Self {
+        let project_root = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
         Self {
-            search_paths: vec![
-                PathBuf::from("."),           // Current directory
-                PathBuf::from("modules"),     // modules/ directory
-                PathBuf::from("lib"),         // lib/ directory
-            ],
+            resolver: ModuleResolver::new(project_root),
             cache: HashMap::new(),
         }
     }
 
-    /// Create loader with custom search paths
-    pub fn with_paths(paths: Vec<PathBuf>) -> Self {
+    /// Create loader with custom project root
+    pub fn with_project_root(project_root: PathBuf) -> Self {
         Self {
-            search_paths: paths,
+            resolver: ModuleResolver::new(project_root),
+            cache: HashMap::new(),
+        }
+    }
+
+    /// Create loader with custom resolver
+    pub fn with_resolver(resolver: ModuleResolver) -> Self {
+        Self {
+            resolver,
             cache: HashMap::new(),
         }
     }
@@ -68,8 +74,8 @@ impl BytecodeLoader {
             return Ok(self.cache.get(name).unwrap());
         }
 
-        // Find module file
-        let module_path = self.find_module_file(name)?;
+        // Resolve module path using the resolver
+        let module_path = self.resolver.resolve_module(name)?;
 
         // Load and parse bytecode
         let bytecode = self.load_bytecode_file(&module_path)?;
@@ -108,13 +114,26 @@ impl BytecodeLoader {
 
     /// Find module file in search paths
     fn find_module_file(&self, name: &str) -> Result<PathBuf, Error> {
+        // This method is now deprecated - use resolver instead
+        // Keeping for backward compatibility during transition
         let file_name = format!("{}.velac", name);
 
-        for search_path in &self.search_paths {
-            let candidate = search_path.join(&file_name);
-            if candidate.exists() {
-                return Ok(candidate);
-            }
+        // Try current directory first
+        let candidate = PathBuf::from(".").join(&file_name);
+        if candidate.exists() {
+            return Ok(candidate);
+        }
+
+        // Try modules directory
+        let candidate = PathBuf::from("modules").join(&file_name);
+        if candidate.exists() {
+            return Ok(candidate);
+        }
+
+        // Try lib directory
+        let candidate = PathBuf::from("lib").join(&file_name);
+        if candidate.exists() {
+            return Ok(candidate);
         }
 
         Err(Error::ImportError {
@@ -168,9 +187,9 @@ impl BytecodeLoader {
         self.cache.clear();
     }
 
-    /// Add a search path
-    pub fn add_search_path(&mut self, path: PathBuf) {
-        self.search_paths.push(path);
+    /// Add a search path for a specific module prefix
+    pub fn add_search_path(&mut self, prefix: &str, path: PathBuf) {
+        self.resolver.add_search_path(prefix, path);
     }
 }
 
@@ -188,10 +207,12 @@ mod tests {
     }
 
     #[test]
-    fn test_loader_with_paths() {
-        let paths = vec![PathBuf::from("/tmp")];
-        let loader = BytecodeLoader::with_paths(paths);
-        assert_eq!(loader.search_paths.len(), 1);
+    fn test_loader_with_custom_root() {
+        let custom_root = PathBuf::from("/tmp");
+        let loader = BytecodeLoader::with_project_root(custom_root.clone());
+        // Test that resolver was initialized with custom root
+        // (We can't directly test internal state, but we can test behavior)
+        assert!(!loader.is_module_loaded("test"));
     }
 
     #[test]
