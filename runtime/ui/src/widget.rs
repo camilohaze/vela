@@ -6,6 +6,9 @@ use crate::key::Key;
 use crate::lifecycle::{Lifecycle, LifecycleState};
 use crate::layout::{BoxConstraints, Size, Offset, EdgeInsets, Alignment};
 
+// Re-export input widgets
+pub use crate::input_widgets::{Button, ButtonVariant, TextField, Checkbox};
+
 /// Core trait for all widgets in Vela UI
 pub trait Widget: std::fmt::Debug {
     /// Build the widget into a VDOM node
