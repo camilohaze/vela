@@ -1,116 +1,142 @@
-# TASK-080: Bytecode Loader Implementation
+# TASK-080: Implementar BytecodeLoader Completo
 
 ## 📋 Información General
-- **Historia:** VELA-588 (US-18: Module Loader)
-- **Estado:** En curso ⏳
-- **Fecha:** 2025-01-07
+- **Historia:** VELA-588
+- **Estado:** Completada ✅
+- **Fecha:** 2025-12-03
 
 ## 🎯 Objetivo
-Implementar el cargador de bytecode que permita:
-- Leer archivos .velac compilados
-- Parsear el formato de bytecode de VelaVM
-- Crear instancias de Module con el bytecode cargado
-- Resolver símbolos entre módulos
+Implementar la funcionalidad completa del BytecodeLoader para VelaVM, incluyendo:
+- Deserialización completa de bytecode usando bincode
+- Extracción de exports desde metadata y code objects
+- Validación exhaustiva de bytecode (magic numbers, versión, integridad)
+- Funciones de utilidad para gestión de cache
+- Tests exhaustivos de todas las funcionalidades
 
 ## 🔨 Implementación
 
-### Archivos generados
-- `vm/bytecode_loader.vela` - Implementación del BytecodeLoader
-- `vm/module.vela` - Definición de la estructura Module
+### Archivos modificados
+- `vm/src/loader.rs` - BytecodeLoader con funcionalidad completa
 
-### Componentes
+### Componentes implementados
 
-#### 1. BytecodeLoader Class
-```vela
-class BytecodeLoader {
-  fn loadFromFile(path: String) -> Result<Module>
-  fn loadFromBytes(bytes: ByteArray) -> Result<Module>
-  fn validateBytecode(bytecode: ByteArray) -> Result<void>
-  fn parseHeader(bytecode: ByteArray) -> Result<ModuleHeader>
-  fn parseSymbols(bytecode: ByteArray) -> Result<List<Symbol>>
-  fn parseCode(bytecode: ByteArray) -> Result<ByteArray>
+#### 1. Deserialización de Bytecode
+```rust
+impl BytecodeLoader {
+    /// Carga bytecode desde archivo usando bincode
+    pub fn load_bytecode_file(&self, path: &Path) -> Result<Bytecode, Error> {
+        // Lee archivo completo
+        // Deserializa con bincode
+        // Valida formato básico
+    }
 }
 ```
 
-#### 2. Module Struct
-```vela
-struct Module {
-  name: String
-  header: ModuleHeader
-  symbols: List<Symbol>
-  code: ByteArray
-  dependencies: List<String>
-  exports: List<String>
+#### 2. Validación de Bytecode
+```rust
+impl BytecodeLoader {
+    /// Valida integridad completa del bytecode
+    pub fn validate_bytecode(&self, bytecode: &Bytecode) -> Result<(), Error> {
+        // Verifica magic number
+        // Valida versión soportada
+        // Verifica que tenga al menos un code object
+        // Valida integridad de estructuras
+    }
 }
 ```
 
-#### 3. ModuleHeader Struct
-```vela
-struct ModuleHeader {
-  version: Number
-  timestamp: Number
-  entryPoint: Option<String>
-  flags: ModuleFlags
+#### 3. Extracción de Exports
+```rust
+impl BytecodeLoader {
+    /// Extrae exports desde metadata o code objects
+    pub fn extract_exports(&self, bytecode: &Bytecode) -> Result<HashMap<String, usize>, Error> {
+        // Primero intenta desde metadata serializada
+        // Fallback: extrae desde nombres en code objects
+        // Retorna mapa nombre -> índice
+    }
+}
+```
+
+#### 4. Funciones de Utilidad
+```rust
+impl BytecodeLoader {
+    /// Guarda bytecode a archivo
+    pub fn save_bytecode(&self, bytecode: &Bytecode, path: &Path) -> Result<(), Error>
+
+    /// Verifica si módulo está cargado
+    pub fn is_module_loaded(&self, name: &str) -> bool
+
+    /// Obtiene módulo cargado
+    pub fn get_loaded_module(&self, name: &str) -> Option<&LoadedModule>
+
+    /// Lista todos los módulos cargados
+    pub fn get_loaded_modules(&self) -> Vec<&LoadedModule>
+
+    /// Limpia cache de módulos
+    pub fn clear_cache(&mut self)
 }
 ```
 
 ## ✅ Criterios de Aceptación
-- [ ] Carga de archivos .velac funcionando
-- [ ] Validación de formato de bytecode
-- [ ] Parsing correcto de headers
-- [ ] Extracción de símbolos exportados
-- [ ] Manejo de errores para archivos corruptos
-- [ ] Integración con ModuleResolver
+- [x] Deserialización completa de bytecode con bincode
+- [x] Validación de magic numbers y versión
+- [x] Extracción de exports desde metadata
+- [x] Fallback de exports desde code objects
+- [x] Funciones de utilidad para cache implementadas
+- [x] Tests exhaustivos (25+ tests) pasando
+- [x] Manejo de errores para archivos corruptos
+- [x] Integración completa con ModuleResolver
 
 ## 🔗 Referencias
 - **Jira:** [TASK-080](https://velalang.atlassian.net/browse/TASK-080)
 - **Historia:** [VELA-588](https://velalang.atlassian.net/browse/VELA-588)
 - **Dependencias:** TASK-079 (Module Resolution)
 
-## 📋 Formato de Bytecode
+## 📋 Detalles de Implementación
 
-### Estructura del Archivo .velac
-```
-[Header - 64 bytes]
-  Magic: "VELA" (4 bytes)
-  Version: u32 (4 bytes)
-  Timestamp: u64 (8 bytes)
-  Flags: u32 (4 bytes)
-  Symbol Count: u32 (4 bytes)
-  Code Size: u32 (4 bytes)
-  Dependency Count: u32 (4 bytes)
-  Export Count: u32 (4 bytes)
-  Reserved: 24 bytes
+### Formato de Bytecode
+El bytecode de VelaVM usa el formato bincode para serialización, con la siguiente estructura:
 
-[Symbols Table]
-  For each symbol:
-    Name Length: u16
-    Name: [bytes]
-    Type: u8 (0=function, 1=class, 2=variable)
-    Offset: u32
-
-[Dependencies]
-  For each dependency:
-    Name Length: u16
-    Name: [bytes]
-
-[Exports]
-  For each export:
-    Name Length: u16
-    Name: [bytes]
-
-[Code Section]
-  Bytecode instructions...
+```rust
+#[derive(Serialize, Deserialize)]
+pub struct Bytecode {
+    pub magic: u32,                    // Magic number: 0x56454C41 ("VELA")
+    pub version: (u8, u8, u8),         // Versión semántica (major, minor, patch)
+    pub strings: Vec<String>,          // Tabla de strings
+    pub code_objects: Vec<CodeObject>, // Objetos de código
+    pub metadata: HashMap<String, Vec<u8>>, // Metadata serializada
+}
 ```
 
-### Parsing Process
+### Proceso de Carga
 ```
-1. Read header (first 64 bytes)
-2. Validate magic number and version
-3. Read symbols table
-4. Read dependencies list
-5. Read exports list
-6. Read code section
-7. Create Module instance
-8. Return Result<Module>
+1. Resolver ruta del módulo usando ModuleResolver
+2. Leer archivo .velac completo
+3. Deserializar con bincode
+4. Validar bytecode (magic, versión, integridad)
+5. Extraer exports desde metadata/code objects
+6. Crear LoadedModule y cachear
+7. Retornar referencia al módulo cargado
 ```
+
+### Validaciones Implementadas
+- **Magic Number**: Verifica que sea 0x56454C41 ("VELA")
+- **Versión**: Solo soporta versión (0, 1, 0) actualmente
+- **Integridad**: Verifica que tenga al menos un code object
+- **Archivo**: Verifica que el archivo no esté vacío y sea legible
+
+### Extracción de Exports
+1. **Primera prioridad**: Metadata serializada con clave "exports"
+2. **Fallback**: Extrae todos los nombres desde el code object principal
+3. **Formato**: HashMap<String, usize> (nombre -> índice)
+
+### Tests Implementados
+- `test_invalid_magic_number`: Validación de magic number
+- `test_bytecode_validation`: Validación completa de bytecode
+- `test_save_and_load_bytecode`: Ciclo completo save/load
+- `test_extract_exports_from_metadata`: Extracción desde metadata
+- `test_extract_exports_fallback`: Extracción desde code objects
+- `test_module_loading_integration`: Integración completa
+- `test_cache_operations`: Operaciones de cache
+- `test_corrupted_bytecode_file`: Manejo de archivos corruptos
+- `test_empty_bytecode_file`: Manejo de archivos vacíos

@@ -18,6 +18,14 @@ Implementar un sistema completo de carga de módulos para VelaVM que permita la 
 - Validación de magic numbers y formato básico
 - Cache de módulos cargados
 
+### TASK-080: Implementar BytecodeLoader Completo
+**Estado:** Completada ✅
+- Deserialización completa de bytecode usando bincode
+- Extracción de exports desde metadata y code objects
+- Validación completa de bytecode (magic, versión, integridad)
+- Funciones de utilidad para gestión de cache
+- Tests exhaustivos de todas las funcionalidades
+
 ### TASK-079: Implementar Sistema de Resolución de Módulos
 **Estado:** Completada ✅
 - Sistema de prefijos de módulo (module:, library:, package:, system:, extension:, assets:)
@@ -41,7 +49,9 @@ Implementar un sistema completo de carga de módulos para VelaVM que permita la 
 - **Propósito**: Cargar y gestionar módulos de bytecode
 - **Características**:
   - Carga lazy de módulos
-  - Validación de bytecode
+  - Validación completa de bytecode
+  - Deserialización con bincode
+  - Extracción de exports
   - Cache de módulos cargados
   - Integración con ModuleResolver
 
@@ -60,23 +70,35 @@ impl ModuleResolver {
 pub struct BytecodeLoader { /* ... */ }
 impl BytecodeLoader {
     pub fn new() -> Self
+    pub fn with_project_root(root: PathBuf) -> Self
     pub fn load_module(&mut self, name: &str) -> Result<&LoadedModule, Error>
-    pub fn add_search_path(&mut self, prefix: &str, path: PathBuf)
+    pub fn load_bytecode_file(&self, path: &Path) -> Result<Bytecode, Error>
+    pub fn save_bytecode(&self, bytecode: &Bytecode, path: &Path) -> Result<(), Error>
+    pub fn validate_bytecode(&self, bytecode: &Bytecode) -> Result<(), Error>
+    pub fn extract_exports(&self, bytecode: &Bytecode) -> Result<HashMap<String, usize>, Error>
+    pub fn is_module_loaded(&self, name: &str) -> bool
+    pub fn get_loaded_module(&self, name: &str) -> Option<&LoadedModule>
+    pub fn get_loaded_modules(&self) -> Vec<&LoadedModule>
+    pub fn clear_cache(&mut self)
 }
 ```
 
 ## 📊 Métricas
-- **Subtasks completadas:** 2/2
+- **Subtasks completadas:** 3/3
 - **Archivos creados:** 1 (module_resolver.rs)
 - **Archivos modificados:** 2 (lib.rs, loader.rs)
-- **Tests unitarios:** 15+ tests pasando
-- **Líneas de código:** ~500 líneas
-- **Complejidad:** Baja (funciones puras, buen manejo de errores)
+- **Tests unitarios:** 25+ tests pasando
+- **Líneas de código:** ~700 líneas
+- **Complejidad:** Media (serialización, validación, manejo de errores)
 
 ## ✅ Definición de Hecho
 - [x] TASK-081 completada (BytecodeLoader base)
+- [x] TASK-080 completada (BytecodeLoader completo con deserialización)
 - [x] TASK-079 completada (ModuleResolver)
 - [x] Sistema de prefijos funcionando
+- [x] Deserialización de bytecode completa
+- [x] Extracción de exports implementada
+- [x] Validación de bytecode exhaustiva
 - [x] Integración entre componentes completa
 - [x] Tests unitarios pasando
 - [x] Documentación completa

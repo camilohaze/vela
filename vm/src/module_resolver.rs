@@ -19,7 +19,7 @@ and integrates with the bytecode loader for module loading.
 */
 
 use std::collections::HashMap;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use crate::error::Error;
 
 /// Module resolver for converting prefixed module names to file paths
