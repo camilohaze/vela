@@ -17,9 +17,13 @@ pub use di as di;
 
 // Modules
 pub mod store;
+pub mod action;
+pub mod reducer;
 
 // Re-export common types
 pub use store::Store;
+pub use action::Action;
+pub use reducer::{Reducer, ReducerBuilder, create_reducer, combine_reducers};
 
 /// Resultado común para operaciones del runtime
 pub type RuntimeResult<T> = Result<T, RuntimeError>;
