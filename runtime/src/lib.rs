@@ -15,6 +15,12 @@ pub use http as http;
 pub use events as events;
 pub use di as di;
 
+// Modules
+pub mod store;
+
+// Re-export common types
+pub use store::Store;
+
 /// Resultado común para operaciones del runtime
 pub type RuntimeResult<T> = Result<T, RuntimeError>;
 
