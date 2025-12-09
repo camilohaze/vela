@@ -14,16 +14,15 @@ pub use reactive as reactive;
 pub use http as http;
 pub use events as events;
 pub use di as di;
+pub use state_management as state_management;
 
 // Modules
-pub mod store;
-pub mod action;
-pub mod reducer;
+// pub mod store;  // Movido a packages/state-management
+// pub mod action; // Movido a packages/state-management
+// pub mod reducer; // Movido a packages/state-management
 
 // Re-export common types
-pub use store::Store;
-pub use action::Action;
-pub use reducer::{Reducer, ReducerBuilder, create_reducer, combine_reducers};
+pub use state_management::{Store, Action, Reducer, ReducerBuilder, create_reducer, combine_reducers};
 
 /// Resultado común para operaciones del runtime
 pub type RuntimeResult<T> = Result<T, RuntimeError>;

@@ -12,6 +12,7 @@ http = { path = "../packages/http" }
 reactive = { path = "../packages/reactive" }
 events = { path = "../packages/events" }
 di = { path = "../packages/di" }
+state-management = { path = "../packages/state-management", package = "vela-state-management" }
 
 # Dependencias restantes
 tokio = { version = "1.0", features = ["full"] }
