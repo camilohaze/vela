@@ -1,6 +1,6 @@
 //! Virtual DOM diffing algorithm
 
-use crate::vdom::{VDomNode, VDomTree, NodeType};
+use crate::vdom::{VDomNode, VDomTree, VDomPath, NodeType};
 use crate::key::Key;
 use std::collections::HashMap;
 
@@ -15,37 +15,37 @@ pub struct DiffResult {
 pub enum Patch {
     /// Insert a new node
     Insert {
-        parent_path: Vec<usize>,
+        parent_path: VDomPath,
         index: usize,
         node: VDomNode,
     },
     /// Remove a node
     Remove {
-        path: Vec<usize>,
+        path: VDomPath,
     },
     /// Replace a node
     Replace {
-        path: Vec<usize>,
+        path: VDomPath,
         new_node: VDomNode,
     },
     /// Update text content
     UpdateText {
-        path: Vec<usize>,
+        path: VDomPath,
         new_text: String,
     },
     /// Update attributes
     UpdateAttributes {
-        path: Vec<usize>,
+        path: VDomPath,
         attributes: HashMap<String, Option<String>>, // None = remove, Some = set
     },
     /// Update properties
     UpdateProperties {
-        path: Vec<usize>,
+        path: VDomPath,
         properties: HashMap<String, Option<serde_json::Value>>,
     },
     /// Update event listeners
     UpdateEvents {
-        path: Vec<usize>,
+        path: VDomPath,
         events: HashMap<String, Option<String>>,
     },
 }
@@ -53,14 +53,15 @@ pub enum Patch {
 /// Diff two VDOM trees
 pub fn diff_trees(old_tree: &VDomTree, new_tree: &VDomTree) -> Vec<Patch> {
     let mut patches = Vec::new();
-    diff_nodes(&old_tree.root, &new_tree.root, &mut Vec::new(), &mut patches);
+    diff_nodes(&old_tree.root, &new_tree.root, VDomPath::root(), &mut patches);
     patches
 }
 
 /// Diff two VDOM nodes recursively
-fn diff_nodes(old_node: &VDomNode, new_node: &VDomNode, path: &mut Vec<usize>, patches: &mut Vec<Patch>) {
-    // If nodes are identical, no patches needed
-    if nodes_equal(old_node, new_node) {
+fn diff_nodes(old_node: &VDomNode, new_node: &VDomNode, path: VDomPath, patches: &mut Vec<Patch>) {
+    // For Fragment nodes, always diff children since they have no content of their own
+    if old_node.node_type == NodeType::Fragment && new_node.node_type == NodeType::Fragment {
+        diff_children(old_node, new_node, path, patches);
         return;
     }
 
@@ -116,7 +117,7 @@ fn diff_nodes(old_node: &VDomNode, new_node: &VDomNode, path: &mut Vec<usize>, p
             }
 
             // Diff children using key-based reconciliation
-            diff_children(old_node, new_node, path, patches);
+            diff_children(old_node, new_node, path.clone(), patches);
         }
         _ => {
             // For other cases, replace the node
@@ -126,18 +127,6 @@ fn diff_nodes(old_node: &VDomNode, new_node: &VDomNode, path: &mut Vec<usize>, p
             });
         }
     }
-}
-
-/// Check if two nodes are equal (shallow comparison)
-fn nodes_equal(a: &VDomNode, b: &VDomNode) -> bool {
-    a.node_type == b.node_type &&
-    a.tag_name == b.tag_name &&
-    a.text_content == b.text_content &&
-    a.key == b.key &&
-    a.attributes == b.attributes &&
-    a.properties == b.properties &&
-    a.event_listeners == b.event_listeners &&
-    a.children.len() == b.children.len()
 }
 
 /// Diff attributes between two nodes
@@ -222,7 +211,7 @@ fn diff_events(old_events: &HashMap<String, String>, new_events: &HashMap<String
 }
 
 /// Diff children using key-based reconciliation
-fn diff_children(old_node: &VDomNode, new_node: &VDomNode, path: &mut Vec<usize>, patches: &mut Vec<Patch>) {
+fn diff_children(old_node: &VDomNode, new_node: &VDomNode, path: VDomPath, patches: &mut Vec<Patch>) {
     let old_children = &old_node.children;
     let new_children = &new_node.children;
 
@@ -251,9 +240,8 @@ fn diff_children(old_node: &VDomNode, new_node: &VDomNode, path: &mut Vec<usize>
                 }
 
                 // Diff the matched children
-                path.push(result_children.len());
-                diff_nodes(old_child, new_child, path, patches);
-                path.pop();
+                let child_path = path.child(result_children.len());
+                diff_nodes(old_child, new_child, child_path, patches);
 
                 result_children.push(old_idx);
             } else {
@@ -272,9 +260,8 @@ fn diff_children(old_node: &VDomNode, new_node: &VDomNode, path: &mut Vec<usize>
 
                 // Only diff if old child is also non-keyed
                 if old_child.key.is_none() {
-                    path.push(result_children.len());
-                    diff_nodes(old_child, new_child, path, patches);
-                    path.pop();
+                    let child_path = path.child(result_children.len());
+                    diff_nodes(old_child, new_child, child_path, patches);
                     result_children.push(old_index);
                     old_index += 1;
                 } else {
@@ -304,11 +291,9 @@ fn diff_children(old_node: &VDomNode, new_node: &VDomNode, path: &mut Vec<usize>
     while old_index < old_children.len() {
         let old_child = &old_children[old_index];
         if old_child.key.is_none() || !new_key_map.contains_key(&old_child.key.as_ref().unwrap()) {
-            let remove_path = path.clone();
             // Find the index in result_children
             if let Some(pos) = result_children.iter().position(|&idx| idx == old_index) {
-                let mut remove_path = path.clone();
-                remove_path.push(pos);
+                let remove_path = path.child(pos);
                 patches.push(Patch::Remove { path: remove_path });
             }
         }
@@ -331,7 +316,6 @@ fn create_key_map(children: &[VDomNode]) -> HashMap<&Key, usize> {
 mod tests {
     use super::*;
     use crate::vdom::VDomTree;
-    use crate::widget::TestText;
 
     #[test]
     fn test_diff_identical_nodes() {
@@ -339,8 +323,7 @@ mod tests {
         let node2 = VDomNode::text("Hello");
 
         let mut patches = Vec::new();
-        let mut path = Vec::new();
-        diff_nodes(&node1, &node2, &mut path, &mut patches);
+        diff_nodes(&node1, &node2, VDomPath::root(), &mut patches);
 
         assert!(patches.is_empty());
     }
@@ -351,8 +334,7 @@ mod tests {
         let new_node = VDomNode::text("World");
 
         let mut patches = Vec::new();
-        let mut path = Vec::new();
-        diff_nodes(&old_node, &new_node, &mut path, &mut patches);
+        diff_nodes(&old_node, &new_node, VDomPath::root(), &mut patches);
 
         assert_eq!(patches.len(), 1);
         match &patches[0] {
@@ -374,15 +356,48 @@ mod tests {
     }
 
     #[test]
-    fn test_diff_trees() {
-        let old_tree = VDomTree::new(TestText::new("Old"));
-        let new_tree = VDomTree::new(TestText::new("New"));
+    fn test_diff_fragment_support() {
+        let old_node = VDomNode::fragment()
+            .child(VDomNode::text("old"));
+        let new_node = VDomNode::fragment()
+            .child(VDomNode::text("new"));
 
-        let patches = diff_trees(&old_tree, &new_tree);
+        let old_tree = VDomTree::new_from_node(old_node);
+        let new_tree = VDomTree::new_from_node(new_node);
 
-        assert_eq!(patches.len(), 1);
-        match &patches[0] {
-            Patch::UpdateText { new_text, .. } => assert_eq!(new_text, "New"),
+        let diff = diff_trees(&old_tree, &new_tree);
+        assert!(!diff.is_empty());
+        assert_eq!(diff.len(), 1);
+
+        match &diff[0] {
+            Patch::UpdateText { path, new_text } => {
+                assert_eq!(path.0, vec![0]);
+                assert_eq!(new_text, "new");
+            }
+            _ => panic!("Expected UpdateText patch"),
+        }
+    }
+
+    #[test]
+    fn test_diff_with_vdom_path() {
+        let old_node = VDomNode::element("div")
+            .child(VDomNode::text("old"));
+        let new_node = VDomNode::element("div")
+            .child(VDomNode::text("new"));
+
+        let old_tree = VDomTree::new_from_node(old_node);
+        let new_tree = VDomTree::new_from_node(new_node);
+
+        let diff = diff_trees(&old_tree, &new_tree);
+        assert!(!diff.is_empty());
+        assert_eq!(diff.len(), 1);
+
+        // Verify the patch uses VDomPath
+        match &diff[0] {
+            Patch::UpdateText { path, new_text } => {
+                assert_eq!(path.0, vec![0]);
+                assert_eq!(new_text, "new");
+            }
             _ => panic!("Expected UpdateText patch"),
         }
     }

@@ -1,6 +1,6 @@
 //! DOM patching system
 
-use crate::vdom::VDomNode;
+use crate::vdom::{VDomNode, VDomPath};
 use crate::diff::Patch;
 use std::collections::HashMap;
 
@@ -63,8 +63,8 @@ impl DomNode {
     }
 
     /// Apply a patch to this DOM node
-    pub fn apply_patch(&mut self, patch: &Patch, path: &[usize]) -> Result<(), Box<dyn std::error::Error>> {
-        if path.is_empty() {
+    pub fn apply_patch(&mut self, patch: &Patch, path: &VDomPath) -> Result<(), Box<dyn std::error::Error>> {
+        if path.0.is_empty() {
             // Apply patch to this node
             match patch {
                 Patch::UpdateText { new_text, .. } => {
@@ -112,12 +112,12 @@ impl DomNode {
             }
         } else {
             // Navigate to child
-            let child_index = path[0];
+            let child_index = path.0[0];
             if child_index >= self.children.len() {
                 return Err(format!("Child index {} out of bounds", child_index).into());
             }
 
-            self.children[child_index].apply_patch(patch, &path[1..])?;
+            self.children[child_index].apply_patch(patch, &VDomPath(path.0[1..].to_vec()))?;
         }
 
         Ok(())
@@ -179,20 +179,20 @@ impl DomTree {
                     })?;
                 }
                 Patch::Remove { path } => {
-                    if path.len() >= 2 {
-                        let parent_path = &path[..path.len() - 1];
-                        let child_index = *path.last().unwrap();
-                        self.apply_patch_to_path(parent_path, |parent| {
+                    if path.0.len() >= 2 {
+                        let parent_path = VDomPath(path.0[..path.0.len() - 1].to_vec());
+                        let child_index = *path.0.last().unwrap();
+                        self.apply_patch_to_path(&parent_path, |parent| {
                             parent.remove_child(child_index)
                         })?;
                     }
                 }
                 Patch::Replace { path, new_node } => {
-                    if path.len() >= 2 {
-                        let parent_path = &path[..path.len() - 1];
-                        let child_index = *path.last().unwrap();
+                    if path.0.len() >= 2 {
+                        let parent_path = VDomPath(path.0[..path.0.len() - 1].to_vec());
+                        let child_index = *path.0.last().unwrap();
                         let dom_node = DomNode::from_vdom(new_node);
-                        self.apply_patch_to_path(parent_path, |parent| {
+                        self.apply_patch_to_path(&parent_path, |parent| {
                             parent.replace_child(child_index, dom_node)
                         })?;
                     }
@@ -216,13 +216,13 @@ impl DomTree {
     }
 
     /// Apply a patch function to a node at the given path
-    fn apply_patch_to_path<F>(&mut self, path: &[usize], f: F) -> Result<(), Box<dyn std::error::Error>>
+    fn apply_patch_to_path<F>(&mut self, path: &VDomPath, f: F) -> Result<(), Box<dyn std::error::Error>>
     where
         F: FnOnce(&mut DomNode) -> Result<(), Box<dyn std::error::Error>>,
     {
         let mut current = &mut self.root;
 
-        for &index in path {
+        for &index in &path.0 {
             if index >= current.children.len() {
                 return Err(format!("Path index {} out of bounds", index).into());
             }
@@ -261,11 +261,11 @@ mod tests {
     fn test_apply_text_patch() {
         let mut dom = DomNode::from_vdom(&VDomNode::text("Old"));
         let patch = Patch::UpdateText {
-            path: vec![],
+            path: VDomPath::root(),
             new_text: "New".to_string(),
         };
 
-        dom.apply_patch(&patch, &[]).unwrap();
+        dom.apply_patch(&patch, &VDomPath::root()).unwrap();
 
         assert_eq!(dom.text_content, Some("New".to_string()));
     }
@@ -274,11 +274,11 @@ mod tests {
     fn test_apply_attribute_patch() {
         let mut dom = DomNode::from_vdom(&VDomNode::element("div"));
         let patch = Patch::UpdateAttributes {
-            path: vec![],
+            path: VDomPath::root(),
             attributes: [("class".to_string(), Some("test".to_string()))].into(),
         };
 
-        dom.apply_patch(&patch, &[]).unwrap();
+        dom.apply_patch(&patch, &VDomPath::root()).unwrap();
 
         assert_eq!(dom.attributes.get("class"), Some(&"test".to_string()));
     }
@@ -289,7 +289,7 @@ mod tests {
         let mut dom_tree = DomTree::from_vdom(&vdom_tree);
 
         let patches = vec![Patch::UpdateText {
-            path: vec![],
+            path: VDomPath::root(),
             new_text: "New".to_string(),
         }];
 
