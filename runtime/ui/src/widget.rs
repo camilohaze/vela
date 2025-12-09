@@ -9,6 +9,9 @@ use crate::layout::{BoxConstraints, Size, Offset, EdgeInsets, Alignment};
 // Re-export input widgets
 pub use crate::input_widgets::{Button, ButtonVariant, TextField, Checkbox};
 
+// Re-export display widgets
+pub use crate::display_widgets::{Text, TextDisplay, Image, ImageFit, Icon};
+
 /// Core trait for all widgets in Vela UI
 pub trait Widget: std::fmt::Debug {
     /// Build the widget into a VDOM node
