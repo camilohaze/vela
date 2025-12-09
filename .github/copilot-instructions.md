@@ -566,6 +566,14 @@ vela/
 │   └── workflows/
 │       └── desarrollo-workflow.yml
 │
+├── core/                         # Tipos base, AST, IR (Rust)
+├── compiler/                     # Lexer, parser, semantic analyzer, codegen (Rust)
+├── vm/                           # Máquina virtual (Rust + Vela)
+├── runtime/                      # Runtime system: reactive, concurrency, GC (Rust)
+├── stdlib/                       # Librería estándar (Rust + Vela)
+├── tooling/                      # CLI, LSP, debugger, devtools (Rust)
+├── packages/                     # Paquetes adicionales: i18n, logging, validation (Rust)
+│
 ├── docs/
 │   ├── architecture/              # ADRs aquí
 │   ├── features/                  # Docs por Historia
@@ -576,15 +584,37 @@ vela/
 │   ├── api/                       # Specs de API
 │   └── design/                    # Diseños
 │
-├── src/                           # Código fuente aquí
-├── tests/
-│   ├── unit/                      # Tests unitarios aquí
-│   └── integration/               # Tests integración aquí
+├── examples/                      # TODOS los ejemplos van aquí
+│   ├── ui/                        # Ejemplos de UI en Vela
+│   ├── hello-world/               # Ejemplo básico
+│   └── ...                        # Otros ejemplos
+│
+├── tests/                         # Tests del proyecto
+│   ├── unit/                      # Tests unitarios
+│   └── integration/               # Tests integración
 │
 ├── README.md
 ├── CHANGELOG.md
+├── Cargo.toml                     # Workspace configuration
 └── .gitignore
 ```
+
+### 📋 REGLAS DE ORGANIZACIÓN
+
+#### ✅ EJEMPLOS: UNA CARPETA ÚNICA
+- **NUNCA** crear carpetas individuales por ejemplo en la raíz (ej: `hello-world/`, `todo-app/`)
+- **SIEMPRE** poner todos los ejemplos en `examples/`
+- **Ejemplo correcto**: `examples/hello-world/`, `examples/todo-app/`
+- **Por qué**: Mantiene la raíz limpia y organizada
+
+#### ✅ FRAMEWORKS Y LIBRERÍAS
+- **UI Framework**: Implementado en `runtime/ui/` (Rust) - NO en Vela
+- **Stdlib**: `stdlib/` (Rust + bindings Vela)
+- **Módulos**: `modules/` (sin prefijo "vela_")
+
+#### ✅ CÓDIGO POR LENGUAJE
+- **Rust**: Core system (core/, compiler/, vm/, runtime/, tooling/, packages/)
+- **Vela**: Solo ejemplos, tests, stdlib bindings
 
 ---
 

@@ -115,28 +115,50 @@ cd ..
 
 ```
 vela/
-├── compiler/           # Vela compiler
-│   ├── lexer/          # Lexical analyzer
-│   ├── parser/         # Syntax parser
-│   ├── semantic/       # Semantic analyzer
-│   └── codegen/        # Code generation
-├── vm/                 # VelaVM (bytecode interpreter)
-├── stdlib/             # Standard library
-├── cli/                # CLI tool
-├── lsp/                # Language Server Protocol
-├── devtools/           # DevTools (UI + Agent)
+├── core/               # Core types, AST, IR (Rust)
+├── compiler/           # Compiler: lexer, parser, semantic analyzer, codegen (Rust)
+├── vm/                 # Virtual machine (Rust + Vela bytecode)
+├── runtime/            # Runtime system: reactive, concurrency, GC (Rust)
+├── stdlib/             # Standard library (Rust + Vela bindings)
+├── tooling/            # CLI, LSP, debugger, devtools (Rust)
+├── packages/           # Additional packages: i18n, logging, validation (Rust)
+│
 ├── docs/               # Documentation
 │   ├── architecture/   # ADRs
-│   ├── specifications/ # Formal specs
-│   └── tooling/        # Tooling docs
+│   ├── features/       # Feature docs by story
+│   ├── api/            # API specifications
+│   └── design/         # Design diagrams
+│
+├── examples/           # ALL examples go here (NEVER individual folders in root)
+│   ├── ui/             # UI examples in Vela
+│   ├── hello-world/    # Basic example
+│   └── ...             # Other examples
+│
 ├── tests/              # Tests
 │   ├── unit/           # Unit tests
-│   ├── integration/    # Integration tests
-│   └── e2e/            # End-to-end tests
-├── .github/            # GitHub workflows
-├── Cargo.toml          # Workspace config
+│   └── integration/    # Integration tests
+│
+├── .github/            # GitHub workflows and templates
+├── Cargo.toml          # Workspace configuration
 └── README.md           # Project overview
 ```
+
+### 📋 Organization Rules
+
+#### ✅ Examples: Single Folder
+- **NEVER** create individual example folders in root (e.g., `hello-world/`, `todo-app/`)
+- **ALWAYS** put all examples in `examples/`
+- **Correct**: `examples/hello-world/`, `examples/todo-app/`
+- **Why**: Keeps root clean and organized
+
+#### ✅ Frameworks and Libraries
+- **UI Framework**: Implemented in `runtime/ui/` (Rust) - NOT in Vela
+- **Stdlib**: `stdlib/` (Rust + Vela bindings)
+- **Modules**: `modules/` (no "vela_" prefix)
+
+#### ✅ Code by Language
+- **Rust**: Core system (core/, compiler/, vm/, runtime/, tooling/, packages/)
+- **Vela**: Only examples, tests, stdlib bindings
 
 ---
 
