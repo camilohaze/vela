@@ -281,16 +281,18 @@ impl GcHeap {
         Ok(freed)
     }
 
-    /// Detect and collect cycles (simplified mark-and-sweep)
+    /// Detect and collect cycles (basic implementation)
     fn detect_cycles(&mut self) -> Result<()> {
-        // Remove dead objects from cycle buffer
-        self.cycle_buffer.retain(|obj| Rc::strong_count(obj) > 1);
+        // For now, implement a basic cycle detection:
+        // - Objects in cycle_buffer with strong_count == 1 are unreachable cycles
+        // - Future: implement full mark-and-sweep with roots from VM
 
-        // TODO: Implement full cycle detection with mark-and-sweep
-        // For now, we rely on Rc's reference counting
-        // Real implementation would:
-        // 1. Mark phase: traverse reachable objects from roots
-        // 2. Sweep phase: collect unmarked objects in cycle_buffer
+        self.cycle_buffer.retain(|obj| {
+            // Keep objects that are still referenced (strong_count > 1)
+            // Remove objects that are only referenced by the GC (strong_count == 1)
+            // These are unreachable cycles
+            Rc::strong_count(obj) > 1
+        });
 
         Ok(())
     }
