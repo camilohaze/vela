@@ -21,6 +21,7 @@ pub mod input_widgets;
 pub mod display_widgets;
 pub mod text_style;
 pub mod style;
+pub mod navigation;
 
 // Reactive modules (enabled with "reactive" feature)
 #[cfg(feature = "reactive")]
@@ -52,6 +53,9 @@ pub use style::{
     theme_context::{ThemeProvider, ThemeConsumer, get_current_theme, use_theme, ThemedWidget},
     resolver::{StyleResolver, ContextualStyleResolver},
     widget_integration::{Stylable, Themed, StyleAwareWidget, StyleContext}
+};
+pub use navigation::{
+    Router, Route, RouteMatch, RouteMatcher, NavigationContext
 };
 #[cfg(feature = "reactive")]
 pub use reactive_widgets::{
