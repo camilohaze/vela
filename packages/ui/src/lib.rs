@@ -23,6 +23,7 @@ pub mod text_style;
 pub mod style;
 pub mod navigation;
 pub mod connect;
+pub mod select;
 
 // Reactive modules (enabled with "reactive" feature)
 #[cfg(feature = "reactive")]
@@ -70,6 +71,9 @@ pub use widget_invalidator::{
 };
 pub use connect::{
     ConnectedWidget
+};
+pub use select::{
+    SelectableWidget
 };
 
 /// Initialize the UI framework
