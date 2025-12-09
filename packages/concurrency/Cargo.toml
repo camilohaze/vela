@@ -1,0 +1,22 @@
+[package]
+name = "concurrency"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.75.0"
+authors = ["Vela Contributors"]
+license = "MIT OR Apache-2.0"
+description = "Concurrency primitives for Vela including actors, channels, and worker pools"
+repository = "https://github.com/velalang/vela"
+homepage = "https://velalang.github.io/vela/"
+documentation = "https://docs.rs/vela-concurrency"
+
+[dependencies]
+tokio = { version = "1.0", features = ["full"] }
+rayon = "1.7"
+parking_lot = "0.12"
+thiserror = "1.0"
+tracing = "0.1"
+futures = "0.3"
+
+[dev-dependencies]
+criterion = "0.5"

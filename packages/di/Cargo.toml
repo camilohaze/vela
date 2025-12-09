@@ -1,0 +1,12 @@
+[package]
+name = "di"
+version = "0.1.0"
+edition = "2021"
+description = "Dependency injection container for Vela runtime"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/camilohaze/vela"
+keywords = ["di", "dependency-injection", "ioc", "container"]
+categories = ["rust-patterns", "development-tools"]
+
+[dependencies]
+thiserror = "1.0"

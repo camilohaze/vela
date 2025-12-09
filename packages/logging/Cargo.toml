@@ -11,7 +11,7 @@ documentation.workspace = true
 
 [lib]
 name = "vela_logging"
-path = "mod.rs"
+path = "src/mod.rs"
 
 [dependencies]
 anyhow.workspace = true

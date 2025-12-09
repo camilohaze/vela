@@ -3,7 +3,7 @@
 //! Este módulo contiene los validadores básicos que se pueden usar
 //! tanto de manera declarativa (con decoradores) como programática.
 
-use crate::validation::error::{ValidationError, ValidationResult};
+use crate::error::{ValidationError, ValidationResult};
 use regex::Regex;
 use std::sync::LazyLock;
 
@@ -106,7 +106,7 @@ pub fn regex(value: &Option<serde_json::Value>, field: &str, pattern: &str) -> V
             None => ValidationResult::valid(),
         },
         Err(_) => ValidationResult::invalid_one(
-            ValidationError::custom(field, "Invalid regex pattern", pattern.into())
+            ValidationError::custom(field, "Invalid regex pattern", serde_json::Value::String(pattern.to_string()))
         ),
     }
 }
@@ -123,12 +123,12 @@ pub fn url(value: &Option<serde_json::Value>, field: &str) -> ValidationResult {
                 ValidationResult::valid()
             } else {
                 ValidationResult::invalid_one(
-                    ValidationError::custom(field, "Invalid URL format", s.clone().into())
+                    ValidationError::custom(field, "Invalid URL format", serde_json::Value::String(s.clone()))
                 )
             }
         }
         Some(_) => ValidationResult::invalid_one(
-            ValidationError::custom(field, "URL must be a non-empty string", "non-string value".into())
+            ValidationError::custom(field, "URL must be a non-empty string", serde_json::Value::String("non-string value".to_string()))
         ),
         None => ValidationResult::valid(),
     }
@@ -142,7 +142,7 @@ where
     match validator(value) {
         Ok(()) => ValidationResult::valid(),
         Err(message) => ValidationResult::invalid_one(
-            ValidationError::custom(field, message, value.cloned().unwrap_or(serde_json::Value::Null))
+            ValidationError::custom(field, message, value.as_ref().cloned().unwrap_or(serde_json::Value::Null))
         ),
     }
 }

@@ -7,7 +7,7 @@
 use std::collections::HashMap;
 
 /// Representa un error de validación individual
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct ValidationError {
     /// Campo que falló la validación
     pub field: String,
@@ -55,7 +55,7 @@ impl ValidationError {
     }
 
     /// Crea un error para email inválido
-    pub fn invalid_email(field: impl Into<String>, value: impl Into<String>) -> Self {
+    pub fn invalid_email(field: impl Into<String>, value: impl Into<serde_json::Value>) -> Self {
         Self::new(
             field,
             "EMAIL",
@@ -85,7 +85,7 @@ impl ValidationError {
     }
 
     /// Crea un error para longitud fuera de rango
-    pub fn length_violation(field: impl Into<String>, value: impl Into<String>, min: Option<usize>, max: Option<usize>) -> Self {
+    pub fn length_violation(field: impl Into<String>, value: impl Into<serde_json::Value>, min: Option<usize>, max: Option<usize>) -> Self {
         let mut error = Self::new(
             field,
             "LENGTH",
@@ -104,7 +104,7 @@ impl ValidationError {
     }
 
     /// Crea un error para patrón regex no cumplido
-    pub fn regex_violation(field: impl Into<String>, value: impl Into<String>, pattern: impl Into<String>) -> Self {
+    pub fn regex_violation(field: impl Into<String>, value: impl Into<serde_json::Value>, pattern: impl Into<serde_json::Value>) -> Self {
         Self::new(
             field,
             "REGEX",

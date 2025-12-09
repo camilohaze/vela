@@ -4,9 +4,10 @@
 //! con DTOs (Data Transfer Objects) y controllers HTTP, permitiendo
 //! validación automática de requests y responses.
 
-use crate::validation::error::ValidationResult;
-use crate::validation::errors::ValidationErrors;
-use crate::validation::schema::Schema;
+use crate::error::ValidationResult;
+use crate::errors::ValidationErrors;
+use crate::schema::Schema;
+use crate::schema::types::*;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -34,18 +35,16 @@ pub trait ValidatableWithSchema {
         let schema = Self::validation_schema();
         let value = serde_json::to_value(self)
             .map_err(|_| ValidationResult::invalid_one(
-                crate::validation::error::ValidationError::custom(
+                crate::error::ValidationError::custom(
                     "serialization",
                     "Failed to serialize DTO for validation",
                     serde_json::Value::Null
                 )
-            ))
-            .unwrap_or_else(|e| e);
+            ));
 
-        if value.is_valid {
-            schema.validate(&serde_json::to_value(self).unwrap_or(serde_json::Value::Null))
-        } else {
-            value
+        match value {
+            Ok(json_value) => schema.validate(&json_value),
+            Err(validation_error) => validation_error,
         }
     }
 }
@@ -65,38 +64,41 @@ impl Validatable for CreateUserDTO {
 
         // Validar nombre
         if self.name.trim().is_empty() {
-            errors.push(crate::validation::error::ValidationError::required(
-                "name", serde_json::json!(self.name)
-            ));
+            errors.push(crate::error::ValidationError::required("name"));
         } else if self.name.len() < 2 || self.name.len() > 50 {
-            errors.push(crate::validation::error::ValidationError::length(
-                "name", serde_json::json!(self.name), Some(2), Some(50)
+            errors.push(crate::error::ValidationError::length_violation(
+                "name", self.name.clone(), Some(2), Some(50)
             ));
         }
 
         // Validar email
         if self.email.trim().is_empty() {
-            errors.push(crate::validation::error::ValidationError::required(
-                "email", serde_json::json!(self.email)
-            ));
-        } else if !crate::validation::validators::is_valid_email(&self.email) {
-            errors.push(crate::validation::error::ValidationError::email(
-                "email", serde_json::json!(self.email)
-            ));
+            errors.push(crate::error::ValidationError::required("email"));
+        } else {
+            let email_result = crate::validators::email(&Some(serde_json::json!(self.email)), "email");
+            if !email_result.is_valid {
+                if let Some(error) = email_result.first_error() {
+                    errors.push(error.clone());
+                }
+            }
         }
 
         // Validar edad
         if let Some(age) = self.age {
-            if age < 18 || age > 120 {
-                errors.push(crate::validation::error::ValidationError::min_max(
-                    "age", serde_json::json!(age), Some(18), Some(120)
+            if age < 18 {
+                errors.push(crate::error::ValidationError::min_violation(
+                    "age", serde_json::json!(age), serde_json::json!(18)
+                ));
+            } else if age > 120 {
+                errors.push(crate::error::ValidationError::max_violation(
+                    "age", serde_json::json!(age), serde_json::json!(120)
                 ));
             }
         }
 
         // Validar password
         if self.password.len() < 8 {
-            errors.push(crate::validation::error::ValidationError::custom(
+            errors.push(crate::error::ValidationError::custom(
                 "password",
                 "Password must be at least 8 characters long",
                 serde_json::json!(self.password),
@@ -113,7 +115,7 @@ impl Validatable for CreateUserDTO {
 
 impl ValidatableWithSchema for CreateUserDTO {
     fn validation_schema() -> Schema {
-        use crate::validation::schema::types::*;
+        use crate::schema::types::*;
 
         Schema::new()
             .field("name", string().required().length(Some(2), Some(50)))
@@ -138,12 +140,10 @@ impl Validatable for UpdateUserDTO {
         // Validar nombre si está presente
         if let Some(name) = &self.name {
             if name.trim().is_empty() {
-                errors.push(crate::validation::error::ValidationError::required(
-                    "name", serde_json::json!(name)
-                ));
+                errors.push(crate::error::ValidationError::required("name"));
             } else if name.len() < 2 || name.len() > 50 {
-                errors.push(crate::validation::error::ValidationError::length(
-                    "name", serde_json::json!(name), Some(2), Some(50)
+                errors.push(crate::error::ValidationError::length_violation(
+                    "name", name.clone(), Some(2), Some(50)
                 ));
             }
         }
@@ -151,21 +151,26 @@ impl Validatable for UpdateUserDTO {
         // Validar email si está presente
         if let Some(email) = &self.email {
             if email.trim().is_empty() {
-                errors.push(crate::validation::error::ValidationError::required(
-                    "email", serde_json::json!(email)
-                ));
-            } else if !crate::validation::validators::is_valid_email(email) {
-                errors.push(crate::validation::error::ValidationError::email(
-                    "email", serde_json::json!(email)
-                ));
+                errors.push(crate::error::ValidationError::required("email"));
+            } else {
+                let email_result = crate::validators::email(&Some(serde_json::json!(email)), "email");
+                if !email_result.is_valid {
+                    if let Some(error) = email_result.first_error() {
+                        errors.push(error.clone());
+                    }
+                }
             }
         }
 
         // Validar edad si está presente
         if let Some(age) = self.age {
-            if age < 18 || age > 120 {
-                errors.push(crate::validation::error::ValidationError::min_max(
-                    "age", serde_json::json!(age), Some(18), Some(120)
+            if age < 18 {
+                errors.push(crate::error::ValidationError::min_violation(
+                    "age", serde_json::json!(age), serde_json::json!(18)
+                ));
+            } else if age > 120 {
+                errors.push(crate::error::ValidationError::max_violation(
+                    "age", serde_json::json!(age), serde_json::json!(120)
                 ));
             }
         }
@@ -250,7 +255,7 @@ impl ValidationMiddleware {
     ) -> Result<serde_json::Value, ValidationErrors> {
         let value: serde_json::Value = serde_json::from_str(body)
             .map_err(|_| ValidationErrors::one(
-                crate::validation::error::ValidationError::custom(
+                crate::error::ValidationError::custom(
                     "body",
                     "Invalid JSON in request body",
                     serde_json::json!(body)
@@ -282,7 +287,7 @@ impl ValidationMiddleware {
 
         let value = serde_json::to_value(&params)
             .map_err(|_| ValidationErrors::one(
-                crate::validation::error::ValidationError::custom(
+                crate::error::ValidationError::custom(
                     "query",
                     "Failed to parse query parameters",
                     serde_json::Value::Null

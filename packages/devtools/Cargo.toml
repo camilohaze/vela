@@ -1,0 +1,22 @@
+[package]
+name = "vela-devtools"
+version = "0.1.0"
+edition = "2021"
+description = "Vela DevTools - UI Inspector, Signal Graph, Profiler"
+authors = ["Vela Core Team <hello@velalang.org>"]
+license = "Apache-2.0 OR MIT"
+repository = "https://github.com/velalang/vela"
+homepage = "https://velalang.org"
+documentation = "https://docs.velalang.org"
+
+[dependencies]
+anyhow.workspace = true
+thiserror.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tracing.workspace = true
+vela-compiler = { path = "../../compiler" }
+vela-vm = { path = "../../vm" }
+
+[dev-dependencies]
+tokio = { version = "1.0", features = ["full"] }

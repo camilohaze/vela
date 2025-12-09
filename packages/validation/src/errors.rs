@@ -4,7 +4,7 @@
 //! el manejo de errores de validación agregados, permitiendo
 //! acceso indexado, filtrado y transformación de errores.
 
-use crate::validation::error::{ValidationError, ValidationResult};
+use crate::error::{ValidationError, ValidationResult};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 

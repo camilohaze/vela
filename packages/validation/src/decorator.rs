@@ -3,8 +3,8 @@
 //! Este módulo proporciona los decoradores que permiten usar
 //! el sistema de validación de manera declarativa en structs.
 
-use crate::validation::error::ValidationResult;
-use crate::validation::validators::*;
+use crate::error::ValidationResult;
+use crate::validators::*;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -69,13 +69,13 @@ pub struct Regex {
 pub struct Url;
 
 /// Decorador para validación custom
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct Custom {
     pub validator: fn(&Option<serde_json::Value>) -> Result<(), String>,
 }
 
 /// Enum que representa todos los decoradores de validación disponibles
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub enum ValidationDecorator {
     Required(Required),
     Email(Email),
@@ -88,13 +88,13 @@ pub enum ValidationDecorator {
 }
 
 /// Metadata de validación para un campo
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct FieldValidation {
     pub decorators: Vec<ValidationDecorator>,
 }
 
 /// Metadata de validación para una struct
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct StructValidation {
     pub fields: HashMap<String, FieldValidation>,
 }
@@ -122,12 +122,12 @@ impl StructValidation {
                 let decorator_result = match decorator {
                     ValidationDecorator::Required(_) => required(value, field_name),
                     ValidationDecorator::Email(_) => email(value, field_name),
-                    ValidationDecorator::Min(min) => min(value, field_name, min.value.clone()),
-                    ValidationDecorator::Max(max) => max(value, field_name, max.value.clone()),
-                    ValidationDecorator::Length(length) => length(value, field_name, length.min, length.max),
-                    ValidationDecorator::Regex(regex) => regex(value, field_name, &regex.pattern),
+                    ValidationDecorator::Min(min_decorator) => min(value, field_name, min_decorator.value.clone()),
+                    ValidationDecorator::Max(max_decorator) => max(value, field_name, max_decorator.value.clone()),
+                    ValidationDecorator::Length(length_decorator) => length(value, field_name, length_decorator.min, length_decorator.max),
+                    ValidationDecorator::Regex(regex_decorator) => regex(value, field_name, &regex_decorator.pattern),
                     ValidationDecorator::Url(_) => url(value, field_name),
-                    ValidationDecorator::Custom(custom) => custom(value, field_name, custom.validator),
+                    ValidationDecorator::Custom(custom_decorator) => custom(value, field_name, custom_decorator.validator),
                 };
 
                 result = result.combine(decorator_result);

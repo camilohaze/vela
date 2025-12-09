@@ -4,13 +4,12 @@
 //! de validación de manera programática, complementando los
 //! decoradores declarativos.
 
-use crate::validation::error::{ValidationError, ValidationResult};
-use crate::validation::validators::*;
+use crate::error::{ValidationError, ValidationResult};
+use crate::validators::*;
 use serde_json::Value;
 use std::collections::HashMap;
 
 /// Schema de validación que se puede construir programáticamente
-#[derive(Debug, Clone)]
 pub struct Schema {
     fields: HashMap<String, FieldSchema>,
 }
@@ -64,7 +63,6 @@ impl Schema {
 }
 
 /// Schema para un campo individual
-#[derive(Debug, Clone)]
 pub struct FieldSchema {
     validators: Vec<Box<dyn Fn(&Option<&Value>) -> ValidationResult + Send + Sync>>,
     required: bool,

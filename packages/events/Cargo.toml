@@ -1,0 +1,15 @@
+[package]
+name = "events"
+version = "0.1.0"
+edition = "2021"
+description = "Sistema de eventos pub/sub para aplicaciones Rust"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/camilohaze/vela"
+keywords = ["events", "pubsub", "async", "tokio"]
+categories = ["asynchronous", "concurrency"]
+
+[dependencies]
+tokio = { version = "1.0", features = ["sync", "rt-multi-thread"] }
+async-trait = "0.1"
+thiserror = "1.0"
+serde = { version = "1.0", features = ["derive"] }
