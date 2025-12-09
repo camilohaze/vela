@@ -7,5 +7,6 @@ pub mod types;
 pub mod composition;
 pub mod registry;
 pub mod theme;
+pub mod theme_context;
 pub mod resolver;
 pub mod widget_integration;

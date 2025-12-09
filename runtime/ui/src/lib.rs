@@ -49,6 +49,7 @@ pub use style::{
     composition::{StyleComposable, ComposedStyle, StyleCascade},
     registry::{StyleRegistry, StyleRef},
     theme::{Theme, ThemeRegistry},
+    theme_context::{ThemeProvider, ThemeConsumer, get_current_theme, use_theme, ThemedWidget},
     resolver::{StyleResolver, ContextualStyleResolver},
     widget_integration::{Stylable, Themed, StyleAwareWidget, StyleContext}
 };
