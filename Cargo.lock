@@ -3693,19 +3693,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "vela-reactive"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "criterion",
- "parking_lot",
- "serde",
- "serde_json",
- "thiserror",
- "uuid",
-]
-
-[[package]]
 name = "vela-runtime"
 version = "0.1.0"
 dependencies = [
@@ -3724,6 +3711,15 @@ dependencies = [
  "tokio",
  "tokio-test",
  "tracing",
+ "vela-state-management",
+]
+
+[[package]]
+name = "vela-state-management"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "tokio",
 ]
 
 [[package]]
@@ -3767,13 +3763,13 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "js-sys",
+ "reactive",
  "serde",
  "serde_json",
  "thiserror",
  "tokio",
  "tokio-test",
  "uuid",
- "vela-reactive",
  "wasm-bindgen",
  "web-sys",
 ]
