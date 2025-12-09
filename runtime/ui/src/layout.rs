@@ -184,6 +184,20 @@ impl EdgeInsets {
     pub fn vertical_total(&self) -> f32 {
         self.top + self.bottom
     }
+
+    /// Convert to CSS shorthand (top right bottom left)
+    pub fn to_css(&self) -> String {
+        if self.left == self.top && self.top == self.right && self.right == self.bottom {
+            // All sides equal
+            format!("{}px", self.left)
+        } else if self.left == self.right && self.top == self.bottom {
+            // Symmetric: vertical horizontal
+            format!("{}px {}px", self.top, self.left)
+        } else {
+            // Individual values: top right bottom left
+            format!("{}px {}px {}px {}px", self.top, self.right, self.bottom, self.left)
+        }
+    }
 }
 
 /// Alignment for positioning
@@ -348,6 +362,18 @@ mod tests {
         let symmetric = EdgeInsets::symmetric(5.0, 15.0);
         assert_eq!(symmetric.left, 5.0);
         assert_eq!(symmetric.top, 15.0);
+    }
+
+    #[test]
+    fn test_edge_insets_to_css() {
+        let all = EdgeInsets::all(10.0);
+        assert_eq!(all.to_css(), "10px");
+
+        let symmetric = EdgeInsets::symmetric(5.0, 15.0);
+        assert_eq!(symmetric.to_css(), "15px 5px");
+
+        let individual = EdgeInsets::new(1.0, 2.0, 3.0, 4.0);
+        assert_eq!(individual.to_css(), "2px 3px 4px 1px");
     }
 
     #[test]
