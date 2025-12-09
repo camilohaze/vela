@@ -12,7 +12,7 @@ use std::path::Path;
 #[derive(Debug, Clone, PartialEq)]
 pub enum TokenKind {
     // Keywords
-    Fn, Async, Await, Return, If, Else, Match, State, Const,
+    Fn, Async, Await, Return, If, Else, Match, State, Const, Dispatch,
     Struct, Enum, Interface, Impl, Type, Import, Export,
     Public, Private, Package, Module, Extension, Library,
 
@@ -494,6 +494,7 @@ impl Lexer {
             "match" => TokenKind::Match,
             "state" => TokenKind::State,
             "const" => TokenKind::Const,
+            "dispatch" => TokenKind::Dispatch,
             "struct" => TokenKind::Struct,
             "enum" => TokenKind::Enum,
             "interface" => TokenKind::Interface,
@@ -617,8 +618,8 @@ mod tests {
 
     #[test]
     fn test_keywords() {
-        let tokens = lex("fn async return if else match state const").unwrap();
-        assert_eq!(tokens.len(), 9); // 8 keywords + EOF
+        let tokens = lex("fn async return if else match state const dispatch").unwrap();
+        assert_eq!(tokens.len(), 10); // 9 keywords + EOF
         assert!(matches!(tokens[0].kind, TokenKind::Fn));
         assert!(matches!(tokens[1].kind, TokenKind::Async));
         assert!(matches!(tokens[2].kind, TokenKind::Return));
@@ -627,6 +628,7 @@ mod tests {
         assert!(matches!(tokens[5].kind, TokenKind::Match));
         assert!(matches!(tokens[6].kind, TokenKind::State));
         assert!(matches!(tokens[7].kind, TokenKind::Const));
+        assert!(matches!(tokens[8].kind, TokenKind::Dispatch));
     }
 
     #[test]

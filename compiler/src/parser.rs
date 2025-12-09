@@ -661,6 +661,15 @@ impl Parser {
                 self.consume(TokenKind::RightParen)?;
                 Ok(expr)
             }
+            TokenKind::Dispatch => {
+                self.advance(); // consume 'dispatch'
+                self.consume(TokenKind::LeftParen)?;
+                let action = self.parse_expression()?;
+                self.consume(TokenKind::RightParen)?;
+                let end_pos = self.previous_token().range.end.clone();
+                let range = Range::new(start_pos, end_pos);
+                Ok(Expression::Dispatch(DispatchExpression::new(range, action)))
+            }
             _ => Err(CompileError::Parse(self.error("Expected expression"))),
         }
     }

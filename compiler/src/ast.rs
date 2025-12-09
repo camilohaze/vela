@@ -1980,6 +1980,7 @@ pub enum Expression {
     StringInterpolation(StringInterpolation),
     Await(AwaitExpression),
     Computed(ComputedExpression),
+    Dispatch(DispatchExpression),
 }
 
 /// Valor literal.
@@ -2385,6 +2386,23 @@ impl ComputedExpression {
         Self {
             node: ASTNode::new(range),
             body,
+        }
+    }
+}
+
+/// Expresión dispatch para enviar acciones al store global.
+/// Ejemplo en Vela: dispatch(IncrementCounter())
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct DispatchExpression {
+    pub node: ASTNode,
+    pub action: Box<Expression>,  // La expresión que representa la acción
+}
+
+impl DispatchExpression {
+    pub fn new(range: Range, action: Expression) -> Self {
+        Self {
+            node: ASTNode::new(range),
+            action: Box::new(action),
         }
     }
 }

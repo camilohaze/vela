@@ -422,6 +422,7 @@ impl SemanticAnalyzer {
             Expression::Identifier(ident) => self.type_check_identifier(ident),
             Expression::Binary(bin) => self.type_check_binary(bin),
             Expression::Unary(un) => self.type_check_unary(un),
+            Expression::Dispatch(disp) => self.type_check_dispatch(disp),
             _ => Ok(SemanticType::Unknown), // TODO: Implementar otros tipos de expresiones
         }
     }
@@ -521,6 +522,18 @@ impl SemanticAnalyzer {
                 location: SourceLocation::new(un.node.range.start.line, un.node.range.start.column, 0),
             })),
         }
+    }
+
+    /// Type check de dispatch expression
+    fn type_check_dispatch(&mut self, disp: &DispatchExpression) -> CompileResult<SemanticType> {
+        // Type check the action expression
+        let action_ty = self.type_check_expression(&disp.action)?;
+        
+        // TODO: Verify that action implements the Action trait
+        // For now, just ensure it's a valid expression
+        
+        // Dispatch returns void
+        Ok(SemanticType::Primitive("void".to_string()))
     }
 
     /// Type check de block statement
