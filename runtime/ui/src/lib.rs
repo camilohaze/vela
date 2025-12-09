@@ -17,10 +17,10 @@ pub mod context;
 pub mod lifecycle;
 pub mod key;
 
-pub use widget::{Widget, WidgetExt, BuildContext};
+pub use widget::{Widget, StatelessWidget, StatefulWidget, Container, Text};
 pub use vdom::{VDomNode, VDomTree};
-pub use diff::{DiffResult, diff_trees};
-pub use patch::{Patch, apply_patches};
+pub use diff::{diff_trees, Patch};
+pub use patch::{apply_patches};
 pub use context::BuildContext;
 pub use key::Key;
 

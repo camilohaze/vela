@@ -4,14 +4,14 @@ use crate::key::Key;
 use std::collections::HashMap;
 
 /// Context passed during widget building
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct BuildContext {
     /// Ancestor keys for efficient reconciliation
     pub ancestor_keys: Vec<Key>,
     /// Build configuration
     pub config: BuildConfig,
     /// Inherited properties
-    pub inherited: HashMap<String, Box<dyn std::any::Any + Send + Sync>>,
+    pub inherited: HashMap<String, serde_json::Value>,
 }
 
 impl BuildContext {
@@ -31,20 +31,13 @@ impl BuildContext {
     }
 
     /// Get inherited property
-    pub fn get_inherited<T: 'static + Clone>(&self, key: &str) -> Option<T> {
-        self.inherited
-            .get(key)?
-            .downcast_ref::<T>()
-            .cloned()
+    pub fn get_inherited(&self, key: &str) -> Option<&serde_json::Value> {
+        self.inherited.get(key)
     }
 
     /// Set inherited property
-    pub fn set_inherited<T: 'static + Send + Sync>(
-        &mut self,
-        key: String,
-        value: T,
-    ) {
-        self.inherited.insert(key, Box::new(value));
+    pub fn set_inherited(&mut self, key: String, value: serde_json::Value) {
+        self.inherited.insert(key, value);
     }
 
     /// Check if context has a specific ancestor key
@@ -89,7 +82,7 @@ impl Default for BuildConfig {
 pub struct BuildContextBuilder {
     ancestor_keys: Vec<Key>,
     config: BuildConfig,
-    inherited: HashMap<String, Box<dyn std::any::Any + Send + Sync>>,
+    inherited: HashMap<String, serde_json::Value>,
 }
 
 impl BuildContextBuilder {
@@ -111,12 +104,12 @@ impl BuildContextBuilder {
         self
     }
 
-    pub fn with_inherited<T: 'static + Send + Sync>(
+    pub fn with_inherited(
         mut self,
         key: String,
-        value: T,
+        value: serde_json::Value,
     ) -> Self {
-        self.inherited.insert(key, Box::new(value));
+        self.inherited.insert(key, value);
         self
     }
 
@@ -158,12 +151,12 @@ mod tests {
     #[test]
     fn test_inherited_properties() {
         let mut context = BuildContext::new();
-        context.set_inherited("theme".to_string(), "dark".to_string());
+        context.set_inherited("theme".to_string(), serde_json::json!("dark"));
 
-        let theme: Option<String> = context.get_inherited("theme");
-        assert_eq!(theme, Some("dark".to_string()));
+        let theme = context.get_inherited("theme");
+        assert_eq!(theme, Some(&serde_json::json!("dark")));
 
-        let missing: Option<String> = context.get_inherited("missing");
+        let missing = context.get_inherited("missing");
         assert_eq!(missing, None);
     }
 
@@ -172,13 +165,13 @@ mod tests {
         let key = crate::key::Key::int(42);
         let context = BuildContextBuilder::new()
             .with_ancestor_key(key.clone())
-            .with_inherited("test".to_string(), 123i32)
+            .with_inherited("test".to_string(), serde_json::json!(123))
             .build();
 
         assert_eq!(context.depth(), 1);
         assert!(context.has_ancestor_key(&key));
 
-        let value: Option<i32> = context.get_inherited("test");
-        assert_eq!(value, Some(123));
+        let value = context.get_inherited("test");
+        assert_eq!(value, Some(&serde_json::json!(123)));
     }
 }

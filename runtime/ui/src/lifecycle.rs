@@ -32,7 +32,7 @@ pub trait Lifecycle: Widget {
 }
 
 /// Lifecycle state management
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum LifecycleState {
     /// Widget not yet mounted
     Unmounted,

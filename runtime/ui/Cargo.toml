@@ -6,8 +6,10 @@ description = "UI Framework for Vela - Declarative widgets with Virtual DOM"
 license = "MIT OR Apache-2.0"
 
 [dependencies]
-vela-reactive = { path = "../../packages/reactive" }
+vela-reactive = { path = "../../packages/vela-reactive", optional = true }
 serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+uuid = { version = "1.0", features = ["v4"] }
 anyhow = "1.0"
 thiserror = "1.0"
 tokio = { version = "1.0", features = ["full"] }
@@ -24,6 +26,10 @@ web-sys = { version = "0.3", features = [
   "EventTarget",
   "Event",
 ] }
+
+[features]
+default = []
+reactive = ["vela-reactive"]
 
 [dev-dependencies]
 tokio-test = "0.4"

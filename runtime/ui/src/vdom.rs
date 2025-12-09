@@ -137,8 +137,8 @@ impl VDomNode {
     }
 
     /// Set key
-    pub fn key(mut self, key: Key) -> Self {
-        self.key = Some(key);
+    pub fn key(mut self, key: &Key) -> Self {
+        self.key = Some(key.clone());
         self
     }
 
@@ -217,7 +217,7 @@ mod tests {
     #[test]
     fn test_vdom_with_key() {
         let key = crate::key::Key::string("test-key");
-        let node = VDomNode::element("div").key(key.clone());
+        let node = VDomNode::element("div").key(&key);
 
         assert_eq!(node.key, Some(key));
     }
@@ -227,9 +227,9 @@ mod tests {
         let key1 = crate::key::Key::string("key1");
         let key2 = crate::key::Key::string("key2");
 
-        let child = VDomNode::element("span").key(key2);
+        let child = VDomNode::element("span").key(&key2);
         let parent = VDomNode::element("div")
-            .key(key1)
+            .key(&key1)
             .child(child);
 
         let keys = parent.collect_keys();

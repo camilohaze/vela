@@ -1,6 +1,6 @@
 //! Virtual DOM diffing algorithm
 
-use crate::vdom::{VDomNode, NodeType};
+use crate::vdom::{VDomNode, VDomTree, NodeType};
 use crate::key::Key;
 use std::collections::HashMap;
 
