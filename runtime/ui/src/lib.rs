@@ -20,6 +20,14 @@ pub mod layout;
 pub mod input_widgets;
 pub mod display_widgets;
 
+// Reactive modules (enabled with "reactive" feature)
+#[cfg(feature = "reactive")]
+pub mod reactive_widgets;
+#[cfg(feature = "reactive")]
+pub mod reactive_context;
+#[cfg(feature = "reactive")]
+pub mod widget_invalidator;
+
 pub use widget::{Widget, StatelessWidget, StatefulWidget, Container, Row, Column, Stack, PositionedChild, Button, ButtonVariant, TextField, Checkbox, Text, TextDisplay, Image, ImageFit, Icon};
 pub use layout::{
     BoxConstraints, Size, Offset, EdgeInsets, Alignment,
@@ -31,6 +39,18 @@ pub use diff::{diff_trees, Patch};
 pub use patch::{apply_patches};
 pub use context::BuildContext;
 pub use key::Key;
+
+// Reactive re-exports (when reactive feature is enabled)
+#[cfg(feature = "reactive")]
+pub use reactive_widgets::{
+    ReactiveWidget, WidgetId
+};
+#[cfg(feature = "reactive")]
+pub use reactive_context::ReactiveBuildContext;
+#[cfg(feature = "reactive")]
+pub use widget_invalidator::{
+    WidgetInvalidator
+};
 
 /// Initialize the UI framework
 pub fn init() {

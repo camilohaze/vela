@@ -4,7 +4,7 @@ use crate::key::Key;
 use std::collections::HashMap;
 
 /// Context passed during widget building
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct BuildContext {
     /// Ancestor keys for efficient reconciliation
     pub ancestor_keys: Vec<Key>,

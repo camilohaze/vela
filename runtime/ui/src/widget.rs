@@ -26,6 +26,16 @@ pub trait Widget: std::fmt::Debug {
     fn type_name(&self) -> &'static str {
         std::any::type_name::<Self>()
     }
+
+    /// Unique widget ID for reactive tracking (default implementation)
+    fn widget_id(&self) -> WidgetId {
+        // Default implementation: use type name + optional key
+        if let Some(key) = self.key() {
+            WidgetId::from_str(&format!("{}-{}", self.type_name(), key))
+        } else {
+            WidgetId::from_str(self.type_name())
+        }
+    }
 }
 
 /// Extension methods for widgets
@@ -1363,3 +1373,17 @@ mod tests {
         assert_eq!(stack_size.height, 90.0); // 30 + 60
     }
 }
+
+// Re-export reactive widgets (when reactive feature is enabled)
+#[cfg(feature = "reactive")]
+pub use crate::reactive_widgets::{
+    ReactiveWidget, WidgetId
+};
+
+#[cfg(feature = "reactive")]
+pub use crate::reactive_context::ReactiveBuildContext;
+
+#[cfg(feature = "reactive")]
+pub use crate::widget_invalidator::{
+    WidgetInvalidator
+};
