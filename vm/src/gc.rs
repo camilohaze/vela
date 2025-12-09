@@ -87,6 +87,10 @@ pub enum GcObject {
     Function(GcPtr<FunctionObject>),
     /// Closure object (function + captured variables)
     Closure(GcPtr<ClosureObject>),
+    /// Reactive signal object
+    ReactiveSignal(GcPtr<ReactiveSignalObject>),
+    /// Reactive computed object
+    ReactiveComputed(GcPtr<ReactiveComputedObject>),
 }
 
 /// Function object
@@ -107,6 +111,28 @@ pub struct ClosureObject {
     pub function: GcPtr<FunctionObject>,
     /// Captured free variables
     pub free_vars: Vec<Value>,
+}
+
+/// Reactive signal object for GC integration
+#[derive(Debug, Clone)]
+pub struct ReactiveSignalObject {
+    /// Signal ID for tracking
+    pub id: String,
+    /// Current value (stored as Value for GC compatibility)
+    pub value: Value,
+    /// List of dependent computed objects
+    pub dependents: Vec<GcPtr<GcObject>>,
+}
+
+/// Reactive computed object for GC integration
+#[derive(Debug, Clone)]
+pub struct ReactiveComputedObject {
+    /// Computed ID for tracking
+    pub id: String,
+    /// Cached computed value
+    pub cached_value: Option<Value>,
+    /// List of dependencies (signals/computed)
+    pub dependencies: Vec<GcPtr<GcObject>>,
 }
 
 /// GC statistics
@@ -235,6 +261,36 @@ impl GcHeap {
         obj
     }
 
+    /// Allocate reactive signal object
+    pub fn alloc_reactive_signal(&mut self, id: String, initial_value: Value) -> GcPtr<GcObject> {
+        let size = id.len() + std::mem::size_of::<Value>();
+        let signal = ReactiveSignalObject {
+            id,
+            value: initial_value,
+            dependents: Vec::new(),
+        };
+        let obj = Rc::new(RefCell::new(GcObject::ReactiveSignal(Rc::new(RefCell::new(
+            signal,
+        )))));
+        self.track_allocation(obj.clone(), size);
+        obj
+    }
+
+    /// Allocate reactive computed object
+    pub fn alloc_reactive_computed(&mut self, id: String) -> GcPtr<GcObject> {
+        let size = id.len();
+        let computed = ReactiveComputedObject {
+            id,
+            cached_value: None,
+            dependencies: Vec::new(),
+        };
+        let obj = Rc::new(RefCell::new(GcObject::ReactiveComputed(Rc::new(RefCell::new(
+            computed,
+        )))));
+        self.track_allocation(obj.clone(), size);
+        obj
+    }
+
     /// Track allocation and trigger GC if needed
     fn track_allocation(&mut self, obj: GcPtr<GcObject>, size: usize) {
         self.objects.push(obj.clone());
@@ -253,7 +309,8 @@ impl GcHeap {
         // Add to cycle buffer if object can participate in cycles
         if matches!(
             *obj.borrow(),
-            GcObject::List(_) | GcObject::Dict(_) | GcObject::Closure(_)
+            GcObject::List(_) | GcObject::Dict(_) | GcObject::Closure(_) |
+            GcObject::ReactiveSignal(_) | GcObject::ReactiveComputed(_)
         ) {
             self.cycle_buffer.push(obj);
         }
@@ -281,17 +338,29 @@ impl GcHeap {
         Ok(freed)
     }
 
-    /// Detect and collect cycles (basic implementation)
+    /// Detect and collect cycles (enhanced for reactive objects)
     fn detect_cycles(&mut self) -> Result<()> {
-        // For now, implement a basic cycle detection:
-        // - Objects in cycle_buffer with strong_count == 1 are unreachable cycles
+        // Enhanced cycle detection that considers reactive dependencies:
+        // - Objects with strong_count > 1 are still referenced
+        // - Reactive objects with dependencies/dependents should be retained
         // - Future: implement full mark-and-sweep with roots from VM
 
         self.cycle_buffer.retain(|obj| {
-            // Keep objects that are still referenced (strong_count > 1)
-            // Remove objects that are only referenced by the GC (strong_count == 1)
-            // These are unreachable cycles
-            Rc::strong_count(obj) > 1
+            let retain = match &*obj.borrow() {
+                // Reactive objects: retain if they have dependencies or dependents
+                GcObject::ReactiveSignal(signal_obj) => {
+                    let signal = signal_obj.borrow();
+                    !signal.dependents.is_empty() || Rc::strong_count(obj) > 1
+                }
+                GcObject::ReactiveComputed(computed_obj) => {
+                    let computed = computed_obj.borrow();
+                    !computed.dependencies.is_empty() || Rc::strong_count(obj) > 1
+                }
+                // Other objects: use basic strong_count check
+                _ => Rc::strong_count(obj) > 1
+            };
+
+            retain
         });
 
         Ok(())
@@ -322,6 +391,107 @@ impl GcHeap {
         self.objects.clear();
         self.cycle_buffer.clear();
         self.statistics = GcStats::default();
+    }
+
+    /// Add reactive dependency between objects
+    pub fn add_reactive_dependency(&mut self, dependent: &GcPtr<GcObject>, dependency: &GcPtr<GcObject>) {
+        // Add dependency to dependent
+        {
+            let mut dependent_borrow = dependent.borrow_mut();
+            match &mut *dependent_borrow {
+                GcObject::ReactiveSignal(_) => {
+                    // Signals don't have dependencies in this implementation
+                    // They are data sources, not consumers
+                    return;
+                }
+                GcObject::ReactiveComputed(computed_obj) => {
+                    let mut computed_inner = computed_obj.borrow_mut();
+                    if !computed_inner.dependencies.iter().any(|dep| Rc::ptr_eq(dep, dependency)) {
+                        computed_inner.dependencies.push(dependency.clone());
+                    }
+                }
+                _ => return, // Not reactive
+            }
+        }
+
+        // Add reverse dependency to dependency (only for signals, as they track dependents)
+        {
+            let mut dependency_borrow = dependency.borrow_mut();
+            match &mut *dependency_borrow {
+                GcObject::ReactiveSignal(signal_obj) => {
+                    let mut signal_inner = signal_obj.borrow_mut();
+                    if !signal_inner.dependents.iter().any(|dep| Rc::ptr_eq(dep, dependent)) {
+                        signal_inner.dependents.push(dependent.clone());
+                    }
+                }
+                GcObject::ReactiveComputed(_) => {
+                    // Computed objects don't track dependents in this implementation
+                    // Only signals track who depends on them
+                }
+                _ => return, // Not reactive
+            }
+        }
+    }
+
+    /// Update reactive signal value
+    pub fn update_reactive_signal(&mut self, signal: &GcPtr<GcObject>, new_value: Value) {
+        if let GcObject::ReactiveSignal(signal_obj) = &mut *signal.borrow_mut() {
+            signal_obj.borrow_mut().value = new_value;
+            // In a full implementation, this would trigger reactive updates
+            // For now, just update the value
+        }
+    }
+
+    /// Get reactive signal value
+    pub fn get_reactive_signal_value(&self, signal: &GcPtr<GcObject>) -> Option<Value> {
+        if let GcObject::ReactiveSignal(signal_obj) = &*signal.borrow() {
+            Some(signal_obj.borrow().value.clone())
+        } else {
+            None
+        }
+    }
+
+    /// Get reactive computed cached value
+    pub fn get_reactive_computed_value(&self, computed: &GcPtr<GcObject>) -> Option<Value> {
+        if let GcObject::ReactiveComputed(computed_obj) = &*computed.borrow() {
+            computed_obj.borrow().cached_value.clone()
+        } else {
+            None
+        }
+    }
+
+    /// Set reactive computed cached value
+    pub fn set_reactive_computed_value(&mut self, computed: &GcPtr<GcObject>, value: Option<Value>) {
+        if let GcObject::ReactiveComputed(computed_obj) = &mut *computed.borrow_mut() {
+            computed_obj.borrow_mut().cached_value = value;
+        }
+    }
+
+    /// Remove reactive dependency between objects
+    pub fn remove_reactive_dependency(&mut self, dependent: &GcPtr<GcObject>, dependency: &GcPtr<GcObject>) {
+        // Remove dependency from dependent
+        {
+            let mut dependent_borrow = dependent.borrow_mut();
+            match &mut *dependent_borrow {
+                GcObject::ReactiveComputed(computed_obj) => {
+                    let mut computed_inner = computed_obj.borrow_mut();
+                    computed_inner.dependencies.retain(|dep| !Rc::ptr_eq(dep, dependency));
+                }
+                _ => return, // Not reactive or signal
+            }
+        }
+
+        // Remove reverse dependency from dependency (only for signals)
+        {
+            let mut dependency_borrow = dependency.borrow_mut();
+            match &mut *dependency_borrow {
+                GcObject::ReactiveSignal(signal_obj) => {
+                    let mut signal_inner = signal_obj.borrow_mut();
+                    signal_inner.dependents.retain(|dep| !Rc::ptr_eq(dep, dependent));
+                }
+                _ => {} // Computed don't track dependents
+            }
+        }
     }
 }
 
