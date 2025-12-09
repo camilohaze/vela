@@ -250,7 +250,7 @@ mod tests {
 
     #[test]
     fn test_dom_tree_from_vdom() {
-        let vdom_tree = crate::vdom::VDomTree::new(crate::widget::Text::new("Test"));
+        let vdom_tree = crate::vdom::VDomTree::new(crate::widget::TestText::new("Test"));
         let dom_tree = DomTree::from_vdom(&vdom_tree);
 
         assert_eq!(dom_tree.root.node_type, "Text");
@@ -285,7 +285,7 @@ mod tests {
 
     #[test]
     fn test_dom_tree_patches() {
-        let vdom_tree = crate::vdom::VDomTree::new(crate::widget::Text::new("Old"));
+        let vdom_tree = crate::vdom::VDomTree::new(crate::widget::TestText::new("Old"));
         let mut dom_tree = DomTree::from_vdom(&vdom_tree);
 
         let patches = vec![Patch::UpdateText {

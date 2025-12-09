@@ -331,7 +331,7 @@ fn create_key_map(children: &[VDomNode]) -> HashMap<&Key, usize> {
 mod tests {
     use super::*;
     use crate::vdom::VDomTree;
-    use crate::widget::Text;
+    use crate::widget::TestText;
 
     #[test]
     fn test_diff_identical_nodes() {
@@ -375,8 +375,8 @@ mod tests {
 
     #[test]
     fn test_diff_trees() {
-        let old_tree = VDomTree::new(Text::new("Old"));
-        let new_tree = VDomTree::new(Text::new("New"));
+        let old_tree = VDomTree::new(TestText::new("Old"));
+        let new_tree = VDomTree::new(TestText::new("New"));
 
         let patches = diff_trees(&old_tree, &new_tree);
 

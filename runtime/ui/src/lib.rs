@@ -16,8 +16,14 @@ pub mod patch;
 pub mod context;
 pub mod lifecycle;
 pub mod key;
+pub mod layout;
 
-pub use widget::{Widget, StatelessWidget, StatefulWidget, Container, Text};
+pub use widget::{Widget, StatelessWidget, StatefulWidget, Container, Row, Column, Stack, PositionedChild};
+pub use layout::{
+    BoxConstraints, Size, Offset, EdgeInsets, Alignment,
+    MainAxisAlignment, CrossAxisAlignment, MainAxisSize,
+    Position, StackFit
+};
 pub use vdom::{VDomNode, VDomTree};
 pub use diff::{diff_trees, Patch};
 pub use patch::{apply_patches};

@@ -240,7 +240,7 @@ mod tests {
 
     #[test]
     fn test_vdom_tree() {
-        let tree = VDomTree::new(crate::widget::Text::new("Root"));
+        let tree = VDomTree::new(crate::widget::TestText::new("Root"));
 
         assert!(!tree.needs_update());
         assert_eq!(tree.root.node_type, NodeType::Text);
