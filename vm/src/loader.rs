@@ -51,12 +51,17 @@ impl BytecodeLoader {
         }
     }
 
-    /// Create loader with custom project root
-    pub fn with_project_root(project_root: PathBuf) -> Self {
+    /// Create a new bytecode loader with custom project root
+    pub fn with_project_root(root: PathBuf) -> Self {
         Self {
-            resolver: ModuleResolver::new(project_root),
+            resolver: ModuleResolver::new(root),
             cache: HashMap::new(),
         }
+    }
+
+    /// Set the module resolver (for testing)
+    pub fn set_resolver(&mut self, resolver: ModuleResolver) {
+        self.resolver = resolver;
     }
 
     /// Create loader with custom resolver
@@ -159,7 +164,7 @@ impl BytecodeLoader {
     }
 
     /// Extract exported symbols from bytecode
-    fn extract_exports(&self, bytecode: &Bytecode) -> Result<HashMap<String, usize>, Error> {
+    pub fn extract_exports(&self, bytecode: &Bytecode) -> Result<HashMap<String, usize>, Error> {
         let mut exports = HashMap::new();
 
         // First, try to get exports from metadata
@@ -201,9 +206,14 @@ impl BytecodeLoader {
         Ok(exports)
     }
 
-    /// Clear the module cache
+    /// Clear module cache
     pub fn clear_cache(&mut self) {
         self.cache.clear();
+    }
+
+    /// Insert module into cache (for testing)
+    pub fn insert_module_into_cache(&mut self, name: String, module: LoadedModule) {
+        self.cache.insert(name, module);
     }
 
     /// Check if a module is loaded
