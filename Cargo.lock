@@ -3847,13 +3847,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "vela-semantic"
-version = "0.1.0"
-dependencies = [
- "thiserror 1.0.69",
-]
-
-[[package]]
 name = "vela-stdlib"
 version = "0.1.0"
 dependencies = [

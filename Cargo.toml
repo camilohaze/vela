@@ -11,7 +11,6 @@ members = [
     "core/types",
     "runtime",
     "runtime/concurrency",
-    "semantic",
     "tooling",
     "packages/package",
     "packages/logging",
