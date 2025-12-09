@@ -19,6 +19,8 @@ pub mod key;
 pub mod layout;
 pub mod input_widgets;
 pub mod display_widgets;
+pub mod text_style;
+pub mod style;
 
 // Reactive modules (enabled with "reactive" feature)
 #[cfg(feature = "reactive")]
@@ -40,7 +42,16 @@ pub use patch::{apply_patches};
 pub use context::BuildContext;
 pub use key::Key;
 
-// Reactive re-exports (when reactive feature is enabled)
+// Text styling re-exports
+pub use text_style::TextStyle;
+pub use style::{
+    types::{FontSize, FontWeight, FontStyle, TextDecoration, TextAlign, TextTransform, Color, ResolvedStyle},
+    composition::{StyleComposable, ComposedStyle, StyleCascade},
+    registry::{StyleRegistry, StyleRef},
+    theme::{Theme, ThemeRegistry},
+    resolver::{StyleResolver, ContextualStyleResolver},
+    widget_integration::{Stylable, Themed, StyleAwareWidget, StyleContext}
+};
 #[cfg(feature = "reactive")]
 pub use reactive_widgets::{
     ReactiveWidget, WidgetId
