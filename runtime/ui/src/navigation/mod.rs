@@ -5,5 +5,7 @@
 //! and programmatic navigation.
 
 pub mod router;
+pub mod service;
 
 pub use router::{Router, Route, RouteMatch, RouteMatcher, NavigationContext};
+pub use service::{NavigationService, NavigationEntry, NavigationError, NavigationGuard, NavigationGuardContext};
