@@ -10,9 +10,11 @@ Trait Action para eventos tipados que modifican el estado del store.
 Implementa pattern matching y type safety para acciones Redux-style.
 */
 
+use std::any::Any;
+
 /// Trait base para todas las acciones que pueden ser enviadas al store
 /// Proporciona type safety y pattern matching para eventos de estado
-pub trait Action: Send + Sync + 'static {
+pub trait Action: Any + Send + Sync + 'static {
     /// Tipo del estado que esta acción puede modificar
     type State;
 
