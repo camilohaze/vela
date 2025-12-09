@@ -11,6 +11,7 @@ Implementa patrón Redux-style con Arc<RwLock<T>> para concurrencia.
 */
 
 use std::sync::{Arc, RwLock};
+use crate::StoreInterface;
 
 /// Store<T> base class para gestión de estado global
 /// Proporciona acceso thread-safe al estado mediante Arc<RwLock<T>>
@@ -148,5 +149,24 @@ mod tests {
         let state2 = store_clone.get_state();
         assert_eq!(*state1, *state2);
         assert_eq!(*state1, initial_state);
+    }
+}
+
+impl<T> StoreInterface<T> for Store<T>
+where
+    T: Clone + Send + Sync + 'static,
+{
+    fn get_state(&self) -> std::sync::RwLockReadGuard<T> {
+        self.get_state()
+    }
+
+    fn set_state(&self, state: T) {
+        self.set_state(state);
+    }
+
+    fn dispatch_raw(&self, _action: &dyn crate::Action<State = T>) -> Result<(), Box<dyn std::error::Error>> {
+        // TODO: Implementar dispatch con reducers
+        // Por ahora, solo un placeholder
+        Ok(())
     }
 }
