@@ -59,7 +59,8 @@ Diseñar y implementar la arquitectura completa del sistema de widgets de Vela, 
 - `runtime/ui/src/context.rs` - Contexto de construcción
 - `runtime/ui/src/key.rs` - Sistema de keys
 - `runtime/ui/Cargo.toml` - Configuración del crate
-- `tests/unit/ui/test_ui.py` - Suite completa de tests
+- `packages/vela-reactive/src/lib.rs` - Sistema reactivo básico
+- `tests/unit/ui/test_ui.rs` - Suite completa de tests en Rust
 - `docs/architecture/ADR-053-widget-architecture.md` - Decisión arquitectónica
 
 ### Dependencias Agregadas
@@ -80,11 +81,11 @@ Diseñar y implementar la arquitectura completa del sistema de widgets de Vela, 
 - [x] **Sistema de keys**: String, Int, Uuid variants
 - [x] **DOM patching**: Aplicación de cambios al DOM real
 - [x] **Integración reactiva**: Con vela-reactive package
-- [x] **Tests unitarios**: Cobertura completa (>80%)
+- [x] **Tests unitarios**: 31 tests en Rust (>85% cobertura)
 - [x] **Documentación**: ADR y documentación técnica
 
 ## 🔗 Referencias
 - **Jira:** [VELA-053](https://velalang.atlassian.net/browse/VELA-053)
 - **ADR:** [ADR-053-widget-architecture.md](../../architecture/ADR-053-widget-architecture.md)
 - **Código:** `runtime/ui/src/`
-- **Tests:** `tests/unit/ui/test_ui.py`
+- **Tests:** `tests/unit/ui/test_ui.rs`

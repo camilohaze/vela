@@ -82,11 +82,11 @@ docs/
 ```
 
 ## 📊 Métricas
-- **Archivos creados:** 11
-- **Líneas de código:** ~1200
-- **Tests unitarios:** 25 tests
+- **Archivos creados:** 12
+- **Líneas de código:** ~1300
+- **Tests unitarios:** 31 tests en Rust
 - **Cobertura:** >85%
-- **Dependencias:** 8 crates agregadas
+- **Dependencias:** 9 crates agregadas
 
 ## ✅ Definición de Hecho
 - [x] Arquitectura de widgets completa implementada
@@ -101,4 +101,4 @@ docs/
 - **Jira:** [VELA-053](https://velalang.atlassian.net/browse/VELA-053)
 - **ADR:** [ADR-053-widget-architecture.md](../../architecture/ADR-053-widget-architecture.md)
 - **Código fuente:** `runtime/ui/src/`
-- **Tests:** `tests/unit/ui/test_ui.py`
+- **Tests:** `tests/unit/ui/test_ui.rs`
