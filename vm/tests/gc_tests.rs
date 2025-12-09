@@ -124,8 +124,8 @@ fn test_gc_force_collect() {
     // Force collect (may not remove all objects if heap holds refs)
     let _ = heap.force_collect();
 
-    // Objects may still exist if heap holds refs
-    assert!(heap.object_count() >= 1);
+    // Objects should be collected
+    assert_eq!(heap.object_count(), 0);
 }
 
 #[test]
