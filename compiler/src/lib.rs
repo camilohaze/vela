@@ -22,11 +22,14 @@ The compiler follows a modular pipeline architecture:
 */
 
 pub mod ast;
+pub mod bytecode;
 pub mod config;
 pub mod error;
+pub mod ir;
 pub mod lexer;
 pub mod parser;
 pub mod semantic;
+pub mod types;
 pub mod codegen;
 
 use std::path::Path;

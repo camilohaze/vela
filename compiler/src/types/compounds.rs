@@ -7,6 +7,9 @@
 
 use std::collections::HashMap;
 use std::fmt;
+use crate::types::Type;
+use crate::types::generics;
+use crate::types::primitives;
 
 /// Struct type definition
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -89,6 +92,38 @@ impl EnumVariant {
     /// Check if this variant has data
     pub fn has_data(&self) -> bool {
         !matches!(self, EnumVariant::Unit(_))
+    }
+
+    /// Get all free type variables in this variant
+    pub fn free_vars(&self) -> std::collections::HashSet<generics::TypeVar> {
+        match self {
+            EnumVariant::Unit(_) => std::collections::HashSet::new(),
+            EnumVariant::Tuple(_, types) => {
+                types.iter().flat_map(|t| t.free_vars()).collect()
+            }
+            EnumVariant::Struct(_, fields) => {
+                fields.values().flat_map(|t| t.free_vars()).collect()
+            }
+        }
+    }
+
+    /// Apply a substitution to this variant
+    pub fn apply_substitution(&self, subst: &super::unification::Substitution) -> Self {
+        match self {
+            EnumVariant::Unit(name) => EnumVariant::Unit(name.clone()),
+            EnumVariant::Tuple(name, types) => {
+                let new_types = types.iter()
+                    .map(|t| t.apply_substitution(subst))
+                    .collect();
+                EnumVariant::Tuple(name.clone(), new_types)
+            }
+            EnumVariant::Struct(name, fields) => {
+                let new_fields = fields.iter()
+                    .map(|(k, v)| (k.clone(), v.apply_substitution(subst)))
+                    .collect();
+                EnumVariant::Struct(name.clone(), new_fields)
+            }
+        }
     }
 }
 
@@ -180,8 +215,8 @@ pub mod helpers {
     /// Create a common struct type (Person)
     pub fn create_person_struct() -> StructType {
         let mut person = StructType::new("Person".to_string());
-        person.add_field("name".to_string(), super::Type::Primitive(super::primitives::PrimitiveType::String));
-        person.add_field("age".to_string(), super::Type::Primitive(super::primitives::PrimitiveType::Number));
+        person.add_field("name".to_string(), super::Type::Primitive(primitives::PrimitiveType::String));
+        person.add_field("age".to_string(), super::Type::Primitive(primitives::PrimitiveType::Number));
         person
     }
 
@@ -189,11 +224,11 @@ pub mod helpers {
     pub fn create_result_enum() -> EnumType {
         let mut result = EnumType::new("Result".to_string());
         result.add_struct_variant("Ok".to_string(),
-            [("value".to_string(), super::Type::Variable(super::generics::TypeVar { id: 1, name: Some("T".to_string()) }))]
+            [("value".to_string(), Type::Variable(generics::TypeVar { id: 1, name: Some("T".to_string()) }))]
                 .into_iter().collect()
         );
         result.add_struct_variant("Err".to_string(),
-            [("error".to_string(), super::Type::Variable(super::generics::TypeVar { id: 2, name: Some("E".to_string()) }))]
+            [("error".to_string(), Type::Variable(generics::TypeVar { id: 2, name: Some("E".to_string()) }))]
                 .into_iter().collect()
         );
         result
@@ -203,7 +238,7 @@ pub mod helpers {
     pub fn create_option_enum() -> EnumType {
         let mut option = EnumType::new("Option".to_string());
         option.add_struct_variant("Some".to_string(),
-            [("value".to_string(), super::Type::Variable(super::generics::TypeVar { id: 1, name: Some("T".to_string()) }))]
+            [("value".to_string(), Type::Variable(generics::TypeVar { id: 1, name: Some("T".to_string()) }))]
                 .into_iter().collect()
         );
         option.add_unit_variant("None".to_string());

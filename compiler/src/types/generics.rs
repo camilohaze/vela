@@ -7,6 +7,8 @@
 
 use std::collections::HashSet;
 use std::fmt;
+use crate::types::Type;
+use crate::types::functions;
 
 /// Type variable for generic types
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -42,18 +44,18 @@ impl fmt::Display for TypeVar {
 }
 
 /// Type constructor for generic types
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TypeConstructor {
     /// Name of the type constructor (e.g., "List", "Option", "Result")
     pub name: String,
 
     /// Type parameters
-    pub params: Vec<super::Type>,
+    pub params: Vec<Type>,
 }
 
 impl TypeConstructor {
     /// Create a new type constructor
-    pub fn new(name: String, params: Vec<super::Type>) -> Self {
+    pub fn new(name: String, params: Vec<Type>) -> Self {
         Self { name, params }
     }
 
@@ -63,12 +65,12 @@ impl TypeConstructor {
     }
 
     /// Create a type constructor with one parameter
-    pub fn unary(name: String, param: super::Type) -> Self {
+    pub fn unary(name: String, param: Type) -> Self {
         Self::new(name, vec![param])
     }
 
     /// Create a type constructor with two parameters
-    pub fn binary(name: String, param1: super::Type, param2: super::Type) -> Self {
+    pub fn binary(name: String, param1: Type, param2: Type) -> Self {
         Self::new(name, vec![param1, param2])
     }
 
@@ -108,16 +110,16 @@ impl fmt::Display for TypeConstructor {
 }
 
 /// Trait bound for type constraints
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TraitBound {
     /// Must implement a specific trait
     Trait(String),
 
     /// Must be a subtype of another type
-    Subtype(Box<super::Type>),
+    Subtype(Box<Type>),
 
     /// Must be a supertype of another type
-    Supertype(Box<super::Type>),
+    Supertype(Box<Type>),
 }
 
 impl fmt::Display for TraitBound {
@@ -150,7 +152,7 @@ impl TypeConstraint {
     }
 
     /// Create a subtype constraint
-    pub fn subtype_bound(var: TypeVar, supertype: super::Type) -> Self {
+    pub fn subtype_bound(var: TypeVar, supertype: Type) -> Self {
         Self {
             var,
             bound: TraitBound::Subtype(Box::new(supertype)),
@@ -158,7 +160,7 @@ impl TypeConstraint {
     }
 
     /// Create a supertype constraint
-    pub fn supertype_bound(var: TypeVar, subtype: super::Type) -> Self {
+    pub fn supertype_bound(var: TypeVar, subtype: Type) -> Self {
         Self {
             var,
             bound: TraitBound::Supertype(Box::new(subtype)),
@@ -179,12 +181,12 @@ pub struct TypeScheme {
     pub vars: Vec<TypeVar>,
 
     /// The type with bound variables
-    pub ty: Box<super::Type>,
+    pub ty: Box<Type>,
 }
 
 impl TypeScheme {
     /// Create a new type scheme
-    pub fn new(vars: Vec<TypeVar>, ty: super::Type) -> Self {
+    pub fn new(vars: Vec<TypeVar>, ty: Type) -> Self {
         Self {
             vars,
             ty: Box::new(ty),
@@ -192,12 +194,12 @@ impl TypeScheme {
     }
 
     /// Create a monomorphic type scheme (no generics)
-    pub fn mono(ty: super::Type) -> Self {
+    pub fn mono(ty: Type) -> Self {
         Self::new(vec![], ty)
     }
 
     /// Instantiate this scheme with fresh type variables
-    pub fn instantiate(&self, supply: &mut TypeVarSupply) -> super::Type {
+    pub fn instantiate(&self, supply: &mut TypeVarSupply) -> Type {
         if self.vars.is_empty() {
             *self.ty.clone()
         } else {
@@ -207,7 +209,7 @@ impl TypeScheme {
 
             let mut subst = std::collections::HashMap::new();
             for (old_var, fresh_var) in self.vars.iter().zip(fresh_vars.iter()) {
-                subst.insert(old_var.clone(), super::Type::Variable(fresh_var.clone()));
+                subst.insert(old_var.clone(), Type::Variable(fresh_var.clone()));
             }
 
             self.ty.apply_substitution(&subst)
@@ -267,29 +269,29 @@ pub mod helpers {
     use super::*;
 
     /// Create a List<T> type constructor
-    pub fn list_type(element_type: super::Type) -> TypeConstructor {
+    pub fn list_type(element_type: Type) -> TypeConstructor {
         TypeConstructor::unary("List".to_string(), element_type)
     }
 
     /// Create a Dict<K,V> type constructor
-    pub fn dict_type(key_type: super::Type, value_type: super::Type) -> TypeConstructor {
+    pub fn dict_type(key_type: Type, value_type: Type) -> TypeConstructor {
         TypeConstructor::binary("Dict".to_string(), key_type, value_type)
     }
 
     /// Create an Option<T> type constructor
-    pub fn option_type(inner_type: super::Type) -> TypeConstructor {
+    pub fn option_type(inner_type: Type) -> TypeConstructor {
         TypeConstructor::unary("Option".to_string(), inner_type)
     }
 
     /// Create a Result<T,E> type constructor
-    pub fn result_type(ok_type: super::Type, err_type: super::Type) -> TypeConstructor {
+    pub fn result_type(ok_type: Type, err_type: Type) -> TypeConstructor {
         TypeConstructor::binary("Result".to_string(), ok_type, err_type)
     }
 
     /// Create a function type scheme
     pub fn function_scheme(
-        param_types: Vec<super::Type>,
-        return_type: super::Type,
+        param_types: Vec<Type>,
+        return_type: Type,
         supply: &mut TypeVarSupply
     ) -> TypeScheme {
         let mut vars = HashSet::new();
@@ -302,10 +304,10 @@ pub mod helpers {
 
         let vars_vec: Vec<TypeVar> = vars.into_iter().collect();
 
-        let fn_type = super::functions::FunctionType {
+        let fn_type = functions::FunctionType {
             params: param_types.into_iter()
                 .enumerate()
-                .map(|(i, ty)| super::functions::Parameter {
+                .map(|(i, ty)| functions::Parameter {
                     name: format!("arg{}", i),
                     ty,
                     is_mutable: false,
@@ -315,7 +317,7 @@ pub mod helpers {
             is_async: false,
         };
 
-        TypeScheme::new(vars_vec, super::Type::Function(fn_type))
+        TypeScheme::new(vars_vec, Type::Function(fn_type))
     }
 }
 

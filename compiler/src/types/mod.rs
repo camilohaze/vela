@@ -27,7 +27,7 @@ use std::collections::HashSet;
 use std::fmt;
 
 /// Core type representation for Vela
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Type {
     /// Primitive types (Number, String, Bool, Void)
     Primitive(primitives::PrimitiveType),
@@ -128,14 +128,14 @@ impl Type {
                 vars
             }
             Type::Closure(functions::ClosureType { captures, function_type }) => {
-                let mut vars = function_type.free_vars();
+                let mut vars = function_type.type_vars();
                 for (_, ty) in captures {
                     vars.extend(ty.free_vars());
                 }
                 vars
             }
             Type::Struct(compounds::StructType { fields, .. }) => {
-                fields.iter().flat_map(|f| f.ty.free_vars()).collect()
+                fields.values().flat_map(|ty| ty.free_vars()).collect()
             }
             Type::Enum(compounds::EnumType { variants, .. }) => {
                 variants.iter().flat_map(|v| v.free_vars()).collect()
@@ -251,16 +251,15 @@ impl Type {
                     function_type: new_fn_type,
                 })
             }
-            Type::Struct(compounds::StructType { name, fields }) => {
+            Type::Struct(compounds::StructType { name, fields, methods }) => {
                 let new_fields = fields.iter()
-                    .map(|f| compounds::StructField {
-                        name: f.name.clone(),
-                        ty: f.ty.apply_substitution(subst),
-                    })
+                    .map(|(name, ty)| (name.clone(), ty.apply_substitution(subst)))
                     .collect();
+                let new_methods = methods.clone(); // TODO: apply substitution to methods
                 Type::Struct(compounds::StructType {
                     name: name.clone(),
                     fields: new_fields,
+                    methods: new_methods,
                 })
             }
             Type::Enum(compounds::EnumType { name, variants }) => {
@@ -352,15 +351,6 @@ impl Type {
             Type::Primitive(_) | Type::Option(special::OptionVariant::None) => self.clone(),
         }
     }
-            Type::Union(types) => {
-                let new_types = types.iter()
-                    .map(|t| t.apply_substitution(subst))
-                    .collect();
-                Type::Union(new_types)
-            }
-            _ => self.clone(),
-        }
-    }
 
     /// Get a human-readable string representation
     pub fn display(&self) -> String {
@@ -436,6 +426,7 @@ pub enum TypeError {
     MissingField { struct_name: String, field: String },
     DuplicateField(String),
     InvalidEnumVariant { enum_name: String, variant: String },
+    UnificationError { expected: Type, actual: Type, context: String },
 }
 
 impl fmt::Display for TypeError {
@@ -464,6 +455,9 @@ impl fmt::Display for TypeError {
             }
             TypeError::InvalidEnumVariant { enum_name, variant } => {
                 write!(f, "Invalid enum variant '{}' for enum '{}'", variant, enum_name)
+            }
+            TypeError::UnificationError { expected, actual, context } => {
+                write!(f, "Unification failed in {}: expected {}, got {}", context, expected, actual)
             }
         }
     }

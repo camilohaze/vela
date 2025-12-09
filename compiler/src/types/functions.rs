@@ -7,15 +7,18 @@
 //! - `ClosureType`: Anonymous function types
 
 use std::fmt;
+use crate::types::Type;
+use crate::types::primitives::PrimitiveType;
+use crate::types::generics::helpers;
 
 /// Function parameter
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Parameter {
     /// Parameter name
     pub name: String,
 
     /// Parameter type
-    pub ty: super::Type,
+    pub ty: Type,
 
     /// Whether this parameter is mutable
     pub is_mutable: bool,
@@ -23,7 +26,7 @@ pub struct Parameter {
 
 impl Parameter {
     /// Create a new parameter
-    pub fn new(name: String, ty: super::Type) -> Self {
+    pub fn new(name: String, ty: Type) -> Self {
         Self {
             name,
             ty,
@@ -32,7 +35,7 @@ impl Parameter {
     }
 
     /// Create a mutable parameter
-    pub fn mutable(name: String, ty: super::Type) -> Self {
+    pub fn mutable(name: String, ty: Type) -> Self {
         Self {
             name,
             ty,
@@ -42,7 +45,7 @@ impl Parameter {
 
     /// Check if this parameter is a type variable
     pub fn is_type_var(&self) -> bool {
-        matches!(self.ty, super::Type::Variable(_))
+        matches!(self.ty, Type::Variable(_))
     }
 }
 
@@ -57,13 +60,13 @@ impl fmt::Display for Parameter {
 }
 
 /// Function type
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FunctionType {
     /// Function parameters
     pub params: Vec<Parameter>,
 
     /// Return type
-    pub return_type: Box<super::Type>,
+    pub return_type: Box<Type>,
 
     /// Whether this is an async function
     pub is_async: bool,
@@ -71,7 +74,7 @@ pub struct FunctionType {
 
 impl FunctionType {
     /// Create a new function type
-    pub fn new(params: Vec<Parameter>, return_type: super::Type) -> Self {
+    pub fn new(params: Vec<Parameter>, return_type: Type) -> Self {
         Self {
             params,
             return_type: Box::new(return_type),
@@ -80,7 +83,7 @@ impl FunctionType {
     }
 
     /// Create an async function type
-    pub fn async_fn(params: Vec<Parameter>, return_type: super::Type) -> Self {
+    pub fn async_fn(params: Vec<Parameter>, return_type: Type) -> Self {
         Self {
             params,
             return_type: Box::new(return_type),
@@ -89,7 +92,7 @@ impl FunctionType {
     }
 
     /// Create a function type from parameter types only
-    pub fn from_types(param_types: Vec<super::Type>, return_type: super::Type) -> Self {
+    pub fn from_types(param_types: Vec<Type>, return_type: Type) -> Self {
         let params = param_types.into_iter()
             .enumerate()
             .map(|(i, ty)| Parameter::new(format!("arg{}", i), ty))
@@ -118,7 +121,7 @@ impl FunctionType {
     }
 
     /// Get the parameter types
-    pub fn param_types(&self) -> Vec<&super::Type> {
+    pub fn param_types(&self) -> Vec<&Type> {
         self.params.iter().map(|p| &p.ty).collect()
     }
 
@@ -153,10 +156,10 @@ impl fmt::Display for FunctionType {
 }
 
 /// Method type (function associated with a type)
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MethodType {
     /// The type this method belongs to
-    pub self_type: Box<super::Type>,
+    pub self_type: Box<Type>,
 
     /// Method name
     pub name: String,
@@ -165,7 +168,7 @@ pub struct MethodType {
     pub params: Vec<Parameter>,
 
     /// Return type
-    pub return_type: Box<super::Type>,
+    pub return_type: Box<Type>,
 
     /// Whether this is a static method
     pub is_static: bool,
@@ -177,10 +180,10 @@ pub struct MethodType {
 impl MethodType {
     /// Create a new instance method
     pub fn instance(
-        self_type: super::Type,
+        self_type: Type,
         name: String,
         params: Vec<Parameter>,
-        return_type: super::Type
+        return_type: Type
     ) -> Self {
         Self {
             self_type: Box::new(self_type),
@@ -194,10 +197,10 @@ impl MethodType {
 
     /// Create a new static method
     pub fn static_method(
-        self_type: super::Type,
+        self_type: Type,
         name: String,
         params: Vec<Parameter>,
-        return_type: super::Type
+        return_type: Type
     ) -> Self {
         Self {
             self_type: Box::new(self_type),
@@ -211,10 +214,10 @@ impl MethodType {
 
     /// Create an async method
     pub fn async_method(
-        self_type: super::Type,
+        self_type: Type,
         name: String,
         params: Vec<Parameter>,
-        return_type: super::Type,
+        return_type: Type,
         is_static: bool
     ) -> Self {
         Self {
@@ -273,16 +276,16 @@ impl fmt::Display for MethodType {
             .collect::<Vec<_>>()
             .join(", ");
 
-        write!(f, "{}{}{} {}::{}({}) -> {}",
+        write!(f, "{}{} {}::{}({}) -> {}",
                static_prefix, async_prefix, self.self_type, self.name, params_str, self.return_type)
     }
 }
 
 /// Closure type (anonymous function)
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ClosureType {
     /// Captured variables and their types
-    pub captures: Vec<(String, super::Type)>,
+    pub captures: Vec<(String, Type)>,
 
     /// Function type of the closure
     pub function_type: FunctionType,
@@ -290,7 +293,7 @@ pub struct ClosureType {
 
 impl ClosureType {
     /// Create a new closure type
-    pub fn new(captures: Vec<(String, super::Type)>, function_type: FunctionType) -> Self {
+    pub fn new(captures: Vec<(String, Type)>, function_type: FunctionType) -> Self {
         Self {
             captures,
             function_type,
@@ -344,57 +347,57 @@ pub mod higher_order {
 
     /// Create a map function type: (T) -> U => List<T> -> List<U>
     pub fn map_function(
-        input_type: super::Type,
-        output_type: super::Type
+        input_type: Type,
+        output_type: Type
     ) -> FunctionType {
-        let list_input = super::generics::helpers::list_type(input_type);
-        let list_output = super::generics::helpers::list_type(output_type);
+        let list_input = helpers::list_type(input_type.clone());
+        let list_output = helpers::list_type(output_type.clone());
 
         FunctionType::new(
             vec![
-                Parameter::new("list".to_string(), super::Type::Constructor(list_input)),
-                Parameter::new("f".to_string(), super::Type::Function(FunctionType::new(
+                Parameter::new("list".to_string(), Type::Constructor(list_input)),
+                Parameter::new("f".to_string(), Type::Function(FunctionType::new(
                     vec![Parameter::new("x".to_string(), input_type)],
                     output_type
                 ))),
             ],
-            super::Type::Constructor(list_output)
+            Type::Constructor(list_output)
         )
     }
 
     /// Create a filter function type: (T) -> Bool => List<T> -> List<T>
-    pub fn filter_function(element_type: super::Type) -> FunctionType {
-        let list_type = super::generics::helpers::list_type(element_type.clone());
+    pub fn filter_function(element_type: Type) -> FunctionType {
+        let list_type = helpers::list_type(element_type.clone());
 
         FunctionType::new(
             vec![
-                Parameter::new("list".to_string(), super::Type::Constructor(list_type.clone())),
-                Parameter::new("predicate".to_string(), super::Type::Function(FunctionType::new(
+                Parameter::new("list".to_string(), Type::Constructor(list_type.clone())),
+                Parameter::new("predicate".to_string(), Type::Function(FunctionType::new(
                     vec![Parameter::new("x".to_string(), element_type)],
-                    super::Type::Primitive(super::primitives::PrimitiveType::Bool)
+                    Type::Primitive(PrimitiveType::Bool)
                 ))),
             ],
-            super::Type::Constructor(list_type)
+            Type::Constructor(list_type)
         )
     }
 
     /// Create a fold/reduce function type: (U, T) -> U => List<T> -> U -> U
     pub fn fold_function(
-        element_type: super::Type,
-        accumulator_type: super::Type
+        element_type: Type,
+        accumulator_type: Type
     ) -> FunctionType {
-        let list_type = super::generics::helpers::list_type(element_type.clone());
+        let list_type = helpers::list_type(element_type.clone());
 
         FunctionType::new(
             vec![
-                Parameter::new("list".to_string(), super::Type::Constructor(list_type)),
+                Parameter::new("list".to_string(), Type::Constructor(list_type)),
                 Parameter::new("initial".to_string(), accumulator_type.clone()),
-                Parameter::new("f".to_string(), super::Type::Function(FunctionType::new(
+                Parameter::new("f".to_string(), Type::Function(FunctionType::new(
                     vec![
                         Parameter::new("acc".to_string(), accumulator_type.clone()),
                         Parameter::new("x".to_string(), element_type),
                     ],
-                    accumulator_type
+                    accumulator_type.clone()
                 ))),
             ],
             accumulator_type
@@ -403,9 +406,9 @@ pub mod higher_order {
 
     /// Create a compose function type: (B -> C) -> (A -> B) -> (A -> C)
     pub fn compose_function(
-        a: super::Type,
-        b: super::Type,
-        c: super::Type
+        a: Type,
+        b: Type,
+        c: Type
     ) -> FunctionType {
         let f1_type = FunctionType::new(
             vec![Parameter::new("x".to_string(), b.clone())],
@@ -422,10 +425,10 @@ pub mod higher_order {
 
         FunctionType::new(
             vec![
-                Parameter::new("f".to_string(), super::Type::Function(f1_type)),
-                Parameter::new("g".to_string(), super::Type::Function(f2_type)),
+                Parameter::new("f".to_string(), Type::Function(f1_type)),
+                Parameter::new("g".to_string(), Type::Function(f2_type)),
             ],
-            super::Type::Function(composed_type)
+            Type::Function(composed_type)
         )
     }
 }

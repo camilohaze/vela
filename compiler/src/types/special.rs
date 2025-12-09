@@ -10,12 +10,14 @@
 //! - `Stream<T>`: Asynchronous sequences
 
 use std::fmt;
+use super::Type;
+use super::generics;
 
 /// Option type variants
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum OptionVariant {
     /// Some value
-    Some(Box<super::Type>),
+    Some(Box<Type>),
     /// No value
     None,
 }
@@ -30,12 +32,12 @@ impl fmt::Display for OptionVariant {
 }
 
 /// Result type variants
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ResultVariant {
     /// Success value
-    Ok(Box<super::Type>),
+    Ok(Box<Type>),
     /// Error value
-    Err(Box<super::Type>),
+    Err(Box<Type>),
 }
 
 impl fmt::Display for ResultVariant {
@@ -48,13 +50,13 @@ impl fmt::Display for ResultVariant {
 }
 
 /// List type with element type
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ListType {
-    pub element_type: Box<super::Type>,
+    pub element_type: Box<Type>,
 }
 
 impl ListType {
-    pub fn new(element_type: super::Type) -> Self {
+    pub fn new(element_type: Type) -> Self {
         Self {
             element_type: Box::new(element_type),
         }
@@ -68,14 +70,14 @@ impl fmt::Display for ListType {
 }
 
 /// Dictionary type with key and value types
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DictType {
-    pub key_type: Box<super::Type>,
-    pub value_type: Box<super::Type>,
+    pub key_type: Box<Type>,
+    pub value_type: Box<Type>,
 }
 
 impl DictType {
-    pub fn new(key_type: super::Type, value_type: super::Type) -> Self {
+    pub fn new(key_type: Type, value_type: Type) -> Self {
         Self {
             key_type: Box::new(key_type),
             value_type: Box::new(value_type),
@@ -90,13 +92,13 @@ impl fmt::Display for DictType {
 }
 
 /// Set type with element type
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SetType {
-    pub element_type: Box<super::Type>,
+    pub element_type: Box<Type>,
 }
 
 impl SetType {
-    pub fn new(element_type: super::Type) -> Self {
+    pub fn new(element_type: Type) -> Self {
         Self {
             element_type: Box::new(element_type),
         }
@@ -110,13 +112,13 @@ impl fmt::Display for SetType {
 }
 
 /// Promise type for asynchronous computations
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PromiseType {
-    pub result_type: Box<super::Type>,
+    pub result_type: Box<Type>,
 }
 
 impl PromiseType {
-    pub fn new(result_type: super::Type) -> Self {
+    pub fn new(result_type: Type) -> Self {
         Self {
             result_type: Box::new(result_type),
         }
@@ -130,13 +132,13 @@ impl fmt::Display for PromiseType {
 }
 
 /// Stream type for asynchronous sequences
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StreamType {
-    pub element_type: Box<super::Type>,
+    pub element_type: Box<Type>,
 }
 
 impl StreamType {
-    pub fn new(element_type: super::Type) -> Self {
+    pub fn new(element_type: Type) -> Self {
         Self {
             element_type: Box::new(element_type),
         }
@@ -150,13 +152,13 @@ impl fmt::Display for StreamType {
 }
 
 /// Tuple type with multiple element types
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TupleType {
-    pub elements: Vec<super::Type>,
+    pub elements: Vec<Type>,
 }
 
 impl TupleType {
-    pub fn new(elements: Vec<super::Type>) -> Self {
+    pub fn new(elements: Vec<Type>) -> Self {
         Self { elements }
     }
 
@@ -164,11 +166,11 @@ impl TupleType {
         Self::new(vec![])
     }
 
-    pub fn pair(first: super::Type, second: super::Type) -> Self {
+    pub fn pair(first: Type, second: Type) -> Self {
         Self::new(vec![first, second])
     }
 
-    pub fn triple(first: super::Type, second: super::Type, third: super::Type) -> Self {
+    pub fn triple(first: Type, second: Type, third: Type) -> Self {
         Self::new(vec![first, second, third])
     }
 
@@ -196,7 +198,7 @@ impl fmt::Display for TupleType {
 }
 
 /// Union type (sum type)
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct UnionType {
     pub variants: Vec<super::Type>,
 }
@@ -226,7 +228,7 @@ impl fmt::Display for UnionType {
 }
 
 /// Intersection type
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct IntersectionType {
     pub types: Vec<super::Type>,
 }
@@ -256,7 +258,7 @@ impl fmt::Display for IntersectionType {
 }
 
 /// Range type for inclusive/exclusive ranges
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RangeType {
     pub element_type: Box<super::Type>,
     pub inclusive: bool,
@@ -286,7 +288,7 @@ impl fmt::Display for RangeType {
 }
 
 /// Iterator type
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct IteratorType {
     pub element_type: Box<super::Type>,
 }
@@ -310,16 +312,16 @@ pub mod helpers {
     use super::*;
 
     /// Create Option<T> type
-    pub fn option_type(inner: super::Type) -> super::Type {
-        super::Type::Constructor(super::generics::TypeConstructor::unary(
+    pub fn option_type(inner: Type) -> Type {
+        Type::Constructor(generics::TypeConstructor::unary(
             "Option".to_string(),
             inner
         ))
     }
 
     /// Create Result<T,E> type
-    pub fn result_type(ok: super::Type, err: super::Type) -> super::Type {
-        super::Type::Constructor(super::generics::TypeConstructor::binary(
+    pub fn result_type(ok: Type, err: Type) -> Type {
+        Type::Constructor(generics::TypeConstructor::binary(
             "Result".to_string(),
             ok,
             err
@@ -327,16 +329,16 @@ pub mod helpers {
     }
 
     /// Create List<T> type
-    pub fn list_type(element: super::Type) -> super::Type {
-        super::Type::Constructor(super::generics::TypeConstructor::unary(
+    pub fn list_type(element: Type) -> Type {
+        Type::Constructor(generics::TypeConstructor::unary(
             "List".to_string(),
             element
         ))
     }
 
     /// Create Dict<K,V> type
-    pub fn dict_type(key: super::Type, value: super::Type) -> super::Type {
-        super::Type::Constructor(super::generics::TypeConstructor::binary(
+    pub fn dict_type(key: Type, value: Type) -> Type {
+        Type::Constructor(generics::TypeConstructor::binary(
             "Dict".to_string(),
             key,
             value
@@ -344,70 +346,70 @@ pub mod helpers {
     }
 
     /// Create Set<T> type
-    pub fn set_type(element: super::Type) -> super::Type {
-        super::Type::Constructor(super::generics::TypeConstructor::unary(
+    pub fn set_type(element: Type) -> Type {
+        Type::Constructor(generics::TypeConstructor::unary(
             "Set".to_string(),
             element
         ))
     }
 
     /// Create Promise<T> type
-    pub fn promise_type(result: super::Type) -> super::Type {
-        super::Type::Constructor(super::generics::TypeConstructor::unary(
+    pub fn promise_type(result: Type) -> Type {
+        Type::Constructor(generics::TypeConstructor::unary(
             "Promise".to_string(),
             result
         ))
     }
 
     /// Create Stream<T> type
-    pub fn stream_type(element: super::Type) -> super::Type {
-        super::Type::Constructor(super::generics::TypeConstructor::unary(
+    pub fn stream_type(element: Type) -> Type {
+        Type::Constructor(generics::TypeConstructor::unary(
             "Stream".to_string(),
             element
         ))
     }
 
     /// Create Iterator<T> type
-    pub fn iterator_type(element: super::Type) -> super::Type {
-        super::Type::Constructor(super::generics::TypeConstructor::unary(
+    pub fn iterator_type(element: Type) -> Type {
+        Type::Constructor(generics::TypeConstructor::unary(
             "Iterator".to_string(),
             element
         ))
     }
 
     /// Create unit tuple type ()
-    pub fn unit_type() -> super::Type {
-        super::Type::Tuple(TupleType::unit())
+    pub fn unit_type() -> Type {
+        Type::Tuple(TupleType::unit())
     }
 
     /// Create pair tuple type (A, B)
-    pub fn pair_type(first: super::Type, second: super::Type) -> super::Type {
-        super::Type::Tuple(TupleType::pair(first, second))
+    pub fn pair_type(first: Type, second: Type) -> Type {
+        Type::Tuple(TupleType::pair(first, second))
     }
 
     /// Create triple tuple type (A, B, C)
-    pub fn triple_type(first: super::Type, second: super::Type, third: super::Type) -> super::Type {
-        super::Type::Tuple(TupleType::triple(first, second, third))
+    pub fn triple_type(first: Type, second: Type, third: Type) -> Type {
+        Type::Tuple(TupleType::triple(first, second, third))
     }
 
     /// Create union type A | B
-    pub fn union_type(left: super::Type, right: super::Type) -> super::Type {
-        super::Type::Union(UnionType::binary(left, right))
+    pub fn union_type(left: Type, right: Type) -> Type {
+        Type::Union(UnionType::binary(left, right))
     }
 
     /// Create intersection type A & B
-    pub fn intersection_type(left: super::Type, right: super::Type) -> super::Type {
-        super::Type::Intersection(IntersectionType::binary(left, right))
+    pub fn intersection_type(left: Type, right: Type) -> Type {
+        Type::Intersection(IntersectionType::binary(left, right))
     }
 
     /// Create inclusive range type
-    pub fn range_inclusive_type(element: super::Type) -> super::Type {
-        super::Type::Range(RangeType::inclusive(element))
+    pub fn range_inclusive_type(element: Type) -> Type {
+        Type::Range(RangeType::inclusive(element))
     }
 
     /// Create exclusive range type
-    pub fn range_exclusive_type(element: super::Type) -> super::Type {
-        super::Type::Range(RangeType::exclusive(element))
+    pub fn range_exclusive_type(element: Type) -> Type {
+        Type::Range(RangeType::exclusive(element))
     }
 }
 

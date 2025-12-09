@@ -75,18 +75,18 @@ impl Default for UnificationContext {
 }
 
 /// Main unification function
-pub fn unify(left: &Type, right: &Type) -> UnificationResult {
+pub fn unify(expected: &Type, actual: &Type) -> UnificationResult {
     let mut context = UnificationContext::new();
-    unify_types(&mut context, left, right)?;
+    unify_types(&mut context, expected, actual)?;
     Ok(context.substitution)
 }
 
 /// Unify two types within a context
-pub fn unify_types(context: &mut UnificationContext, left: &Type, right: &Type) -> Result<(), TypeError> {
-    let left = context.apply(left);
-    let right = context.apply(right);
+pub fn unify_types(context: &mut UnificationContext, expected: &Type, actual: &Type) -> Result<(), TypeError> {
+    let expected = context.apply(expected);
+    let actual = context.apply(actual);
 
-    match (&left, &right) {
+    match (&expected, &actual) {
         // Same types unify trivially
         (Type::Primitive(l), Type::Primitive(r)) if l == r => Ok(()),
 
@@ -175,9 +175,9 @@ pub fn unify_types(context: &mut UnificationContext, left: &Type, right: &Type) 
         (Type::Range(l), Type::Range(r)) => {
             if l.inclusive != r.inclusive {
                 return Err(TypeError::UnificationError {
-                    left: left.clone(),
-                    right: right.clone(),
-                    reason: "Range inclusivity mismatch".to_string(),
+                    expected: expected.clone(),
+                    actual: actual.clone(),
+                    context: "range inclusivity".to_string(),
                 });
             }
             unify_types(context, &l.element_type, &r.element_type)
@@ -185,9 +185,9 @@ pub fn unify_types(context: &mut UnificationContext, left: &Type, right: &Type) 
 
         // Different types cannot unify
         _ => Err(TypeError::UnificationError {
-            left: left.clone(),
-            right: right.clone(),
-            reason: "Type mismatch".to_string(),
+            expected: expected.clone(),
+            actual: actual.clone(),
+            context: "type mismatch".to_string(),
         }),
     }
 }
@@ -196,7 +196,8 @@ pub fn unify_types(context: &mut UnificationContext, left: &Type, right: &Type) 
 fn unify_variable(context: &mut UnificationContext, var: &TypeVar, ty: &Type) -> Result<(), TypeError> {
     // If the variable is already bound
     if let Some(bound_type) = context.substitution.get(var) {
-        return unify_types(context, bound_type, ty);
+        let bound_type = bound_type.clone();
+        return unify_types(context, &bound_type, ty);
     }
 
     // Cannot bind variable to itself
@@ -209,9 +210,9 @@ fn unify_variable(context: &mut UnificationContext, var: &TypeVar, ty: &Type) ->
     // Occurs check - variable cannot appear in the type it's being bound to
     if ty.free_vars().contains(var) {
         return Err(TypeError::UnificationError {
-            left: Type::Variable(var.clone()),
-            right: ty.clone(),
-            reason: "Occurs check failed - circular type".to_string(),
+            expected: Type::Variable(var.clone()),
+            actual: ty.clone(),
+            context: "Occurs check failed - circular type".to_string(),
         });
     }
 
@@ -223,62 +224,62 @@ fn unify_variable(context: &mut UnificationContext, var: &TypeVar, ty: &Type) ->
 /// Unify function types
 fn unify_functions(
     context: &mut UnificationContext,
-    left: &super::functions::FunctionType,
-    right: &super::functions::FunctionType
+    expected: &super::functions::FunctionType,
+    actual: &super::functions::FunctionType
 ) -> Result<(), TypeError> {
     // Must have same arity
-    if left.params.len() != right.params.len() {
+    if expected.params.len() != actual.params.len() {
         return Err(TypeError::UnificationError {
-            left: Type::Function(left.clone()),
-            right: Type::Function(right.clone()),
-            reason: format!("Function arity mismatch: {} vs {}", left.params.len(), right.params.len()),
+            expected: Type::Function(expected.clone()),
+            actual: Type::Function(actual.clone()),
+            context: format!("Function arity mismatch: {} vs {}", expected.params.len(), actual.params.len()),
         });
     }
 
     // Must have same async-ness
-    if left.is_async != right.is_async {
+    if expected.is_async != actual.is_async {
         return Err(TypeError::UnificationError {
-            left: Type::Function(left.clone()),
-            right: Type::Function(right.clone()),
-            reason: "Function async mismatch".to_string(),
+            expected: Type::Function(expected.clone()),
+            actual: Type::Function(actual.clone()),
+            context: "Function async mismatch".to_string(),
         });
     }
 
     // Unify parameters
-    for (l_param, r_param) in left.params.iter().zip(right.params.iter()) {
+    for (l_param, r_param) in expected.params.iter().zip(actual.params.iter()) {
         unify_types(context, &l_param.ty, &r_param.ty)?;
     }
 
     // Unify return types
-    unify_types(context, &left.return_type, &right.return_type)
+    unify_types(context, &expected.return_type, &actual.return_type)
 }
 
 /// Unify generic type constructors
 fn unify_constructors(
     context: &mut UnificationContext,
-    left: &super::generics::TypeConstructor,
-    right: &super::generics::TypeConstructor
+    expected: &super::generics::TypeConstructor,
+    actual: &super::generics::TypeConstructor
 ) -> Result<(), TypeError> {
     // Must have same name
-    if left.name != right.name {
+    if expected.name != actual.name {
         return Err(TypeError::UnificationError {
-            left: Type::Constructor(left.clone()),
-            right: Type::Constructor(right.clone()),
-            reason: format!("Constructor name mismatch: {} vs {}", left.name, right.name),
+            expected: Type::Constructor(expected.clone()),
+            actual: Type::Constructor(actual.clone()),
+            context: format!("Constructor name mismatch: {} vs {}", expected.name, actual.name),
         });
     }
 
     // Must have same arity
-    if left.params.len() != right.params.len() {
+    if expected.params.len() != actual.params.len() {
         return Err(TypeError::UnificationError {
-            left: Type::Constructor(left.clone()),
-            right: Type::Constructor(right.clone()),
-            reason: format!("Constructor arity mismatch: {} vs {}", left.params.len(), right.params.len()),
+            expected: Type::Constructor(expected.clone()),
+            actual: Type::Constructor(actual.clone()),
+            context: format!("Constructor arity mismatch: {} vs {}", expected.params.len(), actual.params.len()),
         });
     }
 
     // Unify type parameters
-    for (l_param, r_param) in left.params.iter().zip(right.params.iter()) {
+    for (l_param, r_param) in expected.params.iter().zip(actual.params.iter()) {
         unify_types(context, l_param, r_param)?;
     }
 
@@ -288,36 +289,40 @@ fn unify_constructors(
 /// Unify struct types
 fn unify_structs(
     context: &mut UnificationContext,
-    left: &super::compounds::StructType,
-    right: &super::compounds::StructType
+    expected: &super::compounds::StructType,
+    actual: &super::compounds::StructType
 ) -> Result<(), TypeError> {
     // Must have same name
-    if left.name != right.name {
+    if expected.name != actual.name {
         return Err(TypeError::UnificationError {
-            left: Type::Struct(left.clone()),
-            right: Type::Struct(right.clone()),
-            reason: format!("Struct name mismatch: {} vs {}", left.name, right.name),
+            expected: Type::Struct(expected.clone()),
+            actual: Type::Struct(actual.clone()),
+            context: format!("Struct name mismatch: {} vs {}", expected.name, actual.name),
         });
     }
 
     // Must have same fields (name and type)
-    if left.fields.len() != right.fields.len() {
+    if expected.fields.len() != actual.fields.len() {
         return Err(TypeError::UnificationError {
-            left: Type::Struct(left.clone()),
-            right: Type::Struct(right.clone()),
-            reason: format!("Struct field count mismatch: {} vs {}", left.fields.len(), right.fields.len()),
+            expected: Type::Struct(expected.clone()),
+            actual: Type::Struct(actual.clone()),
+            context: "struct field count".to_string(),
         });
     }
 
-    for (l_field, r_field) in left.fields.iter().zip(right.fields.iter()) {
-        if l_field.name != r_field.name {
-            return Err(TypeError::UnificationError {
-                left: Type::Struct(left.clone()),
-                right: Type::Struct(right.clone()),
-                reason: format!("Struct field name mismatch: {} vs {}", l_field.name, r_field.name),
-            });
+    for (field_name, expected_ty) in &expected.fields {
+        match actual.fields.get(field_name) {
+            Some(actual_ty) => {
+                unify_types(context, expected_ty, actual_ty)?;
+            }
+            None => {
+                return Err(TypeError::UnificationError {
+                    expected: Type::Struct(expected.clone()),
+                    actual: Type::Struct(actual.clone()),
+                    context: format!("missing field '{}'", field_name),
+                });
+            }
         }
-        unify_types(context, &l_field.ty, &r_field.ty)?;
     }
 
     Ok(())
@@ -326,28 +331,28 @@ fn unify_structs(
 /// Unify enum types
 fn unify_enums(
     context: &mut UnificationContext,
-    left: &super::compounds::EnumType,
-    right: &super::compounds::EnumType
+    expected: &super::compounds::EnumType,
+    actual: &super::compounds::EnumType
 ) -> Result<(), TypeError> {
     // Must have same name
-    if left.name != right.name {
+    if expected.name != actual.name {
         return Err(TypeError::UnificationError {
-            left: Type::Enum(left.clone()),
-            right: Type::Enum(right.clone()),
-            reason: format!("Enum name mismatch: {} vs {}", left.name, right.name),
+            expected: Type::Enum(expected.clone()),
+            actual: Type::Enum(actual.clone()),
+            context: format!("Enum name mismatch: {} vs {}", expected.name, actual.name),
         });
     }
 
     // Must have same variants
-    if left.variants.len() != right.variants.len() {
+    if expected.variants.len() != actual.variants.len() {
         return Err(TypeError::UnificationError {
-            left: Type::Enum(left.clone()),
-            right: Type::Enum(right.clone()),
-            reason: format!("Enum variant count mismatch: {} vs {}", left.variants.len(), right.variants.len()),
+            expected: Type::Enum(expected.clone()),
+            actual: Type::Enum(actual.clone()),
+            context: format!("Enum variant count mismatch: {} vs {}", expected.variants.len(), actual.variants.len()),
         });
     }
 
-    for (l_variant, r_variant) in left.variants.iter().zip(right.variants.iter()) {
+    for (l_variant, r_variant) in expected.variants.iter().zip(actual.variants.iter()) {
         unify_enum_variants(context, l_variant, r_variant)?;
     }
 
@@ -357,22 +362,22 @@ fn unify_enums(
 /// Unify enum variants
 fn unify_enum_variants(
     context: &mut UnificationContext,
-    left: &super::compounds::EnumVariant,
-    right: &super::compounds::EnumVariant
+    expected: &super::compounds::EnumVariant,
+    actual: &super::compounds::EnumVariant
 ) -> Result<(), TypeError> {
-    match (left, right) {
+    match (expected, actual) {
         (super::compounds::EnumVariant::Unit(l_name), super::compounds::EnumVariant::Unit(r_name)) => {
             if l_name != r_name {
                 return Err(TypeError::UnificationError {
-                    left: Type::Enum(super::compounds::EnumType {
+                    expected: Type::Enum(super::compounds::EnumType {
                         name: "enum".to_string(),
-                        variants: vec![left.clone()],
+                        variants: vec![expected.clone()],
                     }),
-                    right: Type::Enum(super::compounds::EnumType {
+                    actual: Type::Enum(super::compounds::EnumType {
                         name: "enum".to_string(),
-                        variants: vec![right.clone()],
+                        variants: vec![actual.clone()],
                     }),
-                    reason: format!("Enum variant name mismatch: {} vs {}", l_name, r_name),
+                    context: format!("Enum variant name mismatch: {} vs {}", l_name, r_name),
                 });
             }
             Ok(())
@@ -381,15 +386,15 @@ fn unify_enum_variants(
         (super::compounds::EnumVariant::Tuple(l_name, l_types), super::compounds::EnumVariant::Tuple(r_name, r_types)) => {
             if l_name != r_name || l_types.len() != r_types.len() {
                 return Err(TypeError::UnificationError {
-                    left: Type::Enum(super::compounds::EnumType {
+                    expected: Type::Enum(super::compounds::EnumType {
                         name: "enum".to_string(),
-                        variants: vec![left.clone()],
+                        variants: vec![expected.clone()],
                     }),
-                    right: Type::Enum(super::compounds::EnumType {
+                    actual: Type::Enum(super::compounds::EnumType {
                         name: "enum".to_string(),
-                        variants: vec![right.clone()],
+                        variants: vec![actual.clone()],
                     }),
-                    reason: "Enum tuple variant mismatch".to_string(),
+                    context: "Enum tuple variant mismatch".to_string(),
                 });
             }
 
@@ -402,47 +407,47 @@ fn unify_enum_variants(
         (super::compounds::EnumVariant::Struct(l_name, l_fields), super::compounds::EnumVariant::Struct(r_name, r_fields)) => {
             if l_name != r_name || l_fields.len() != r_fields.len() {
                 return Err(TypeError::UnificationError {
-                    left: Type::Enum(super::compounds::EnumType {
+                    expected: Type::Enum(super::compounds::EnumType {
                         name: "enum".to_string(),
-                        variants: vec![left.clone()],
+                        variants: vec![expected.clone()],
                     }),
-                    right: Type::Enum(super::compounds::EnumType {
+                    actual: Type::Enum(super::compounds::EnumType {
                         name: "enum".to_string(),
-                        variants: vec![right.clone()],
+                        variants: vec![actual.clone()],
                     }),
-                    reason: "Enum struct variant mismatch".to_string(),
+                    context: "Enum struct variant mismatch".to_string(),
                 });
             }
 
             for (l_field, r_field) in l_fields.iter().zip(r_fields.iter()) {
-                if l_field.name != r_field.name {
+                if l_field.0 != r_field.0 {
                     return Err(TypeError::UnificationError {
-                        left: Type::Enum(super::compounds::EnumType {
+                        expected: Type::Enum(super::compounds::EnumType {
                             name: "enum".to_string(),
-                            variants: vec![left.clone()],
+                            variants: vec![expected.clone()],
                         }),
-                        right: Type::Enum(super::compounds::EnumType {
+                        actual: Type::Enum(super::compounds::EnumType {
                             name: "enum".to_string(),
-                            variants: vec![right.clone()],
+                            variants: vec![actual.clone()],
                         }),
-                        reason: format!("Enum struct field name mismatch: {} vs {}", l_field.name, r_field.name),
+                        context: format!("Enum struct field name mismatch: {} vs {}", l_field.0, r_field.0),
                     });
                 }
-                unify_types(context, &l_field.ty, &r_field.ty)?;
+                unify_types(context, &l_field.1, &r_field.1)?;
             }
             Ok(())
         }
 
         _ => Err(TypeError::UnificationError {
-            left: Type::Enum(super::compounds::EnumType {
+            expected: Type::Enum(super::compounds::EnumType {
                 name: "enum".to_string(),
-                variants: vec![left.clone()],
+                variants: vec![expected.clone()],
             }),
-            right: Type::Enum(super::compounds::EnumType {
+            actual: Type::Enum(super::compounds::EnumType {
                 name: "enum".to_string(),
-                variants: vec![right.clone()],
+                variants: vec![actual.clone()],
             }),
-            reason: "Enum variant type mismatch".to_string(),
+            context: "Enum variant type mismatch".to_string(),
         }),
     }
 }
@@ -450,20 +455,20 @@ fn unify_enum_variants(
 /// Unify union types
 fn unify_unions(
     context: &mut UnificationContext,
-    left: &super::special::UnionType,
-    right: &super::special::UnionType
+    expected: &super::special::UnionType,
+    actual: &super::special::UnionType
 ) -> Result<(), TypeError> {
     // For now, require exact match of union variants
     // More sophisticated union unification could be added later
-    if left.variants.len() != right.variants.len() {
+    if expected.variants.len() != actual.variants.len() {
         return Err(TypeError::UnificationError {
-            left: Type::Union(left.clone()),
-            right: Type::Union(right.clone()),
-            reason: "Union variant count mismatch".to_string(),
+            expected: Type::Union(expected.clone()),
+            actual: Type::Union(actual.clone()),
+            context: "Union variant count mismatch".to_string(),
         });
     }
 
-    for (l_ty, r_ty) in left.variants.iter().zip(right.variants.iter()) {
+    for (l_ty, r_ty) in expected.variants.iter().zip(actual.variants.iter()) {
         unify_types(context, l_ty, r_ty)?;
     }
 
@@ -473,19 +478,19 @@ fn unify_unions(
 /// Unify intersection types
 fn unify_intersections(
     context: &mut UnificationContext,
-    left: &super::special::IntersectionType,
-    right: &super::special::IntersectionType
+    expected: &super::special::IntersectionType,
+    actual: &super::special::IntersectionType
 ) -> Result<(), TypeError> {
     // For now, require exact match of intersection types
-    if left.types.len() != right.types.len() {
+    if expected.types.len() != actual.types.len() {
         return Err(TypeError::UnificationError {
-            left: Type::Intersection(left.clone()),
-            right: Type::Intersection(right.clone()),
-            reason: "Intersection type count mismatch".to_string(),
+            expected: Type::Intersection(expected.clone()),
+            actual: Type::Intersection(actual.clone()),
+            context: "Intersection type count mismatch".to_string(),
         });
     }
 
-    for (l_ty, r_ty) in left.types.iter().zip(right.types.iter()) {
+    for (l_ty, r_ty) in expected.types.iter().zip(actual.types.iter()) {
         unify_types(context, l_ty, r_ty)?;
     }
 
@@ -495,18 +500,18 @@ fn unify_intersections(
 /// Unify tuple types
 fn unify_tuples(
     context: &mut UnificationContext,
-    left: &super::special::TupleType,
-    right: &super::special::TupleType
+    expected: &super::special::TupleType,
+    actual: &super::special::TupleType
 ) -> Result<(), TypeError> {
-    if left.elements.len() != right.elements.len() {
+    if expected.elements.len() != actual.elements.len() {
         return Err(TypeError::UnificationError {
-            left: Type::Tuple(left.clone()),
-            right: Type::Tuple(right.clone()),
-            reason: format!("Tuple arity mismatch: {} vs {}", left.elements.len(), right.elements.len()),
+            expected: Type::Tuple(expected.clone()),
+            actual: Type::Tuple(actual.clone()),
+            context: format!("Tuple arity mismatch: {} vs {}", expected.elements.len(), actual.elements.len()),
         });
     }
 
-    for (l_elem, r_elem) in left.elements.iter().zip(right.elements.iter()) {
+    for (l_elem, r_elem) in expected.elements.iter().zip(actual.elements.iter()) {
         unify_types(context, l_elem, r_elem)?;
     }
 
@@ -516,18 +521,18 @@ fn unify_tuples(
 /// Unify Option variants
 fn unify_option_variants(
     context: &mut UnificationContext,
-    left: &super::special::OptionVariant,
-    right: &super::special::OptionVariant
+    expected: &super::special::OptionVariant,
+    actual: &super::special::OptionVariant
 ) -> Result<(), TypeError> {
-    match (left, right) {
+    match (expected, actual) {
         (super::special::OptionVariant::Some(l_ty), super::special::OptionVariant::Some(r_ty)) => {
-            unify_types(context, l_ty, r_ty)
+            unify_types(context, &l_ty, &r_ty)
         }
         (super::special::OptionVariant::None, super::special::OptionVariant::None) => Ok(()),
         _ => Err(TypeError::UnificationError {
-            left: Type::Option(left.clone()),
-            right: Type::Option(right.clone()),
-            reason: "Option variant mismatch".to_string(),
+            expected: Type::Option(expected.clone()),
+            actual: Type::Option(actual.clone()),
+            context: "Option variant mismatch".to_string(),
         }),
     }
 }
@@ -535,32 +540,32 @@ fn unify_option_variants(
 /// Unify Result variants
 fn unify_result_variants(
     context: &mut UnificationContext,
-    left: &super::special::ResultVariant,
-    right: &super::special::ResultVariant
+    expected: &super::special::ResultVariant,
+    actual: &super::special::ResultVariant
 ) -> Result<(), TypeError> {
-    match (left, right) {
+    match (expected, actual) {
         (super::special::ResultVariant::Ok(l_ty), super::special::ResultVariant::Ok(r_ty)) => {
-            unify_types(context, l_ty, r_ty)
+            unify_types(context, &l_ty, &r_ty)
         }
         (super::special::ResultVariant::Err(l_ty), super::special::ResultVariant::Err(r_ty)) => {
-            unify_types(context, l_ty, r_ty)
+            unify_types(context, &l_ty, &r_ty)
         }
         _ => Err(TypeError::UnificationError {
-            left: Type::Result(left.clone()),
-            right: Type::Result(right.clone()),
-            reason: "Result variant mismatch".to_string(),
+            expected: Type::Result(expected.clone()),
+            actual: Type::Result(actual.clone()),
+            context: "Result variant mismatch".to_string(),
         }),
     }
 }
 
 /// Most general unifier (MGU) - finds the most general substitution
-pub fn mgu(left: &Type, right: &Type) -> UnificationResult {
-    unify(left, right)
+pub fn mgu(expected: &Type, actual: &Type) -> UnificationResult {
+    unify(expected, actual)
 }
 
 /// Check if two types can be unified
-pub fn can_unify(left: &Type, right: &Type) -> bool {
-    unify(left, right).is_ok()
+pub fn can_unify(expected: &Type, actual: &Type) -> bool {
+    unify(expected, actual).is_ok()
 }
 
 /// Get the principal type of a type (after unification)
