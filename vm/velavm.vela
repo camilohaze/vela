@@ -402,7 +402,30 @@ public class VelaVM {
     # ARC (TASK-075): Inicializar ARCManager
     this.arc = ARCManager(this.heap)
     this.heap.setARCManager(this.arc)
-  } []
+  }
+  
+  """
+  Main interpreter loop (recursive implementation).
+  """
+  fn _runInterpreterLoop() -> void {
+    if this.halted {
+      return
+    }
+    
+    result = this._executeInstruction()
+    
+    match result {
+      Ok(_) => {
+        this.instructionCount = this.instructionCount + 1
+        this._runInterpreterLoop()  # Recursive call
+      }
+      Err(e) => {
+        # Error handling - halt execution
+        this.halted = true
+        # Note: Error is handled by caller
+      }
+    }
+  }
   
   # Estado
   currentFrame: Option<CallFrame> = None
@@ -551,17 +574,8 @@ public class VelaVM {
     mainFn = VelaFunction("main", 0, 0)
     this._pushFrame(mainFn)
     
-    # Main interpreter loop
-    while !this.halted {
-      result = this._executeInstruction()
-      
-      match result {
-        Ok(_) => { /* continue */ }
-        Err(e) => return Err(e)
-      }
-      
-      this.instructionCount = this.instructionCount + 1
-    }
+    # Main interpreter loop (recursive)
+    this._runInterpreterLoop()
     
     # Retornar valor final del stack (o None)
     if this.valueStack.length() > 0 {

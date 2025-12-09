@@ -496,21 +496,8 @@ public class VelaHeap {
           # Es el primer objeto
           this.objects = ref.metadata.next
         } else {
-          # Buscar en la lista
-          current = Some(headRef)
-          while let Some(currentRef) = current {
-            match currentRef.metadata.next {
-              Some(nextRef) => {
-                if nextRef === ref {
-                  # Encontrado, remover de la lista
-                  currentRef.metadata.next = ref.metadata.next
-                  break
-                }
-                current = Some(nextRef)
-              }
-              None => break
-            }
-          }
+          # Buscar en la lista recursivamente
+          this._removeFromList(headRef, ref)
         }
       }
       None => {
@@ -530,6 +517,27 @@ public class VelaHeap {
     # 3. Actualizar estadísticas
     this.objectCount = this.objectCount - 1
     this.totalFreed = this.totalFreed + ref.metadata.size
+  }
+  
+  """
+  Recursively remove a reference from the linked list
+  """
+  fn _removeFromList(currentRef: HeapObjectRef, targetRef: HeapObjectRef) -> void {
+    match currentRef.metadata.next {
+      Some(nextRef) => {
+        if nextRef === targetRef {
+          # Encontrado, remover de la lista
+          currentRef.metadata.next = targetRef.metadata.next
+        } else {
+          # Continuar recursivamente
+          this._removeFromList(nextRef, targetRef)
+        }
+      }
+      None => {
+        # No encontrado, no debería pasar
+        throw Error("_removeFromList(): target ref not found in list")
+      }
+    }
   }
 }
 

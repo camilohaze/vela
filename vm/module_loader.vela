@@ -119,13 +119,13 @@ class ModuleCache {
     evicted = 0
 
     // Get modules that are only weakly referenced
-    for weakRef in this.weakRefs.getDeadRefs() {
+    this.weakRefs.getDeadRefs().forEach(weakRef => {
       if this.loadedModules.contains(weakRef.key) {
         this.loadedModules.remove(weakRef.key)
         this.accessTimes.remove(weakRef.key)
         evicted = evicted + 1
       }
-    }
+    })
 
     return evicted
   }
@@ -300,37 +300,48 @@ class ModuleResolver {
   fn loadDependencies(module: Module) -> Result<List<Module>> {
     loadedDeps = List()
     toLoad = List.from(module.path.dependencies)
+    
+    this._loadDependenciesRecursive(module, loadedDeps, toLoad)
+    
+    return Ok(loadedDeps)
+  }
+  
+  """
+  Recursive helper for loading dependencies
+  """
+  fn _loadDependenciesRecursive(module: Module, loadedDeps: List<Module>, toLoad: List<String>) -> Result<void> {
+    if toLoad.size() == 0 {
+      return Ok(None)
+    }
+    
+    depName = toLoad.remove(0)
 
-    while toLoad.size() > 0 {
-      depName = toLoad.remove(0)
-
-      // Skip if already loaded
-      if this.cache.contains(depName) {
-        continue
-      }
-
-      // Load dependency
-      depResult = this.resolve(depName)
-      if depResult.isErr() {
-        return Err("Failed to load dependency ${depName}: ${depResult.unwrapErr()}")
-      }
-      depModule = depResult.unwrap()
-
-      // Add to loaded list
-      loadedDeps.add(depModule)
-
-      // Add transitive dependencies
-      for transitiveDep in depModule.path.dependencies {
-        if !toLoad.contains(transitiveDep) && !this.cache.contains(transitiveDep) {
-          toLoad.add(transitiveDep)
-        }
-      }
-
-      // Register dependency relationship
-      this.dependencyGraph.addDependency(module.name, depName)
+    // Skip if already loaded
+    if this.cache.contains(depName) {
+      return this._loadDependenciesRecursive(module, loadedDeps, toLoad)
     }
 
-    return Ok(loadedDeps)
+    // Load dependency
+    depResult = this.resolve(depName)
+    if depResult.isErr() {
+      return Err("Failed to load dependency ${depName}: ${depResult.unwrapErr()}")
+    }
+    depModule = depResult.unwrap()
+
+    // Add to loaded list
+    loadedDeps.add(depModule)
+
+    // Add transitive dependencies
+    depModule.path.dependencies.forEach(transitiveDep => {
+      if !toLoad.contains(transitiveDep) && !this.cache.contains(transitiveDep) {
+        toLoad.add(transitiveDep)
+      }
+    })
+
+    // Register dependency relationship
+    this.dependencyGraph.addDependency(module.name, depName)
+    
+    return this._loadDependenciesRecursive(module, loadedDeps, toLoad)
   }
 
   """
