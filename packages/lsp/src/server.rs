@@ -10,7 +10,8 @@ use lsp_types::{
     MarkupContent, MarkupKind, GotoDefinitionParams,
     GotoDefinitionResponse, Location, Range, SignatureHelpParams,
     SignatureHelp, SignatureInformation, ParameterInformation,
-    SignatureHelpOptions, ReferenceParams, Url,
+    SignatureHelpOptions, ReferenceParams, Url, Diagnostic,
+    DiagnosticSeverity, PublishDiagnosticsParams,
 };
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
@@ -274,10 +275,15 @@ impl LanguageServer {
                 .map_err(|e| anyhow::anyhow!("Invalid didOpen params: {}", e))?;
 
         let uri = params.text_document.uri.clone();
+        let content = params.text_document.text.clone();
         let mut store = self.document_store.lock().unwrap();
-        store.update_document(params.text_document.uri, params.text_document.text);
+        store.update_document(params.text_document.uri, content.clone());
 
-        info!("Opened document: {}", uri);
+        // Analyze diagnostics and send to client
+        let diagnostics = self.analyze_diagnostics(&content, &uri);
+        self.send_diagnostics(uri, diagnostics)?;
+
+        info!("Opened document and sent diagnostics");
         Ok(())
     }
 
@@ -289,10 +295,15 @@ impl LanguageServer {
 
         // For now, we only handle full content changes
         if let Some(change) = params.content_changes.first() {
+            let uri = params.text_document.uri.clone();
             let mut store = self.document_store.lock().unwrap();
-            store.update_document(params.text_document.uri.clone(), change.text.clone());
+            store.update_document(uri.clone(), change.text.clone());
 
-            info!("Updated document: {}", params.text_document.uri);
+            // Analyze diagnostics and send to client
+            let diagnostics = self.analyze_diagnostics(&change.text, &uri);
+            self.send_diagnostics(uri, diagnostics)?;
+
+            info!("Updated document and sent diagnostics");
         }
 
         Ok(())
@@ -761,6 +772,200 @@ impl LanguageServer {
 
         // Symbol not found in document
         None
+    }
+
+    /// Analyze document for diagnostics (errors and warnings)
+    pub fn analyze_diagnostics(&self, document: &str, _uri: &lsp_types::Url) -> Vec<Diagnostic> {
+        let mut diagnostics = Vec::new();
+        let lines: Vec<&str> = document.lines().collect();
+
+        // Global brace/bracket/parenthesis counting
+        let mut brace_stack = Vec::new();
+        let mut bracket_stack = Vec::new();
+        let mut paren_stack = Vec::new();
+
+        for (line_idx, line) in lines.iter().enumerate() {
+            let trimmed = line.trim();
+
+            // Count braces, brackets, and parentheses
+            for (char_idx, ch) in line.char_indices() {
+                match ch {
+                    '{' => brace_stack.push((line_idx, char_idx)),
+                    '}' => {
+                        if brace_stack.pop().is_none() {
+                            // Extra closing brace
+                            diagnostics.push(Diagnostic {
+                                range: Range {
+                                    start: Position { line: line_idx as u32, character: char_idx as u32 },
+                                    end: Position { line: line_idx as u32, character: (char_idx + 1) as u32 },
+                                },
+                                severity: Some(DiagnosticSeverity::ERROR),
+                                code: Some(lsp_types::NumberOrString::String("brace-mismatch".to_string())),
+                                code_description: None,
+                                source: Some("vela-lsp".to_string()),
+                                message: "Unmatched closing brace".to_string(),
+                                related_information: None,
+                                tags: None,
+                                data: None,
+                            });
+                        }
+                    }
+                    '[' => bracket_stack.push((line_idx, char_idx)),
+                    ']' => {
+                        if bracket_stack.pop().is_none() {
+                            diagnostics.push(Diagnostic {
+                                range: Range {
+                                    start: Position { line: line_idx as u32, character: char_idx as u32 },
+                                    end: Position { line: line_idx as u32, character: (char_idx + 1) as u32 },
+                                },
+                                severity: Some(DiagnosticSeverity::ERROR),
+                                code: Some(lsp_types::NumberOrString::String("bracket-mismatch".to_string())),
+                                code_description: None,
+                                source: Some("vela-lsp".to_string()),
+                                message: "Unmatched closing bracket".to_string(),
+                                related_information: None,
+                                tags: None,
+                                data: None,
+                            });
+                        }
+                    }
+                    '(' => paren_stack.push((line_idx, char_idx)),
+                    ')' => {
+                        if paren_stack.pop().is_none() {
+                            diagnostics.push(Diagnostic {
+                                range: Range {
+                                    start: Position { line: line_idx as u32, character: char_idx as u32 },
+                                    end: Position { line: line_idx as u32, character: (char_idx + 1) as u32 },
+                                },
+                                severity: Some(DiagnosticSeverity::ERROR),
+                                code: Some(lsp_types::NumberOrString::String("paren-mismatch".to_string())),
+                                code_description: None,
+                                source: Some("vela-lsp".to_string()),
+                                message: "Unmatched closing parenthesis".to_string(),
+                                related_information: None,
+                                tags: None,
+                                data: None,
+                            });
+                        }
+                    }
+                    _ => {}
+                }
+            }
+
+            // Check for TODO comments (warnings)
+            if trimmed.contains("TODO") || trimmed.contains("FIXME") {
+                diagnostics.push(Diagnostic {
+                    range: Range {
+                        start: Position { line: line_idx as u32, character: 0 },
+                        end: Position { line: line_idx as u32, character: line.len() as u32 },
+                    },
+                    severity: Some(DiagnosticSeverity::WARNING),
+                    code: Some(lsp_types::NumberOrString::String("todo-comment".to_string())),
+                    code_description: None,
+                    source: Some("vela-lsp".to_string()),
+                    message: "TODO comment found".to_string(),
+                    related_information: None,
+                    tags: None,
+                    data: None,
+                });
+            }
+
+            // Check for very long lines (style warning)
+            if line.len() > 120 {
+                diagnostics.push(Diagnostic {
+                    range: Range {
+                        start: Position { line: line_idx as u32, character: 120 },
+                        end: Position { line: line_idx as u32, character: line.len() as u32 },
+                    },
+                    severity: Some(DiagnosticSeverity::WARNING),
+                    code: Some(lsp_types::NumberOrString::String("line-too-long".to_string())),
+                    code_description: None,
+                    source: Some("vela-lsp".to_string()),
+                    message: "Line exceeds 120 characters".to_string(),
+                    related_information: None,
+                    tags: None,
+                    data: None,
+                });
+            }
+        }
+
+        // Check for unmatched opening braces/brackets/parentheses at end of file
+        if !brace_stack.is_empty() {
+            for (line_idx, char_idx) in brace_stack {
+                diagnostics.push(Diagnostic {
+                    range: Range {
+                        start: Position { line: line_idx as u32, character: char_idx as u32 },
+                        end: Position { line: line_idx as u32, character: (char_idx + 1) as u32 },
+                    },
+                    severity: Some(DiagnosticSeverity::ERROR),
+                    code: Some(lsp_types::NumberOrString::String("brace-mismatch".to_string())),
+                    code_description: None,
+                    source: Some("vela-lsp".to_string()),
+                    message: "Unmatched opening brace".to_string(),
+                    related_information: None,
+                    tags: None,
+                    data: None,
+                });
+            }
+        }
+
+        if !bracket_stack.is_empty() {
+            for (line_idx, char_idx) in bracket_stack {
+                diagnostics.push(Diagnostic {
+                    range: Range {
+                        start: Position { line: line_idx as u32, character: char_idx as u32 },
+                        end: Position { line: line_idx as u32, character: (char_idx + 1) as u32 },
+                    },
+                    severity: Some(DiagnosticSeverity::ERROR),
+                    code: Some(lsp_types::NumberOrString::String("bracket-mismatch".to_string())),
+                    code_description: None,
+                    source: Some("vela-lsp".to_string()),
+                    message: "Unmatched opening bracket".to_string(),
+                    related_information: None,
+                    tags: None,
+                    data: None,
+                });
+            }
+        }
+
+        if !paren_stack.is_empty() {
+            for (line_idx, char_idx) in paren_stack {
+                diagnostics.push(Diagnostic {
+                    range: Range {
+                        start: Position { line: line_idx as u32, character: char_idx as u32 },
+                        end: Position { line: line_idx as u32, character: (char_idx + 1) as u32 },
+                    },
+                    severity: Some(DiagnosticSeverity::ERROR),
+                    code: Some(lsp_types::NumberOrString::String("paren-mismatch".to_string())),
+                    code_description: None,
+                    source: Some("vela-lsp".to_string()),
+                    message: "Unmatched opening parenthesis".to_string(),
+                    related_information: None,
+                    tags: None,
+                    data: None,
+                });
+            }
+        }
+
+        diagnostics
+    }
+
+    /// Send diagnostics notification to client
+    fn send_diagnostics(&self, uri: lsp_types::Url, diagnostics: Vec<Diagnostic>) -> Result<()> {
+        let params = PublishDiagnosticsParams {
+            uri,
+            diagnostics,
+            version: None,
+        };
+
+        let notification = lsp_server::Notification {
+            method: "textDocument/publishDiagnostics".to_string(),
+            params: serde_json::to_value(params)
+                .map_err(|e| anyhow::anyhow!("Failed to serialize diagnostics: {}", e))?,
+        };
+
+        self.connection.sender.send(Message::Notification(notification))?;
+        Ok(())
     }
 
     /// Analyze the function call at the given position for signature help
