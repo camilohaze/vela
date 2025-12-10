@@ -3593,6 +3593,7 @@ name = "vela-compiler"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "bincode",
  "criterion",
  "nom",
  "num_cpus",
@@ -3753,6 +3754,7 @@ dependencies = [
 name = "vela-tooling"
 version = "0.1.0"
 dependencies = [
+ "bincode",
  "clap",
  "criterion",
  "miette",

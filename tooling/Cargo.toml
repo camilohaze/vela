@@ -19,6 +19,7 @@ rayon = "1.10"
 sha2 = "0.10"
 walkdir = "2.5"
 tempfile = "3.10"
+bincode = "1.3"
 vela-lsp = { path = "../packages/lsp" }
 vela-compiler = { path = "../compiler" }
 vela-vm = { path = "../vm" }

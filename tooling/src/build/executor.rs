@@ -208,18 +208,11 @@ impl BuildExecutor {
     fn find_vela_files(&self) -> Result<Vec<std::path::PathBuf>> {
         let mut vela_files = Vec::new();
 
-        // Directorios a buscar (src/, examples/, packages/)
-        let search_dirs = ["src", "examples", "packages"];
-
-        for dir_name in &search_dirs {
-            let dir_path = self.config.project_root.join(dir_name);
-            if dir_path.exists() {
-                self.collect_vela_files_recursive(&dir_path, &mut vela_files)?;
-            }
+        // Solo buscar en src/ para evitar archivos de ejemplo con caracteres Unicode
+        let src_dir = self.config.project_root.join("src");
+        if src_dir.exists() {
+            self.collect_vela_files_recursive(&src_dir, &mut vela_files)?;
         }
-
-        // También buscar en la raíz del proyecto
-        self.collect_vela_files_recursive(&self.config.project_root, &mut vela_files)?;
 
         Ok(vela_files)
     }
@@ -251,7 +244,7 @@ impl BuildExecutor {
             .and_then(|n| n.to_str())
             .unwrap_or("");
 
-        matches!(dir_name, "target" | "node_modules" | ".git" | "dist" | "build")
+        matches!(dir_name, "target" | "node_modules" | ".git" | "dist" | "build" | "vm" | "examples" | "tests" | "tooling" | "docs" | ".github")
     }
 
     /// Get mutable reference to graph

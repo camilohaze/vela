@@ -9,6 +9,7 @@ Este módulo define las estructuras de bytecode ejecutable por la VelaVM.
 
 use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
+use bincode;
 
 /// Programa bytecode completo
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -34,9 +35,7 @@ impl BytecodeProgram {
 
     /// Serializar el programa a bytes
     pub fn to_bytes(&self) -> Result<Vec<u8>, String> {
-        // TODO: Implementar serialización real
-        // Por ahora, devolver un error
-        Err("to_bytes not implemented yet".to_string())
+        bincode::serialize(self).map_err(|e| format!("Failed to serialize bytecode: {}", e))
     }
 }
 

@@ -277,11 +277,11 @@ impl ASTToIRConverter {
                 }
             }
             "number" => {
-                if let Some(i) = lit.value.as_i64() {
-                    Ok((IRValue::Int(i), IRType::Int))
+                if let Some(f) = lit.value.as_f64() {
+                    Ok((IRValue::Float(f), IRType::Float))
                 } else {
                     Err(CompileError::Codegen(CodegenError {
-                        message: "Invalid integer literal".to_string(),
+                        message: "Invalid number literal".to_string(),
                         location: None,
                     }))
                 }
