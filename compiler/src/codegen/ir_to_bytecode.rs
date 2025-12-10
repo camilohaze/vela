@@ -304,7 +304,7 @@ impl IROptimizer {
     fn optimize_function(&self, function: &mut IRFunction) {
         // Optimización básica: eliminar NOPs
         // No hay Nop en IR, así que no eliminamos nada
-    // function.body.retain(|instr| !matches!(instr, IRInstruction::Nop));
+        // function.body.retain(|instr| !matches!(instr, IRInstruction::Nop));
 
         // Constant folding: simplificar expresiones constantes
         self.constant_folding(function);
