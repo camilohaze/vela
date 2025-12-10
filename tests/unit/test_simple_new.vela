@@ -1,0 +1,113 @@
+"""
+Test simple usando sistema @test básico
+
+Tests que solo verifican que el código se ejecuta sin errores.
+Sin dependencias de framework de testing complejo.
+"""
+
+@test
+fn testBasicExecution() -> void {
+  println("✅ Test básico ejecutado correctamente")
+}
+
+@test
+fn testVariableAssignment() -> void {
+  x: Number = 42
+  y: String = "Hello"
+  z: Bool = true
+
+  println("✅ Variables asignadas: x=${x}, y=${y}, z=${z}")
+}
+
+@test
+fn testArithmetic() -> void {
+  a: Number = 10
+  b: Number = 5
+
+  sum = a + b
+  diff = a - b
+  prod = a * b
+  quot = a / b
+
+  println("✅ Aritmética: ${a}+${b}=${sum}, ${a}-${b}=${diff}, ${a}*${b}=${prod}, ${a}/${b}=${quot}")
+}
+
+@test
+fn testStringOperations() -> void {
+  text: String = "Hello World"
+  upper = text.toUpperCase()
+  length = text.length()
+
+  println("✅ String ops: original='${text}', upper='${upper}', length=${length}")
+}
+
+@test
+fn testListOperations() -> void {
+  numbers = [1, 2, 3, 4, 5]
+  doubled = numbers.map(n => n * 2)
+  evens = numbers.filter(n => n % 2 == 0)
+
+  println("✅ List ops: original=${numbers}, doubled=${doubled}, evens=${evens}")
+}
+
+@test
+fn testConditionalLogic() -> void {
+  x: Number = 10
+
+  if x > 5 {
+    println("✅ Condicional: x > 5 es true")
+  } else {
+    println("❌ Condicional: x > 5 es false")
+  }
+
+  result = if x % 2 == 0 { "even" } else { "odd" }
+  println("✅ Expresión condicional: ${x} es ${result}")
+}
+
+struct TestStruct {
+  id: Number
+  name: String
+  active: Bool
+}
+
+@test
+fn testStruct() -> void {
+  user = TestStruct {
+    id: 1,
+    name: "Alice",
+    active: true
+  }
+
+  println("✅ Struct: id=${user.id}, name=${user.name}, active=${user.active}")
+}
+
+fn fibonacci(n: Number) -> Number {
+  if n <= 1 {
+    return n
+  }
+  return fibonacci(n - 1) + fibonacci(n - 2)
+}
+
+@test
+fn testRecursion() -> void {
+  fib5 = fibonacci(5)
+  fib8 = fibonacci(8)
+
+  println("✅ Recursión: fib(5)=${fib5}, fib(8)=${fib8}")
+}
+
+@test
+fn testPatternMatching() -> void {
+  value = 42
+
+  result = match value {
+    0 => "zero"
+    1..=10 => "small"
+    11..=100 => "medium"
+    _ => "large"
+  }
+
+  println("✅ Pattern matching: ${value} es ${result}")
+}
+
+println("🎉 Todos los tests básicos completados!")

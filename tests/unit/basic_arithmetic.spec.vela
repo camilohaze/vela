@@ -1,0 +1,11 @@
+@test
+fn test_basic_arithmetic() -> void {
+    let result = 2 + 3
+    assert(result == 5, "2 + 3 should equal 5")
+}
+
+@test
+fn test_string_concatenation() -> void {
+    let greeting = "Hello" + " " + "World"
+    assert(greeting == "Hello World", "String concatenation should work")
+}

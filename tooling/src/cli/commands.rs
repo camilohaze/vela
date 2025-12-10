@@ -194,12 +194,141 @@ pub fn execute_run(release: bool, args: &[String]) -> Result<()> {
 
 /// Execute test command
 pub fn execute_test(filter: Option<&str>, release: bool) -> Result<()> {
-    println!("Running tests (release: {})", release);
+    println!("🧪 Running Vela tests...");
+    println!("📋 Configuration:");
+    println!("   Release mode: {}", release);
     if let Some(f) = filter {
-        println!("Filter: {}", f);
+        println!("   Filter: {}", f);
     }
-    // TODO: Implement test runner
-    Ok(())
+
+    // Determinar directorio del proyecto
+    let project_root = std::env::current_dir()
+        .map_err(|e| crate::common::Error::Io(e))?;
+
+    // Buscar archivos de test .vela recursivamente
+    let mut test_files = Vec::new();
+    fn find_test_files(dir: &std::path::Path, test_files: &mut Vec<std::path::PathBuf>) -> Result<()> {
+        for entry in std::fs::read_dir(dir)? {
+            let entry = entry?;
+            let path = entry.path();
+            if path.is_dir() {
+                // Only search in directories that contain 'tests' in their path
+                if path.components().any(|c| c.as_os_str() == "tests") {
+                    find_test_files(&path, test_files)?;
+                }
+                // Skip all other directories completely
+            } else if let Some(ext) = path.extension().and_then(|s| s.to_str()) {
+                if ext == "vela" {
+                    // Check if this is a valid test file: must end with .spec.vela (Angular/NestJS style)
+                    let is_test_file = path.file_name()
+                        .and_then(|n| n.to_str())
+                        .map(|s| s.ends_with(".spec.vela"))
+                        .unwrap_or(false);
+
+                    if is_test_file {
+                        test_files.push(path);
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+
+    find_test_files(&project_root, &mut test_files)?;
+
+    if test_files.is_empty() {
+        println!("\n❌ No test files found!");
+        println!("   Expected .spec.vela files (Angular/NestJS style)");
+        return Err(crate::common::Error::Io(std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            "No test files found"
+        )));
+    }
+
+    println!("\n📂 Found {} test files:", test_files.len());
+    for file in &test_files {
+        println!("   {}", file.strip_prefix(&project_root).unwrap_or(file).display());
+    }
+
+    // Crear directorio de output si no existe
+    let output_dir = project_root.join("target");
+    std::fs::create_dir_all(&output_dir)?;
+
+    // Ejecutar cada archivo de test
+    let mut passed = 0;
+    let mut failed = 0;
+
+    for test_file in &test_files {
+        println!("\n▶️  Running tests in: {}", test_file.strip_prefix(&project_root).unwrap_or(test_file).display());
+
+        // Compilar el archivo de test usando vela-compiler
+        let mut compiler = vela_compiler::Compiler::default();
+        let compile_result = compiler.compile_file(test_file);
+
+        let bytecode_bytes = match compile_result {
+            Ok(bytes) => bytes,
+            Err(e) => {
+                println!("❌ Compilation failed: {}", e);
+                failed += 1;
+                continue;
+            }
+        };
+
+        // Determinar nombre del archivo bytecode
+        let file_stem = test_file.file_stem().unwrap().to_str().unwrap();
+        let bytecode_path = output_dir.join(format!("{}.velac", file_stem));
+
+        // Escribir bytecode a archivo
+        if let Err(e) = std::fs::write(&bytecode_path, &bytecode_bytes) {
+            println!("❌ Failed to write bytecode: {}", e);
+            failed += 1;
+            continue;
+        }
+
+        // Deserializar bytecode
+        let bytecode: vela_vm::Bytecode = match bincode::deserialize(&bytecode_bytes) {
+            Ok(bc) => bc,
+            Err(e) => {
+                println!("❌ Failed to deserialize bytecode: {}", e);
+                failed += 1;
+                continue;
+            }
+        };
+
+        // Crear VM y ejecutar
+        let mut vm = vela_vm::VirtualMachine::new();
+        let start_time = std::time::Instant::now();
+        let result = vm.execute(&bytecode);
+        let duration = start_time.elapsed();
+
+        match result {
+            Ok(_) => {
+                println!("✅ Tests passed in {} ms", duration.as_millis());
+                passed += 1;
+            }
+            Err(e) => {
+                println!("❌ Tests failed after {} ms: {}", duration.as_millis(), e);
+                failed += 1;
+            }
+        }
+    }
+
+    // Reporte final
+    println!("\n📊 Test Results:");
+    println!("   Files: {}", test_files.len());
+    println!("   Passed: {} ✅", passed);
+    println!("   Failed: {} ❌", failed);
+
+    if failed > 0 {
+        println!("\n❌ Some tests failed!");
+        Err(crate::common::Error::Io(std::io::Error::new(
+            std::io::ErrorKind::Other,
+            format!("{} test files failed", failed)
+        )))
+    } else {
+        println!("\n✅ All tests passed!");
+        Ok(())
+    }
 }
 
 /// Execute fmt command

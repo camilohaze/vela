@@ -1,0 +1,18 @@
+@test
+fn test_user_service_creation() -> void {
+    // Test user service instantiation
+    let user_service = UserService()
+    assert(user_service != null, "UserService should be created successfully")
+}
+
+@test
+fn test_user_validation() -> void {
+    // Test user data validation
+    let valid_user = User {
+        id: 1,
+        name: "John Doe",
+        email: "john@example.com"
+    }
+    assert(valid_user.name.length > 0, "User name should not be empty")
+    assert(valid_user.email.contains("@"), "Email should contain @ symbol")
+}

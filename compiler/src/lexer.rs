@@ -132,8 +132,17 @@ impl Lexer {
             if let Err(e) = self.scan_token() {
                 println!("❌ Lex error: {:?}", e);
                 self.errors.push(e);
-                // Error recovery: skip invalid character and continue
+                // Error recovery: skip invalid character and reset start position
                 self.advance();
+                self.start = self.current;
+                // Additional safety: if we've had too many consecutive errors, skip ahead
+                if self.errors.len() > 10 {
+                    println!("🚨 Too many consecutive errors, skipping to next line or whitespace");
+                    while !self.is_at_end() && !matches!(self.peek(), ' ' | '\t' | '\n' | '\r') {
+                        self.advance();
+                    }
+                    self.start = self.current;
+                }
             }
         }
 
@@ -521,11 +530,19 @@ impl Lexer {
 
     /// Agrega un token a la lista
     fn add_token(&mut self, kind: TokenKind) {
+        // Bounds checking to prevent overflow from error recovery
+        if self.current < self.start {
+            println!("⚠️  Token range error: current ({}) < start ({}), skipping token", self.current, self.start);
+            return;
+        }
+
         let lexeme = self.source[self.start..self.current].to_string();
+        let token_length = self.current - self.start;
+
         let range = crate::ast::Range {
             start: crate::ast::Position {
                 line: self.line,
-                column: self.column - (self.current - self.start),
+                column: if self.column >= token_length { self.column - token_length } else { 0 },
             },
             end: crate::ast::Position {
                 line: self.line,

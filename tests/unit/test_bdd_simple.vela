@@ -1,0 +1,119 @@
+"""
+Test simple usando sistema describe/it básico
+
+Tests que solo verifican que el código se ejecuta sin errores.
+Sin dependencias de framework de testing complejo.
+"""
+
+fn describe(name: String, tests: () -> void) -> void {
+  println("📋 Suite: ${name}")
+  tests()
+}
+
+fn it(description: String, testFn: () -> void) -> void {
+  println("  🧪 ${description}")
+  testFn()
+  println("  ✅ Passed")
+}
+
+# ============================================================================
+# SUITE: BASIC FUNCTIONALITY
+# ============================================================================
+
+describe("Basic Functionality", () => {
+
+  it("should execute basic code", () => {
+    x = 42
+    println("    Value: ${x}")
+  })
+
+  it("should handle string operations", () => {
+    text = "Hello World"
+    upper = text.toUpperCase()
+    println("    Original: ${text}, Upper: ${upper}")
+  })
+
+  it("should work with lists", () => {
+    numbers = [1, 2, 3, 4, 5]
+    doubled = numbers.map(n => n * 2)
+    println("    Original: ${numbers}, Doubled: ${doubled}")
+  })
+
+})
+
+# ============================================================================
+# SUITE: MATHEMATICAL OPERATIONS
+# ============================================================================
+
+describe("Mathematical Operations", () => {
+
+  it("should perform addition", () => {
+    result = 10 + 5
+    println("    10 + 5 = ${result}")
+  })
+
+  it("should perform multiplication", () => {
+    result = 6 * 7
+    println("    6 * 7 = ${result}")
+  })
+
+  it("should handle division", () => {
+    result = 20 / 4
+    println("    20 / 4 = ${result}")
+  })
+
+})
+
+# ============================================================================
+# SUITE: DATA STRUCTURES
+# ============================================================================
+
+describe("Data Structures", () => {
+
+  it("should work with structs", () => {
+    struct Person {
+      name: String
+      age: Number
+    }
+
+    person = Person { name: "Alice", age: 30 }
+    println("    Person: ${person.name}, ${person.age} years old")
+  })
+
+  it("should handle conditional logic", () => {
+    x = 15
+    result = if x > 10 { "big" } else { "small" }
+    println("    ${x} is ${result}")
+  })
+
+})
+
+# ============================================================================
+# SUITE: ADVANCED FEATURES
+# ============================================================================
+
+describe("Advanced Features", () => {
+
+  it("should handle recursion", () => {
+    fn factorial(n: Number) -> Number {
+      if n <= 1 { return 1 }
+      return n * factorial(n - 1)
+    }
+
+    result = factorial(5)
+    println("    5! = ${result}")
+  })
+
+  it("should work with pattern matching", () => {
+    value = 25
+    category = match value {
+      0..=10 => "small"
+      11..=50 => "medium"
+      _ => "large"
+    }
+    println("    ${value} is ${category}")
+  })
+
+})
+
+println("🎉 All BDD tests completed!")

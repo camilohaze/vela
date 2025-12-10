@@ -1,0 +1,24 @@
+@test
+fn testBasicAssertions() -> void {
+  // Test basic assertions
+  assert(true, "true should be true")
+  assertEquals(5, 5, "5 should equal 5")
+  assertEquals("hello", "hello", "strings should be equal")
+
+  // Test that would fail (commented out for now)
+  // assert(false, "this should fail")
+  // assertEquals(5, 6, "this should fail")
+
+  println("All basic assertions passed!")
+}
+
+@test
+fn testMathOperations() -> void {
+  let result = 2 + 3
+  assertEquals(result, 5, "2 + 3 should equal 5")
+
+  let multiply = 4 * 3
+  assertEquals(multiply, 12, "4 * 3 should equal 12")
+
+  println("Math operations work correctly!")
+}

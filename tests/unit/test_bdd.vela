@@ -1,0 +1,351 @@
+"""
+Test completo usando sistema describe/it (BDD Style)
+
+Ejemplos de Behavior Driven Development con suites organizadas,
+tests descriptivos y assertions con expect().
+"""
+
+import 'system:test' show { describe, it, expect, beforeEach, afterEach, beforeAll, afterAll }
+
+# ============================================================================
+# SETUP GLOBAL
+# ============================================================================
+
+state globalCounter: Number = 0
+state users: List<String> = []
+
+beforeAll(() => {
+  println("🚀 Starting BDD Test Suite")
+  globalCounter = 100
+})
+
+afterAll(() => {
+  println("✅ BDD Test Suite Completed")
+  globalCounter = 0
+})
+
+# ============================================================================
+# SUITE: COUNTER FUNCTIONALITY
+# ============================================================================
+
+describe("Counter Management", () => {
+  counter: Number = 0
+
+  beforeEach(() => {
+    counter = 5
+    println("Counter reset to 5")
+  })
+
+  afterEach(() => {
+    counter = 0
+    println("Counter cleaned up")
+  })
+
+  it("should initialize with default value", () => {
+    expect(counter).toBe(5)
+  })
+
+  it("should increment correctly", () => {
+    counter = counter + 3
+    expect(counter).toBe(8)
+  })
+
+  it("should decrement correctly", () => {
+    counter = counter - 2
+    expect(counter).toBe(3)
+  })
+
+  it("should handle multiplication", () => {
+    counter = counter * 4
+    expect(counter).toBe(20)
+  })
+
+  it("should handle division", () => {
+    counter = counter / 5
+    expect(counter).toBe(1)
+  })
+
+  describe("Edge Cases", () => {
+    it("should handle zero division safely", () => {
+      result = safeDivide(counter, 0)
+      expect(result).toBe(-1)
+    })
+
+    it("should handle normal division", () => {
+      result = safeDivide(10, 2)
+      expect(result).toBe(5)
+    })
+  })
+})
+
+fn safeDivide(a: Number, b: Number) -> Number {
+  if b == 0 {
+    return -1
+  }
+  return a / b
+}
+
+# ============================================================================
+# SUITE: USER MANAGEMENT
+# ============================================================================
+
+describe("User Management System", () => {
+  testUsers: List<String> = []
+
+  beforeEach(() => {
+    testUsers = ["Alice", "Bob", "Charlie"]
+    users = ["System", "Admin"]
+  })
+
+  afterEach(() => {
+    testUsers = []
+  })
+
+  it("should have initial users", () => {
+    expect(users.length()).toBe(2)
+    expect(users[0]).toBe("System")
+    expect(users[1]).toBe("Admin")
+  })
+
+  it("should add users correctly", () => {
+    users = users + ["User1"]
+    expect(users.length()).toBe(3)
+    expect(users.contains("User1")).toBe(true)
+  })
+
+  it("should remove users correctly", () => {
+    users = users.filter(user => user != "Admin")
+    expect(users.length()).toBe(1)
+    expect(users.contains("Admin")).toBe(false)
+  })
+
+  it("should find users by name", () => {
+    found = users.find(user => user == "System")
+    expect(found.isSome()).toBe(true)
+    expect(found.unwrap()).toBe("System")
+  })
+
+  it("should handle user not found", () => {
+    found = users.find(user => user == "NonExistent")
+    expect(found.isNone()).toBe(true)
+  })
+
+  describe("User Validation", () => {
+    it("should validate user names", () => {
+      expect(isValidUserName("Alice")).toBe(true)
+      expect(isValidUserName("")).toBe(false)
+      expect(isValidUserName("A")).toBe(false)
+      expect(isValidUserName("ThisIsAVeryLongUserNameThatExceedsLimits")).toBe(false)
+    })
+
+    it("should validate email format", () => {
+      expect(isValidEmail("user@example.com")).toBe(true)
+      expect(isValidEmail("invalid-email")).toBe(false)
+      expect(isValidEmail("@example.com")).toBe(false)
+      expect(isValidEmail("user@")).toBe(false)
+    })
+  })
+})
+
+fn isValidUserName(name: String) -> Bool {
+  length = name.length()
+  return length >= 2 && length <= 20
+}
+
+fn isValidEmail(email: String) -> Bool {
+  return email.contains("@") && email.contains(".")
+}
+
+# ============================================================================
+# SUITE: MATHEMATICAL OPERATIONS
+# ============================================================================
+
+describe("Mathematical Operations", () => {
+
+  describe("Basic Arithmetic", () => {
+    it("should perform addition", () => {
+      expect(add(2, 3)).toBe(5)
+      expect(add(-1, 1)).toBe(0)
+      expect(add(0, 0)).toBe(0)
+    })
+
+    it("should perform subtraction", () => {
+      expect(subtract(5, 3)).toBe(2)
+      expect(subtract(1, 5)).toBe(-4)
+    })
+
+    it("should perform multiplication", () => {
+      expect(multiply(4, 3)).toBe(12)
+      expect(multiply(0, 10)).toBe(0)
+      expect(multiply(-2, 3)).toBe(-6)
+    })
+
+    it("should perform division", () => {
+      expect(divide(10, 2)).toBe(5)
+      expect(divide(7, 2)).toBe(3)  # Integer division
+    })
+  })
+
+  describe("Advanced Operations", () => {
+    it("should calculate factorial", () => {
+      expect(factorial(0)).toBe(1)
+      expect(factorial(1)).toBe(1)
+      expect(factorial(5)).toBe(120)
+    })
+
+    it("should check prime numbers", () => {
+      expect(isPrime(2)).toBe(true)
+      expect(isPrime(3)).toBe(true)
+      expect(isPrime(4)).toBe(false)
+      expect(isPrime(17)).toBe(true)
+      expect(isPrime(1)).toBe(false)
+    })
+
+    it("should calculate fibonacci", () => {
+      expect(fibonacci(0)).toBe(0)
+      expect(fibonacci(1)).toBe(1)
+      expect(fibonacci(7)).toBe(13)
+    })
+  })
+})
+
+fn add(a: Number, b: Number) -> Number { a + b }
+fn subtract(a: Number, b: Number) -> Number { a - b }
+fn multiply(a: Number, b: Number) -> Number { a * b }
+fn divide(a: Number, b: Number) -> Number { a / b }
+
+fn factorial(n: Number) -> Number {
+  if n <= 1 {
+    return 1
+  }
+  return n * factorial(n - 1)
+}
+
+fn isPrime(n: Number) -> Bool {
+  if n <= 1 {
+    return false
+  }
+  if n <= 3 {
+    return true
+  }
+  if n % 2 == 0 || n % 3 == 0 {
+    return false
+  }
+
+  i = 5
+  while i * i <= n {
+    if n % i == 0 || n % (i + 2) == 0 {
+      return false
+    }
+    i = i + 6
+  }
+  return true
+}
+
+fn fibonacci(n: Number) -> Number {
+  if n <= 1 {
+    return n
+  }
+  return fibonacci(n - 1) + fibonacci(n - 2)
+}
+
+# ============================================================================
+# SUITE: ERROR HANDLING
+# ============================================================================
+
+describe("Error Handling", () => {
+
+  it("should handle successful operations", () => {
+    result = safeOperation("valid", true)
+    expect(result.isOk()).toBe(true)
+    expect(result.unwrap()).toBe("SUCCESS")
+  })
+
+  it("should handle error operations", () => {
+    result = safeOperation("invalid", false)
+    expect(result.isErr()).toBe(true)
+  })
+
+  it("should throw exceptions appropriately", () => {
+    expect(() => {
+      throw Error("Test error")
+    }).toThrow()
+  })
+
+  it("should handle complex error scenarios", () => {
+    # Test division by zero
+    expect(() => {
+      divide(5, 0)
+    }).toThrow()
+
+    # Test array bounds
+    arr = [1, 2, 3]
+    expect(() => {
+      arr[10]  # Out of bounds
+    }).toThrow()
+  })
+})
+
+fn safeOperation(input: String, success: Bool) -> Result<String, String> {
+  if success && input == "valid" {
+    return Ok("SUCCESS")
+  }
+  return Err("OPERATION_FAILED")
+}
+
+# ============================================================================
+# SUITE: ASYNC OPERATIONS (SIMULATED)
+# ============================================================================
+
+describe("Async Operations", () => {
+
+  it("should handle simulated async results", () => {
+    # Simulate async operation
+    result = simulateAsyncOperation(true)
+    expect(result).toBe("COMPLETED")
+  })
+
+  it("should handle simulated async errors", () => {
+    result = simulateAsyncOperation(false)
+    expect(result).toBe("FAILED")
+  })
+
+  it("should handle timeouts", () => {
+    start = getCurrentTime()
+    result = simulateDelay(100)  # Simulate 100ms delay
+    elapsed = getCurrentTime() - start
+    expect(elapsed >= 100).toBe(true)
+    expect(result).toBe("DELAYED")
+  })
+})
+
+fn simulateAsyncOperation(success: Bool) -> String {
+  # Simulate some processing time
+  i = 0
+  while i < 1000 {
+    i = i + 1
+  }
+
+  if success {
+    return "COMPLETED"
+  }
+  return "FAILED"
+}
+
+fn simulateDelay(ms: Number) -> String {
+  # Simulate delay (in a real async system this would be non-blocking)
+  i = 0
+  iterations = ms * 1000  # Rough approximation
+  while i < iterations {
+    i = i + 1
+  }
+  return "DELAYED"
+}
+
+fn getCurrentTime() -> Number {
+  # Simplified time function (would use system time in real implementation)
+  return 1234567890
+}
+
+println("🎉 All BDD tests defined and ready to run!")</content>
+<parameter name="filePath">c:\Users\cristian.naranjo\Downloads\Vela\tests\unit\test_bdd.vela
