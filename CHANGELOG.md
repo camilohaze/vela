@@ -9,6 +9,7 @@ y este proyecto adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 ### Added
 - [VELA-103] Implementar `vela install` - Comando para instalar dependencias del proyecto desde `vela.yaml`
+- [ADR-XXX] Foreign Language Bindings - Sistema para integrar librerías de otros lenguajes (JS, WASM, Native) manteniendo pureza funcional
 
 ## [0.10.0] - Sprint 34 - 2025-12-08
 

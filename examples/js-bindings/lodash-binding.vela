@@ -1,0 +1,78 @@
+"""
+Ejemplo de Foreign Language Binding: Integración con Lodash (JS)
+
+Este ejemplo demuestra cómo crear bindings a librerías JavaScript
+mientras se mantiene la pureza funcional de Vela.
+
+Jira: TASK-103
+Historia: US-23 (Package Manager)
+Fecha: 2025-12-10
+"""
+
+// bindings/js/lodash.vela
+@js_binding("lodash")
+module Lodash {
+  """
+  Binding puro a la librería lodash de JavaScript.
+  Todas las funciones son declaradas como @pure para asegurar
+  que no tienen side effects.
+  """
+
+  @pure
+  fn chunk<T>(array: List<T>, size: Number) -> List<List<T>> {
+    """
+    Divide un array en grupos de tamaño especificado.
+
+    Args:
+      array: Lista a dividir
+      size: Tamaño de cada grupo
+
+    Returns:
+      Lista de listas, cada una del tamaño especificado
+    """
+    // Implementation: calls lodash.chunk(array, size)
+  }
+
+  @pure
+  fn flatten<T>(array: List<List<T>>) -> List<T> {
+    """
+    Aplana un array de arrays en un array simple.
+
+    Args:
+      array: Array anidado a aplanar
+
+    Returns:
+      Array plano con todos los elementos
+    """
+    // Implementation: calls lodash.flatten(array)
+  }
+
+  @pure
+  fn uniq<T>(array: List<T>) -> List<T> {
+    """
+    Remueve elementos duplicados de un array.
+
+    Args:
+      array: Array con posibles duplicados
+
+    Returns:
+      Array sin duplicados
+    """
+    // Implementation: calls lodash.uniq(array)
+  }
+
+  @pure
+  fn groupBy<T, K>(array: List<T>, iteratee: (T) -> K) -> Dict<K, List<T>> {
+    """
+    Agrupa elementos de un array por una función.
+
+    Args:
+      array: Array a agrupar
+      iteratee: Función que determina la clave de agrupación
+
+    Returns:
+      Diccionario con elementos agrupados por clave
+    """
+    // Implementation: calls lodash.groupBy(array, iteratee)
+  }
+}
