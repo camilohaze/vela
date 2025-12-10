@@ -21,6 +21,7 @@ vela-vm = { path = "../vm" }
 [dev-dependencies]
 criterion.workspace = true
 tokio = { version = "1.0", features = ["rt", "macros", "sync"] }
+tempfile = "3.0"
 
 [features]
 default = []
