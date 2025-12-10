@@ -1247,14 +1247,6 @@ class SortedList<T> where T: Comparable, T: Hashable {
 
 ---
 
-### `@module`
-**Propósito**: Define el nombre del módulo.
-
-**Uso**:
-```vela
-@module("auth")
-```
-
 ---
 
 ### `@library`
@@ -1321,6 +1313,7 @@ class UserController {
 **Uso**:
 ```vela
 @module({
+  name: "NetworkModule",
   providers: [HttpClient],
   exports: [HttpClient]
 })
@@ -2580,8 +2573,9 @@ validator EmailValidator {
 **Propósito**: Módulo funcional (MULTIPLATAFORMA: Angular + NestJS style).
 
 **Características obligatorias**:
-- DEBE tener decorador `@module({ ... })`
-- DEBE declarar `declarations`, `controllers`, `providers`, `imports`, `exports`
+- DEBE tener decorador `@module({ name: "...", ... })`
+- DEBE declarar `name`, `declarations`, `controllers`, `providers`, `imports`, `exports`
+- `name`: Nombre único del módulo (string)
 - `declarations`: Widgets, components, services (frontend/general)
 - `controllers`: Controllers REST (backend)
 - `providers`: Services, repositories, guards, middleware, pipes (con `@injectable`)
@@ -2590,6 +2584,7 @@ validator EmailValidator {
 **Uso (Backend Module)**:
 ```vela
 @module({
+  name: "UserModule",
   controllers: [UserController],  # REST endpoints
   providers: [UserService, UserRepository],  # Business logic
   imports: [DatabaseModule, HttpModule],  # Otros módulos
@@ -2601,6 +2596,7 @@ module UserModule { }
 **Uso (Frontend Module)**:
 ```vela
 @module({
+  name: "AuthModule",
   declarations: [LoginWidget, HeaderWidget],  # UI components
   providers: [AuthService],  # Shared services
   imports: [UiModule, FormsModule],  # Otros módulos UI
@@ -2612,6 +2608,7 @@ module AuthModule { }
 **Uso (Hybrid Module - TÍPICO EN VELA)**:
 ```vela
 @module({
+  name: "UserModule",
   declarations: [UserWidget, UserCard],  # UI components
   controllers: [UserController],  # REST API
   providers: [UserService, UserRepository],  # Business logic
