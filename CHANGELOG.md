@@ -7,6 +7,9 @@ y este proyecto adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 ## [Unreleased]
 
+### Added
+- [VELA-103] Implementar `vela install` - Comando para instalar dependencias del proyecto desde `vela.yaml`
+
 ## [0.10.0] - Sprint 34 - 2025-12-08
 
 ### 🎯 Resumen del Sprint
