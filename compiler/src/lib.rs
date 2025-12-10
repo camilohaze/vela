@@ -31,6 +31,7 @@ pub mod parser;
 pub mod semantic;
 pub mod types;
 pub mod codegen;
+pub mod json_decorators;
 
 use std::path::Path;
 use config::Config;

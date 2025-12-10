@@ -3,10 +3,12 @@
 //! This module provides comprehensive JSON parsing and encoding capabilities
 //! according to RFC 8259 specification.
 
+pub mod decorators;
 pub mod encoder;
 pub mod parser;
 pub mod serialization;
 
+pub use decorators::*;
 pub use encoder::{JsonEncoder, JsonEncoderConfig, convenience as json_encoder};
 pub use parser::{JsonParser, JsonValue, JsonParseError};
 pub use serialization::*;
