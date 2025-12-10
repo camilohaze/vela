@@ -16,7 +16,6 @@ Implementar la librería estándar completa de Vela con colecciones, I/O, networ
 - [x] **TASK-086**: Tests de colecciones - Tests exhaustivos ✅
 - [x] **TASK-087**: Implementar File API - Lectura/escritura archivos ✅
 - [x] **TASK-088**: Implementar Directory API - Operaciones directorios ✅
-- [ ] **TASK-088**: Implementar Directory API - Operaciones directorios
 - [ ] **TASK-089**: Implementar HttpClient - Cliente HTTP básico
 - [ ] **TASK-090**: Implementar WebSocket - Soporte WebSockets
 - [ ] **TASK-091**: Tests de I/O y networking - Tests de correctness
