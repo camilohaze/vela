@@ -1408,36 +1408,9 @@ fn testAddition() {
 
 ## 16. Operadores Especiales
 
-### `?.` (Safe navigation)
-**Propósito**: Acceso seguro a propiedades (retorna None si es null).
-
-**Uso**:
-```vela
-user: Option<User> = getUser()
-name: Option<String> = user?.name
-email: Option<String> = user?.profile?.email
-```
-
 ---
 
-### `??` (Null coalescing)
-**Propósito**: Valor por defecto si es None/null.
-
-**Uso**:
-```vela
-name: String = user?.name ?? "Guest"
-```
-
 ---
-
-### `!` (Non-null assertion)
-**Propósito**: Afirma que un valor no es null (puede lanzar error en runtime).
-
-**Uso**:
-```vela
-user: Option<User> = getUser()
-name: String = user!.name  # Peligroso: puede fallar si user es None
-```
 
 ---
 
@@ -1692,7 +1665,7 @@ Vela tiene **~100 palabras reservadas** que cubren:
 - ✅ Concurrencia (actor, spawn, send, call)
 - ✅ Genéricos (<T>, where)
 - ✅ Decoradores (@package, @module, @library, @test, @deprecated)
-- ✅ Operadores especiales (?., ??, !, =>, .., ..=, |>)
+- ✅ Operadores especiales (=>, .., ..=, |>)
 - ✅ ADTs (Some, None, Ok, Err) - **❌ SIN null**
 
 ## Filosofía de Vela
@@ -1716,6 +1689,7 @@ Para mantener la pureza funcional y simplicidad:
 - ❌ `for`, `while`, `loop`, `break`, `continue` → métodos funcionales
 - ❌ `export`, `from` → modificadores de acceso (`public`, `private`, `protected`)
 - ❌ `null` → solo `Option<T>` con `Some`/`None`
+- ❌ `?.`, `??`, `!` → null-safety operators NO existen (paradigma funcional puro)
 - ❌ `any` → tipado fuerte obligatorio
 - ❌ `@override` → keyword `override` es suficiente
 - ❌ `component`, `widget` → `StatefulWidget`, `StatelessWidget`
