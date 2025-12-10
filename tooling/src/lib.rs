@@ -87,12 +87,14 @@ pub mod cli;
 pub mod build;
 pub mod lsp;
 pub mod common;
+pub mod package;
 
 // Re-export commonly used types
 pub use cli::{Cli, Commands};
 pub use build::{BuildExecutor, BuildConfig, BuildResult};
 pub use lsp::LanguageServer;
 pub use common::{Error, Result};
+pub use package::PackageManager;
 
 #[cfg(test)]
 mod tests {

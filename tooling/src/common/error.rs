@@ -88,6 +88,90 @@ pub enum Error {
     /// Invalid project structure
     #[error("Invalid project structure: {message}")]
     InvalidProject { message: String },
+
+    /// Unsatisfiable dependency constraints
+    #[error("Unsatisfiable dependency constraints")]
+    #[diagnostic(
+        code(vela::deps::unsatisfiable),
+        help("Check for conflicting version requirements")
+    )]
+    Unsatisfiable,
+
+    /// Invalid version constraint
+    #[error("Invalid version constraint: {constraint}")]
+    #[diagnostic(
+        code(vela::deps::invalid_constraint),
+        help("Check version constraint syntax (e.g., ^1.0.0, >=2.0.0)")
+    )]
+    InvalidVersionConstraint { constraint: String },
+
+    /// Duplicate package in dependency graph
+    #[error("Duplicate package: {name}")]
+    #[diagnostic(
+        code(vela::deps::duplicate_package),
+        help("Remove duplicate package declarations")
+    )]
+    DuplicatePackage { name: String },
+
+    /// Circular dependency detected
+    #[error("Circular dependency detected")]
+    #[diagnostic(
+        code(vela::deps::circular_dependency),
+        help("Break the circular dependency by refactoring")
+    )]
+    CircularDependency,
+
+    /// Version constraint violation
+    #[error("Version constraint violation: {package}@{version} violates {constraint}")]
+    #[diagnostic(
+        code(vela::deps::constraint_violation),
+        help("Update version constraints to be compatible")
+    )]
+    ConstraintViolation {
+        package: String,
+        version: String,
+        constraint: String,
+    },
+
+    /// Unsatisfiable constraint in solver
+    #[error("Unsatisfiable constraint: {package}@{constraint}")]
+    #[diagnostic(
+        code(vela::solver::unsatisfiable_constraint),
+        help("Review constraint logic")
+    )]
+    UnsatisfiableConstraint {
+        package: String,
+        constraint: String,
+    },
+
+    /// Solver error
+    #[error("Solver error: {message}")]
+    #[diagnostic(code(vela::solver::error))]
+    SolverError { message: String },
+
+    /// Unsatisfiable dependency
+    #[error("Unsatisfiable dependency: {dependent} requires {dependency}@{required} but {available} is available")]
+    #[diagnostic(
+        code(vela::deps::unsatisfiable_dependency),
+        help("Check if the required version exists")
+    )]
+    UnsatisfiableDependency {
+        dependent: String,
+        dependency: String,
+        required: String,
+        available: String,
+    },
+
+    /// Missing dependency
+    #[error("Missing dependency: {dependent} requires {dependency}")]
+    #[diagnostic(
+        code(vela::deps::missing),
+        help("Add the missing dependency to your manifest")
+    )]
+    MissingDependency {
+        dependent: String,
+        dependency: String,
+    },
 }
 
 impl Error {
@@ -138,6 +222,85 @@ impl Error {
     pub fn invalid_project(message: impl Into<String>) -> Self {
         Self::InvalidProject {
             message: message.into(),
+        }
+    }
+
+    /// Create an Unsatisfiable error
+    pub fn unsatisfiable() -> Self {
+        Self::Unsatisfiable
+    }
+
+    /// Create an InvalidVersionConstraint error
+    pub fn invalid_version_constraint(constraint: impl Into<String>) -> Self {
+        Self::InvalidVersionConstraint {
+            constraint: constraint.into(),
+        }
+    }
+
+    /// Create a DuplicatePackage error
+    pub fn duplicate_package(name: impl Into<String>) -> Self {
+        Self::DuplicatePackage { name: name.into() }
+    }
+
+    /// Create a CircularDependency error
+    pub fn circular_dependency() -> Self {
+        Self::CircularDependency
+    }
+
+    /// Create a ConstraintViolation error
+    pub fn constraint_violation(
+        package: impl Into<String>,
+        version: impl Into<String>,
+        constraint: impl Into<String>,
+    ) -> Self {
+        Self::ConstraintViolation {
+            package: package.into(),
+            version: version.into(),
+            constraint: constraint.into(),
+        }
+    }
+
+    /// Create an UnsatisfiableConstraint error
+    pub fn unsatisfiable_constraint(
+        package: impl Into<String>,
+        constraint: impl Into<String>,
+    ) -> Self {
+        Self::UnsatisfiableConstraint {
+            package: package.into(),
+            constraint: constraint.into(),
+        }
+    }
+
+    /// Create a SolverError
+    pub fn solver_error(message: impl Into<String>) -> Self {
+        Self::SolverError {
+            message: message.into(),
+        }
+    }
+
+    /// Create an UnsatisfiableDependency error
+    pub fn unsatisfiable_dependency(
+        dependent: impl Into<String>,
+        dependency: impl Into<String>,
+        required: impl Into<String>,
+        available: impl Into<String>,
+    ) -> Self {
+        Self::UnsatisfiableDependency {
+            dependent: dependent.into(),
+            dependency: dependency.into(),
+            required: required.into(),
+            available: available.into(),
+        }
+    }
+
+    /// Create a MissingDependency error
+    pub fn missing_dependency(
+        dependent: impl Into<String>,
+        dependency: impl Into<String>,
+    ) -> Self {
+        Self::MissingDependency {
+            dependent: dependent.into(),
+            dependency: dependency.into(),
         }
     }
 }
