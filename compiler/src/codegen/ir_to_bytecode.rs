@@ -228,17 +228,8 @@ impl IRToBytecodeGenerator {
                 Ok(vec![Opcode::StoreField as u8, (prop_index >> 8) as u8, prop_index as u8])
             }
             IRInstruction::AssignVar { name, value } => {
-                // Primero generar bytecode para el valor
-                self.generate_instruction(value)?;
-                // Buscar el índice de la variable local
-                if let Some(&local_index) = self.local_symbols.get(name) {
-                    Ok(vec![Opcode::StoreLocal as u8, local_index as u8])
-                } else {
-                    Err(CompileError::Codegen(CodegenError {
-                        message: format!("Undefined variable: {}", name),
-                        location: None,
-                    }))
-                }
+                // TODO: Implement AssignVar - currently handled by StoreVar in AST conversion
+                todo!("AssignVar instruction not yet implemented - use StoreVar instead")
             }
         }
     }
@@ -332,7 +323,7 @@ impl IROptimizer {
                     if i >= 2 {
                         if let (IRInstruction::LoadConst(a), IRInstruction::LoadConst(b)) =
                             (&function.body[i-2], &function.body[i-1]) {
-                            if let Some(result) = self.fold_binary_op(*op, a.clone(), b.clone()) {
+                            if let Some(result) = self.fold_binary_op(op.clone(), a.clone(), b.clone()) {
                                 // Reemplazar las 3 instrucciones con una sola LoadConst
                                 function.body.splice(i-2..=i, vec![IRInstruction::LoadConst(result)]);
                                 continue; // No incrementar i porque eliminamos elementos
@@ -344,7 +335,7 @@ impl IROptimizer {
                     // Verificar si el valor anterior es constante
                     if i >= 1 {
                         if let IRInstruction::LoadConst(val) = &function.body[i-1] {
-                            if let Some(result) = self.fold_unary_op(*op, val.clone()) {
+                            if let Some(result) = self.fold_unary_op(op.clone(), val.clone()) {
                                 // Reemplazar las 2 instrucciones con una sola LoadConst
                                 function.body.splice(i-1..=i, vec![IRInstruction::LoadConst(result)]);
                                 continue;
@@ -359,32 +350,32 @@ impl IROptimizer {
     }
 
     /// Aplicar operación binaria a constantes
-    fn fold_binary_op(&self, op: BinaryOp, a: Value, b: Value) -> Option<Value> {
+    fn fold_binary_op(&self, op: BinaryOp, a: IRValue, b: IRValue) -> Option<IRValue> {
         match (op, a, b) {
-            (BinaryOp::Add, Value::Int(x), Value::Int(y)) => Some(Value::Int(x + y)),
-            (BinaryOp::Sub, Value::Int(x), Value::Int(y)) => Some(Value::Int(x - y)),
-            (BinaryOp::Mul, Value::Int(x), Value::Int(y)) => Some(Value::Int(x * y)),
-            (BinaryOp::Div, Value::Int(x), Value::Int(y)) if y != 0 => Some(Value::Int(x / y)),
-            (BinaryOp::Add, Value::Float(x), Value::Float(y)) => Some(Value::Float(x + y)),
-            (BinaryOp::Sub, Value::Float(x), Value::Float(y)) => Some(Value::Float(x - y)),
-            (BinaryOp::Mul, Value::Float(x), Value::Float(y)) => Some(Value::Float(x * y)),
-            (BinaryOp::Div, Value::Float(x), Value::Float(y)) if y != 0.0 => Some(Value::Float(x / y)),
-            (BinaryOp::Eq, Value::Int(x), Value::Int(y)) => Some(Value::Bool(x == y)),
-            (BinaryOp::Ne, Value::Int(x), Value::Int(y)) => Some(Value::Bool(x != y)),
-            (BinaryOp::Lt, Value::Int(x), Value::Int(y)) => Some(Value::Bool(x < y)),
-            (BinaryOp::Le, Value::Int(x), Value::Int(y)) => Some(Value::Bool(x <= y)),
-            (BinaryOp::Gt, Value::Int(x), Value::Int(y)) => Some(Value::Bool(x > y)),
-            (BinaryOp::Ge, Value::Int(x), Value::Int(y)) => Some(Value::Bool(x >= y)),
+            (BinaryOp::Add, IRValue::Int(x), IRValue::Int(y)) => Some(IRValue::Int(x + y)),
+            (BinaryOp::Sub, IRValue::Int(x), IRValue::Int(y)) => Some(IRValue::Int(x - y)),
+            (BinaryOp::Mul, IRValue::Int(x), IRValue::Int(y)) => Some(IRValue::Int(x * y)),
+            (BinaryOp::Div, IRValue::Int(x), IRValue::Int(y)) if y != 0 => Some(IRValue::Int(x / y)),
+            (BinaryOp::Add, IRValue::Float(x), IRValue::Float(y)) => Some(IRValue::Float(x + y)),
+            (BinaryOp::Sub, IRValue::Float(x), IRValue::Float(y)) => Some(IRValue::Float(x - y)),
+            (BinaryOp::Mul, IRValue::Float(x), IRValue::Float(y)) => Some(IRValue::Float(x * y)),
+            (BinaryOp::Div, IRValue::Float(x), IRValue::Float(y)) if y != 0.0 => Some(IRValue::Float(x / y)),
+            (BinaryOp::Eq, IRValue::Int(x), IRValue::Int(y)) => Some(IRValue::Bool(x == y)),
+            (BinaryOp::Ne, IRValue::Int(x), IRValue::Int(y)) => Some(IRValue::Bool(x != y)),
+            (BinaryOp::Lt, IRValue::Int(x), IRValue::Int(y)) => Some(IRValue::Bool(x < y)),
+            (BinaryOp::Le, IRValue::Int(x), IRValue::Int(y)) => Some(IRValue::Bool(x <= y)),
+            (BinaryOp::Gt, IRValue::Int(x), IRValue::Int(y)) => Some(IRValue::Bool(x > y)),
+            (BinaryOp::Ge, IRValue::Int(x), IRValue::Int(y)) => Some(IRValue::Bool(x >= y)),
             _ => None,
         }
     }
 
     /// Aplicar operación unaria a constante
-    fn fold_unary_op(&self, op: UnaryOp, val: Value) -> Option<Value> {
+    fn fold_unary_op(&self, op: UnaryOp, val: IRValue) -> Option<IRValue> {
         match (op, val) {
-            (UnaryOp::Neg, Value::Int(x)) => Some(Value::Int(-x)),
-            (UnaryOp::Neg, Value::Float(x)) => Some(Value::Float(-x)),
-            (UnaryOp::Not, Value::Bool(x)) => Some(Value::Bool(!x)),
+            (UnaryOp::Neg, IRValue::Int(x)) => Some(IRValue::Int(-x)),
+            (UnaryOp::Neg, IRValue::Float(x)) => Some(IRValue::Float(-x)),
+            (UnaryOp::Not, IRValue::Bool(x)) => Some(IRValue::Bool(!x)),
             _ => None,
         }
     }
