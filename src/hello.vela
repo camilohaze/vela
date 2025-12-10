@@ -1,3 +1,0 @@
-fn main() -> Number {
-    return 42
-}

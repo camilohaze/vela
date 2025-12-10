@@ -14,6 +14,8 @@ Implementar un Language Server Protocol (LSP) básico para Vela que proporcione 
 2. **TASK-109**: Implementar textDocument/hover ✅
 3. **TASK-110**: Implementar textDocument/definition ✅
 4. **TASK-111**: Implementar textDocument/publishDiagnostics ✅
+5. **TASK-112**: Implementar textDocument/rename ✅
+6. **TASK-113**: Tests de LSP ✅
 
 ## 🔨 Implementación
 
@@ -45,16 +47,29 @@ Implementar un Language Server Protocol (LSP) básico para Vela que proporcione 
 - Warnings para TODO comments y líneas largas
 - Notificaciones en tiempo real al cliente LSP
 
+#### 5. Rename Support (TASK-112)
+- Renombrado de símbolos con cambios en múltiples ubicaciones
+- Filtro de keywords para evitar renombrado de palabras reservadas
+- WorkspaceEdit para cambios atómicos
+
+#### 6. Integration Tests (TASK-113)
+- Suite completa de 10 tests de integración
+- Validación end-to-end de protocolo LSP
+- Cobertura de inicialización, documentos, completion, hover, definition, rename
+- Tests de manejo de errores y operaciones concurrentes
+
 ## 📊 Métricas
-- **Subtasks completadas:** 4/4
-- **Archivos creados:** 8 (código + tests + docs)
-- **Tests unitarios:** 12 tests pasando
-- **Líneas de código:** ~500 líneas
+- **Subtasks completadas:** 6/6
+- **Archivos creados:** 9 (código + tests + docs)
+- **Tests unitarios:** 8 tests pasando
+- **Tests de integración:** 10 tests pasando
+- **Líneas de código:** ~600 líneas
 
 ## ✅ Definición de Hecho
-- [x] Todas las Subtasks completadas
-- [x] LSP server funcional con 4 características principales
-- [x] Tests unitarios con cobertura completa
+- [x] Todas las Subtasks completadas (6/6)
+- [x] LSP server funcional con 5 características principales
+- [x] Tests unitarios con cobertura completa (8/8 tests)
+- [x] Tests de integración completos (10/10 tests)
 - [x] Documentación técnica completa
 - [x] Integración completa con protocolo LSP
 - [x] Pull Request merged a main

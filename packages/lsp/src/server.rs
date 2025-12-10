@@ -12,10 +12,13 @@ use lsp_types::{
     SignatureHelp, SignatureInformation, ParameterInformation,
     SignatureHelpOptions, ReferenceParams, Url, Diagnostic,
     DiagnosticSeverity, PublishDiagnosticsParams, RenameParams,
-    WorkspaceEdit, TextEdit,
+    WorkspaceEdit, TextEdit, OneOf, DiagnosticServerCapabilities,
+    DiagnosticOptions, DidOpenTextDocumentParams, TextDocumentItem,
+    DidChangeTextDocumentParams,
 };
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
+use crate::completion::CompletionProvider;
 use tracing::{error, info, warn};
 
 /// Document store for managing open text documents
@@ -53,6 +56,7 @@ impl DocumentStore {
 pub struct LanguageServer {
     connection: Connection,
     document_store: Arc<Mutex<DocumentStore>>,
+    completion_provider: CompletionProvider,
 }
 
 impl LanguageServer {
@@ -68,6 +72,7 @@ impl LanguageServer {
         Ok(Self {
             connection,
             document_store: Arc::new(Mutex::new(DocumentStore::new())),
+            completion_provider: CompletionProvider::new(),
         })
     }
 
@@ -1742,5 +1747,58 @@ impl LanguageServer {
         completions.extend(self.function_completions());
 
         completions
+    }
+
+    /// Check if a document exists in the store (for testing)
+    pub fn has_document(&self, uri: &lsp_types::Url) -> bool {
+        let store = self.document_store.lock().unwrap();
+        store.get_document(uri).is_some()
+    }
+
+    /// Get document content (for testing)
+    pub fn get_document_content(&self, uri: &lsp_types::Url) -> Option<String> {
+        let store = self.document_store.lock().unwrap();
+        store.get_document(uri).cloned()
+    }
+
+    /// Get server capabilities (for testing)
+    pub fn server_capabilities(&self) -> ServerCapabilities {
+        ServerCapabilities {
+            text_document_sync: Some(TextDocumentSyncCapability::Kind(
+                TextDocumentSyncKind::FULL,
+            )),
+            completion_provider: Some(CompletionOptions {
+                resolve_provider: Some(false),
+                trigger_characters: Some(vec![".".to_string()]),
+                all_commit_characters: None,
+                work_done_progress_options: Default::default(),
+                completion_item: None,
+            }),
+            hover_provider: Some(HoverProviderCapability::Simple(true)),
+            definition_provider: Some(OneOf::Left(true)),
+            rename_provider: Some(OneOf::Left(true)),
+            diagnostic_provider: Some(DiagnosticServerCapabilities::Options(DiagnosticOptions {
+                identifier: Some("vela-lsp".to_string()),
+                inter_file_dependencies: false,
+                workspace_diagnostics: false,
+                work_done_progress_options: Default::default(),
+            })),
+            ..Default::default()
+        }
+    }
+
+    /// Get completions (for testing)
+    pub fn get_completions(&self, params: &CompletionParams) -> CompletionList {
+        self.completion_provider.get_completions(params)
+    }
+
+    /// Get hover information (for testing)
+    pub fn get_hover(&self, params: &HoverParams) -> Option<Hover> {
+        self.compute_hover(params).ok().flatten()
+    }
+
+    /// Get definition (for testing)
+    pub fn get_definition(&self, params: &GotoDefinitionParams) -> Option<GotoDefinitionResponse> {
+        self.compute_definition(params).ok().flatten()
     }
 }
