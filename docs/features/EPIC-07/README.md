@@ -13,10 +13,10 @@ Implementar la librería estándar completa de Vela con colecciones, I/O, networ
 - [x] **TASK-083**: Implementar Set<T> - Set con hash table ✅
 - [x] **TASK-084**: Implementar Dict<K,V> - Dictionary con hash table ✅
 - [x] **TASK-085**: Implementar Queue y Stack - Estructuras adicionales ✅
+- [x] **TASK-086**: Tests de colecciones - Tests exhaustivos ✅
 
 ### 🔄 En Progreso
-- [ ] **TASK-086**: Tests de colecciones - Tests exhaustivos
-- [ ] **TASK-086**: Tests de colecciones - Tests exhaustivos
+- [ ] **TASK-087**: Implementar File API - Lectura/escritura archivos
 - [ ] **TASK-087**: Implementar File API - Lectura/escritura archivos
 - [ ] **TASK-088**: Implementar Directory API - Operaciones directorios
 - [ ] **TASK-089**: Implementar HttpClient - Cliente HTTP básico
@@ -45,9 +45,9 @@ Implementar la librería estándar completa de Vela con colecciones, I/O, networ
 4. **JSON**: Parser, encoder y decorators
 
 ## 📊 Métricas
-- **TASK completadas:** 3/12 (25%)
-- **Líneas implementadas:** ~2159 líneas (Set + Dict + Queue + Stack)
-- **Tests totales:** 67 tests
+- **TASK completadas:** 4/12 (33%)
+- **Líneas implementadas:** ~2159 líneas (Set + Dict + Queue + Stack) + 546 líneas (tests integración)
+- **Tests totales:** 67 tests unitarios + 15 tests integración = 82 tests totales
 - **Cobertura promedio:** 95%
 
 ## 🔗 Referencias
