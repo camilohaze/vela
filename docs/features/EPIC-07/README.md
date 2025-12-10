@@ -17,7 +17,7 @@ Implementar la librería estándar completa de Vela con colecciones, I/O, networ
 - [x] **TASK-087**: Implementar File API - Lectura/escritura archivos ✅
 - [x] **TASK-088**: Implementar Directory API - Operaciones directorios ✅
 - [x] **TASK-089**: Implementar HttpClient - Cliente HTTP básico ✅
-- [ ] **TASK-090**: Implementar WebSocket - Soporte WebSockets
+- [x] **TASK-090**: Implementar WebSocket - Soporte WebSockets ✅
 - [ ] **TASK-091**: Tests de I/O y networking - Tests de correctness
 - [ ] **TASK-092**: Implementar JSON parser - Parser JSON
 - [ ] **TASK-093**: Implementar JSON encoder - Serialización JSON
@@ -42,9 +42,9 @@ Implementar la librería estándar completa de Vela con colecciones, I/O, networ
 4. **JSON**: Parser, encoder y decorators
 
 ## 📊 Métricas
-- **TASK completadas:** 7/12 (58%)
-- **Líneas implementadas:** ~8889 líneas (Set + Dict + Queue + Stack + File API + Directory API + HttpClient) + 546 líneas (tests integración)
-- **Tests totales:** 149 tests unitarios + 15 tests integración = 164 tests totales
+- **TASK completadas:** 8/12 (67%)
+- **Líneas implementadas:** ~9289 líneas (Set + Dict + Queue + Stack + File API + Directory API + HttpClient + WebSocket) + 546 líneas (tests integración)
+- **Tests totales:** 175 tests unitarios + 15 tests integración = 190 tests totales
 - **Cobertura promedio:** 95%
 
 ## 🔗 Referencias
