@@ -979,7 +979,7 @@ component MyComponent {
 
 **Uso**:
 ```vela
-class Counter extends StatefulWidget {
+widget Counter {
   # Estado local
   state count: Number = 0
   
@@ -1029,7 +1029,7 @@ class Counter extends StatefulWidget {
 
 **Uso**:
 ```vela
-class Card extends StatelessWidget {
+component Card {
   # Propiedades inmutables (pasadas en constructor)
   title: String
   content: String
@@ -1077,7 +1077,7 @@ card = Card(
 
 ```vela
 # StatefulWidget: tiene estado mutable
-class TodoList extends StatefulWidget {
+widget TodoList {
   state todos: List<String> = []
   
   fn addTodo(text: String) -> void {
@@ -1092,7 +1092,7 @@ class TodoList extends StatefulWidget {
 }
 
 # StatelessWidget: sin estado, puro
-class TodoItem extends StatelessWidget {
+component TodoItem {
   text: String
   isCompleted: Bool
   
@@ -1242,7 +1242,7 @@ class SortedList<T> where T: Comparable, T: Hashable {
 
 **Uso**:
 ```vela
-@package("com.example.myapp")
+@package("custom-http")
 ```
 
 ---
@@ -1315,29 +1315,16 @@ class UserController {
 
 ---
 
-### `@module`
-**Propósito**: Define un módulo de DI que provee dependencias.
-
-**Uso**:
-```vela
-@module
-class AppModule {
-  @provides
-  fn provideApiClient() -> ApiClient {
-    return ApiClient(baseUrl: "https://api.example.com")
-  }
-}
-```
-
----
-
 ### `@provides`
 **Propósito**: Marca un método que provee una dependencia en un módulo de DI.
 
 **Uso**:
 ```vela
-@module
-class NetworkModule {
+@module({
+  providers: [HttpClient],
+  exports: [HttpClient]
+})
+module NetworkModule {
   @provides
   fn provideHttpClient() -> HttpClient {
     return HttpClient()
@@ -1352,7 +1339,7 @@ class NetworkModule {
 
 **Uso**:
 ```vela
-class UserProfile extends StatefulWidget {
+widget UserProfile {
   @connect(AppStore)
   store: AppStore
   
@@ -1369,7 +1356,7 @@ class UserProfile extends StatefulWidget {
 
 **Uso**:
 ```vela
-class UserWidget extends StatefulWidget {
+widget UserWidget {
   @connect(AppStore)
   store: AppStore
   
@@ -1615,24 +1602,6 @@ match result {
   Ok(value) => print("Success: ${value}")
   Err(error) => print("Error: ${error}")
 }
-```
-
----
-
-## 19. Otras Palabras Reservadas
-
-### `module`
-**Propósito**: Define un módulo (archivo o namespace).
-
-**Uso**:
-```vela
-module auth {
-  export fn login(username: String, password: String) -> Result<User, Error> {
-    # ...
-  }
-}
-```
-
 ---
 
 ### `namespace`
@@ -1726,7 +1695,7 @@ Vela tiene **~100 palabras reservadas** que cubren:
 - ✅ Modificadores de acceso (public, private, protected)
 - ✅ Hooks reactivos (computed, memo, effect, watch)
 - ✅ Ciclo de vida (mount, update, destroy, beforeUpdate, afterUpdate)
-- ✅ UI (**StatefulWidget, StatelessWidget** - como Flutter)
+- ✅ UI (**widget, component** - como Flutter)
 - ✅ Concurrencia (actor, spawn, send, call)
 - ✅ Genéricos (<T>, where)
 - ✅ Decoradores (@package, @module, @library, @test, @deprecated)
@@ -1784,9 +1753,9 @@ class UserService {
   fn getUsers() -> List<User> { /* ... */ }
 }
 
-# Inyectar dependencias
-@injectable
-class AuthController {
+# Inyectar dependencias (controllers NO usan @injectable)
+@controller("/api/auth")
+controller AuthController {
   constructor(
     @inject userService: UserService,
     @inject logger: Logger
@@ -1805,9 +1774,9 @@ class AppContainer {
 
 **Ejemplo REST API completo**:
 ```vela
-# Controlador REST
+# Controlador REST (✅ NO usa @injectable)
 @controller("/api/users")
-class UserController {
+controller UserController {
   constructor(@inject userService: UserService) { }
   
   @get("/")
@@ -1857,7 +1826,7 @@ class AppStore extends Store<AppState> {
 # Conectar widget al store
 @connect(AppStore)
 @select((store) => store.counter) # Solo re-renderiza si counter cambia
-class CounterWidget extends StatefulWidget<CounterProps> {
+widget CounterWidget {
   fn render(context: Context) -> Widget {
     dispatch(IncrementAction()) # Enviar acción
     
@@ -1961,7 +1930,6 @@ Ver documento completo para detalles de implementación, ejemplos y comparación
 **Propósito**: Componente de UI con estado (stateful).
 
 **Características obligatorias**:
-- DEBE extender `StatefulWidget`
 - DEBE implementar `build(context: Context): Widget`
 - DEBE implementar lifecycle: `init()`, `dispose()`
 - PUEDE tener `state` mutable
@@ -1969,7 +1937,7 @@ Ver documento completo para detalles de implementación, ejemplos y comparación
 
 **Uso**:
 ```vela
-widget LoginWidget extends StatefulWidget {
+widget LoginWidget {
   state email: String = ""
   state password: String = ""
   
@@ -2005,7 +1973,6 @@ widget LoginWidget extends StatefulWidget {
 **Propósito**: Componente de UI sin estado (stateless).
 
 **Características obligatorias**:
-- DEBE extender `StatelessWidget`
 - DEBE implementar `build(context: Context): Widget`
 - SOLO puede tener `props` readonly
 - NO puede tener `state`
@@ -2889,5 +2856,35 @@ serializer JsonSerializer {
 - ✅ Prevención de errores
 - ✅ Mejores prácticas forzadas
 - ✅ IDE inteligente con autocomplete contextual
+
+---
+
+## 📋 Reglas de `@injectable`
+
+**Cuándo SÍ usar `@injectable`:**
+
+| Keyword | Requiere `@injectable` | Razón |
+|---------|----------------------|-------|
+| `service` | ✅ SÍ | Lógica de negocio, necesita DI |
+| `repository` | ✅ SÍ | Acceso a datos, necesita DI |
+| `usecase` | ✅ SÍ | Orquestación, necesita DI |
+| `guard` | ✅ SÍ | Autorización, necesita DI |
+| `middleware` | ✅ SÍ | Interceptores HTTP, necesita DI |
+| `interceptor` | ✅ SÍ | Interceptores, necesita DI |
+| `validator` | ✅ SÍ | Validación, necesita DI |
+| `store` | ✅ SÍ | State management, necesita DI |
+| `provider` | ✅ SÍ | Proveedores de DI, necesita DI |
+
+**Cuándo NO usar `@injectable`:**
+
+| Keyword | Requiere `@injectable` | Razón |
+|---------|----------------------|-------|
+| `controller` | ❌ NO | Se registra en `controllers: []`, no en `providers: []` |
+| `widget` | ❌ NO | Componentes UI no necesitan DI |
+| `component` | ❌ NO | Componentes UI no necesitan DI |
+| `dto` | ❌ NO | Objetos de transferencia, no necesitan DI |
+| `entity` | ❌ NO | Entidades de dominio, no necesitan DI |
+| `valueObject` | ❌ NO | Value objects, no necesitan DI |
+| `model` | ❌ NO | Modelos de datos, no necesitan DI |
 
 **IMPORTANTE**: NO se usa prefijo `use` ni `on` en lifecycle hooks. Los hooks son: `init()`, `dispose()`, `mount()`, `update()`, etc.
