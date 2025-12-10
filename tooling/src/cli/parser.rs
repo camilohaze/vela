@@ -109,6 +109,9 @@ pub enum Commands {
         package: Option<String>,
     },
 
+    /// Install dependencies
+    Install,
+
     /// Show version information
     Version,
 

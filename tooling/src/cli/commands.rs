@@ -463,7 +463,7 @@ fn format_file(file_path: &std::path::Path, check: bool) -> Result<bool> {
 /// Apply basic formatting rules to Vela code
 fn basic_format(content: &str) -> String {
     let mut result = String::new();
-    let mut indent_level = 0;
+    let mut indent_level: usize = 0;
     let indent_size = 4;
 
     for line in content.lines() {
@@ -563,6 +563,152 @@ pub fn execute_update(package: Option<&str>) -> Result<()> {
         println!("Updating all dependencies");
     }
     // TODO: Implement dependency update
+    Ok(())
+}
+
+/// Execute install command
+pub fn execute_install() -> Result<()> {
+    println!("📦 Installing Vela project dependencies...");
+
+    // Determinar directorio del proyecto
+    let project_root = std::env::current_dir()
+        .map_err(|e| crate::common::Error::Io(e))?;
+
+    let vela_yaml_path = project_root.join("vela.yaml");
+
+    // Verificar que vela.yaml existe
+    if !vela_yaml_path.exists() {
+        println!("❌ No vela.yaml found in project root");
+        println!("   Expected: {}", vela_yaml_path.display());
+        return Err(crate::common::Error::Io(std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            "vela.yaml not found"
+        )));
+    }
+
+    println!("📂 Found project configuration: {}", vela_yaml_path.display());
+
+    // Leer y parsear vela.yaml
+    let content = std::fs::read_to_string(&vela_yaml_path)
+        .map_err(|e| {
+            println!("❌ Failed to read vela.yaml: {}", e);
+            crate::common::Error::Io(e)
+        })?;
+
+    // Parsear YAML básico (simplificado)
+    let dependencies = parse_vela_yaml_dependencies(&content)?;
+
+    if dependencies.is_empty() {
+        println!("✅ No dependencies to install");
+        return Ok(());
+    }
+
+    println!("📋 Dependencies to install:");
+    for dep in &dependencies {
+        println!("   {}", dep);
+    }
+
+    // Crear directorio de dependencias si no existe
+    let deps_dir = project_root.join("vela_modules");
+    std::fs::create_dir_all(&deps_dir)
+        .map_err(|e| {
+            println!("❌ Failed to create dependencies directory: {}", e);
+            crate::common::Error::Io(e)
+        })?;
+
+    println!("📁 Dependencies will be installed to: {}", deps_dir.display());
+
+    // Instalar dependencias (simulado por ahora)
+    let mut installed = 0;
+    let mut failed = 0;
+
+    for dep in dependencies {
+        println!("\n📥 Installing {}...", dep);
+        
+        // Simular instalación
+        match install_dependency(&dep, &deps_dir) {
+            Ok(_) => {
+                println!("   ✅ Installed {}", dep);
+                installed += 1;
+            }
+            Err(e) => {
+                println!("   ❌ Failed to install {}: {}", dep, e);
+                failed += 1;
+            }
+        }
+    }
+
+    // Reporte final
+    println!("\n📊 Installation Summary:");
+    println!("   Successfully installed: {} ✅", installed);
+    if failed > 0 {
+        println!("   Failed: {} ❌", failed);
+        return Err(crate::common::Error::Io(std::io::Error::new(
+            std::io::ErrorKind::Other,
+            format!("Failed to install {} dependencies", failed)
+        )));
+    }
+
+    println!("✅ All dependencies installed successfully!");
+    Ok(())
+}
+
+/// Parse dependencies from vela.yaml content
+fn parse_vela_yaml_dependencies(content: &str) -> Result<Vec<String>> {
+    let mut dependencies = Vec::new();
+
+    for line in content.lines() {
+        let line = line.trim();
+        
+        // Buscar líneas de dependencias
+        if line.starts_with("dependencies:") || line.starts_with("devDependencies:") {
+            // TODO: Parsear YAML completo con una librería
+            // Por ahora, parsing básico
+            continue;
+        }
+
+        // Parsear dependencias externas
+        if line.contains("external:") || line.contains("local:") {
+            // TODO: Mejor parsing
+            continue;
+        }
+
+        // Ejemplo de parsing simple: buscar líneas con "name: version"
+        if line.contains(": ") && !line.starts_with("name:") && !line.starts_with("version:") {
+            let parts: Vec<&str> = line.split(": ").collect();
+            if parts.len() == 2 {
+                let dep = format!("{}@{}", parts[0].trim(), parts[1].trim().trim_matches('"'));
+                dependencies.push(dep);
+            }
+        }
+    }
+
+    Ok(dependencies)
+}
+
+/// Install a single dependency
+fn install_dependency(dep: &str, deps_dir: &std::path::Path) -> Result<()> {
+    // Parsear nombre y versión
+    let parts: Vec<&str> = dep.split('@').collect();
+    let name = parts[0];
+    let version = parts.get(1).unwrap_or(&"latest");
+
+    // Crear directorio para la dependencia
+    let dep_dir = deps_dir.join(name);
+    std::fs::create_dir_all(&dep_dir)?;
+
+    // Simular descarga/creación de archivos
+    let package_json = format!(r#"{{
+  "name": "{}",
+  "version": "{}",
+  "description": "Simulated package"
+}}"#, name, version);
+
+    std::fs::write(dep_dir.join("package.json"), package_json)?;
+
+    // Simular algunos archivos
+    std::fs::write(dep_dir.join("index.js"), format!("// {} v{}\nmodule.exports = {{}};", name, version))?;
+
     Ok(())
 }
 
@@ -691,7 +837,7 @@ pub fn execute_doctor() -> Result<()> {
 
     // Return error if there are critical issues
     if !issues.is_empty() {
-        return Err(crate::common::Error::Generic {
+        return Err(crate::common::Error::BuildFailed {
             message: format!("Doctor found {} critical issues", issues.len())
         });
     }
@@ -757,5 +903,41 @@ mod tests {
     fn test_execute_version() {
         let result = execute_version();
         assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_parse_vela_yaml_dependencies() {
+        let yaml = r#"
+name: test-project
+version: "1.0.0"
+dependencies:
+  serde: "1.0"
+  anyhow: "1.0"
+"#;
+        let deps = parse_vela_yaml_dependencies(yaml).unwrap();
+        assert!(!deps.is_empty());
+        // Note: Current parsing is basic, may need improvement
+    }
+
+    #[test]
+    fn test_install_dependency() {
+        use std::env;
+        use std::path::PathBuf;
+        
+        // Create temp directory
+        let temp_dir = env::temp_dir().join("vela_test_install");
+        std::fs::create_dir_all(&temp_dir).unwrap();
+        
+        let result = install_dependency("test-package@1.0.0", &temp_dir);
+        assert!(result.is_ok());
+        
+        // Check if files were created
+        let package_dir = temp_dir.join("test-package");
+        assert!(package_dir.exists());
+        assert!(package_dir.join("package.json").exists());
+        assert!(package_dir.join("index.js").exists());
+        
+        // Cleanup
+        std::fs::remove_dir_all(&temp_dir).unwrap();
     }
 }

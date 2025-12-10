@@ -1,0 +1,5 @@
+{
+  "name": "local-lib",
+  "version": "../libs/local-lib",
+  "description": "Simulated package"
+}

@@ -56,6 +56,8 @@ enum Commands {
         #[arg(long)]
         release: bool,
     },
+    /// Install project dependencies
+    Install,
     /// Format source code
     Fmt,
 }
@@ -75,6 +77,9 @@ fn main() {
         }
         Commands::Test { filter, release } => {
             vela_tooling::cli::commands::execute_test(filter.as_deref(), release)
+        }
+        Commands::Install => {
+            vela_tooling::cli::commands::execute_install()
         }
         Commands::Fmt => {
             println!("Format command not implemented yet");
