@@ -227,7 +227,19 @@ impl IRToBytecodeGenerator {
                 let prop_index = self.add_constant(BytecodeValue::String(prop_name.clone()));
                 Ok(vec![Opcode::StoreField as u8, (prop_index >> 8) as u8, prop_index as u8])
             }
-            &IRInstruction::AssignVar { .. } => todo!()
+            IRInstruction::AssignVar { name, value } => {
+                // Primero generar bytecode para el valor
+                self.generate_instruction(value)?;
+                // Buscar el índice de la variable local
+                if let Some(&local_index) = self.local_symbols.get(name) {
+                    Ok(vec![Opcode::StoreLocal as u8, local_index as u8])
+                } else {
+                    Err(CompileError::Codegen(CodegenError {
+                        message: format!("Undefined variable: {}", name),
+                        location: None,
+                    }))
+                }
+            }
         }
     }
 
@@ -303,11 +315,89 @@ impl IROptimizer {
         // No hay Nop en IR, así que no eliminamos nada
     // function.body.retain(|instr| !matches!(instr, IRInstruction::Nop));
 
-        // TODO: Más optimizaciones
-        // - Constant folding
-        // - Dead code elimination
-        // - Common subexpression elimination
-        // - Loop optimizations
+        // Constant folding: simplificar expresiones constantes
+        self.constant_folding(function);
+
+        // Dead code elimination: eliminar código inalcanzable
+        self.dead_code_elimination(function);
+    }
+
+    /// Constant folding: simplificar expresiones constantes
+    fn constant_folding(&self, function: &mut IRFunction) {
+        let mut i = 0;
+        while i < function.body.len() {
+            match &function.body[i] {
+                IRInstruction::BinaryOp(op) => {
+                    // Verificar si los dos valores anteriores son constantes
+                    if i >= 2 {
+                        if let (IRInstruction::LoadConst(a), IRInstruction::LoadConst(b)) =
+                            (&function.body[i-2], &function.body[i-1]) {
+                            if let Some(result) = self.fold_binary_op(*op, a.clone(), b.clone()) {
+                                // Reemplazar las 3 instrucciones con una sola LoadConst
+                                function.body.splice(i-2..=i, vec![IRInstruction::LoadConst(result)]);
+                                continue; // No incrementar i porque eliminamos elementos
+                            }
+                        }
+                    }
+                }
+                IRInstruction::UnaryOp(op) => {
+                    // Verificar si el valor anterior es constante
+                    if i >= 1 {
+                        if let IRInstruction::LoadConst(val) = &function.body[i-1] {
+                            if let Some(result) = self.fold_unary_op(*op, val.clone()) {
+                                // Reemplazar las 2 instrucciones con una sola LoadConst
+                                function.body.splice(i-1..=i, vec![IRInstruction::LoadConst(result)]);
+                                continue;
+                            }
+                        }
+                    }
+                }
+                _ => {}
+            }
+            i += 1;
+        }
+    }
+
+    /// Aplicar operación binaria a constantes
+    fn fold_binary_op(&self, op: BinaryOp, a: Value, b: Value) -> Option<Value> {
+        match (op, a, b) {
+            (BinaryOp::Add, Value::Int(x), Value::Int(y)) => Some(Value::Int(x + y)),
+            (BinaryOp::Sub, Value::Int(x), Value::Int(y)) => Some(Value::Int(x - y)),
+            (BinaryOp::Mul, Value::Int(x), Value::Int(y)) => Some(Value::Int(x * y)),
+            (BinaryOp::Div, Value::Int(x), Value::Int(y)) if y != 0 => Some(Value::Int(x / y)),
+            (BinaryOp::Add, Value::Float(x), Value::Float(y)) => Some(Value::Float(x + y)),
+            (BinaryOp::Sub, Value::Float(x), Value::Float(y)) => Some(Value::Float(x - y)),
+            (BinaryOp::Mul, Value::Float(x), Value::Float(y)) => Some(Value::Float(x * y)),
+            (BinaryOp::Div, Value::Float(x), Value::Float(y)) if y != 0.0 => Some(Value::Float(x / y)),
+            (BinaryOp::Eq, Value::Int(x), Value::Int(y)) => Some(Value::Bool(x == y)),
+            (BinaryOp::Ne, Value::Int(x), Value::Int(y)) => Some(Value::Bool(x != y)),
+            (BinaryOp::Lt, Value::Int(x), Value::Int(y)) => Some(Value::Bool(x < y)),
+            (BinaryOp::Le, Value::Int(x), Value::Int(y)) => Some(Value::Bool(x <= y)),
+            (BinaryOp::Gt, Value::Int(x), Value::Int(y)) => Some(Value::Bool(x > y)),
+            (BinaryOp::Ge, Value::Int(x), Value::Int(y)) => Some(Value::Bool(x >= y)),
+            _ => None,
+        }
+    }
+
+    /// Aplicar operación unaria a constante
+    fn fold_unary_op(&self, op: UnaryOp, val: Value) -> Option<Value> {
+        match (op, val) {
+            (UnaryOp::Neg, Value::Int(x)) => Some(Value::Int(-x)),
+            (UnaryOp::Neg, Value::Float(x)) => Some(Value::Float(-x)),
+            (UnaryOp::Not, Value::Bool(x)) => Some(Value::Bool(!x)),
+            _ => None,
+        }
+    }
+
+    /// Dead code elimination: eliminar código inalcanzable después de Return
+    fn dead_code_elimination(&self, function: &mut IRFunction) {
+        for i in 0..function.body.len() {
+            if matches!(function.body[i], IRInstruction::Return) {
+                // Eliminar todo después del Return
+                function.body.truncate(i + 1);
+                break;
+            }
+        }
     }
 
     /// Convertir valor IR a valor bytecode
