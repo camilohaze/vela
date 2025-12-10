@@ -11,7 +11,8 @@ use lsp_types::{
     GotoDefinitionResponse, Location, Range, SignatureHelpParams,
     SignatureHelp, SignatureInformation, ParameterInformation,
     SignatureHelpOptions, ReferenceParams, Url, Diagnostic,
-    DiagnosticSeverity, PublishDiagnosticsParams,
+    DiagnosticSeverity, PublishDiagnosticsParams, RenameParams,
+    WorkspaceEdit, TextEdit,
 };
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
@@ -70,6 +71,12 @@ impl LanguageServer {
         })
     }
 
+    /// Update a document in the store (for testing purposes)
+    pub fn update_document(&self, uri: lsp_types::Url, content: String) {
+        let mut store = self.document_store.lock().unwrap();
+        store.update_document(uri, content);
+    }
+
     /// Run the language server main loop
     pub fn run(mut self) -> Result<()> {
         info!("Vela Language Server starting...");
@@ -114,6 +121,7 @@ impl LanguageServer {
             "textDocument/definition" => self.handle_definition(request)?,
             "textDocument/signatureHelp" => self.handle_signature_help(request)?,
             "textDocument/references" => self.handle_references(request)?,
+            "textDocument/rename" => self.handle_rename(request)?,
             _ => {
                 warn!("Unhandled request method: {}", request.method);
                 Response::new_err(
@@ -178,6 +186,7 @@ impl LanguageServer {
                 ..Default::default()
             }),
             references_provider: Some(lsp_types::OneOf::Left(true)),
+            rename_provider: Some(lsp_types::OneOf::Left(true)),
             // TODO: Add more capabilities as we implement them
             ..Default::default()
         };
@@ -265,6 +274,19 @@ impl LanguageServer {
         let references = self.compute_references(&params)?;
 
         let response = Response::new_ok(request.id, references);
+        Ok(response)
+    }
+
+    /// Handle textDocument/rename
+    fn handle_rename(&self, request: Request) -> Result<Response> {
+        let params: RenameParams = serde_json::from_value(request.params)
+            .map_err(|e| anyhow::anyhow!("Invalid rename params: {}", e))?;
+
+        info!("Rename requested: '{}' at position: {:?}", params.new_name, params.text_document_position.position);
+
+        let workspace_edit = self.compute_rename(&params)?;
+
+        let response = Response::new_ok(request.id, workspace_edit);
         Ok(response)
     }
 
@@ -446,6 +468,56 @@ impl LanguageServer {
         let references = self.find_symbol_references(document, &symbol, uri.clone());
 
         Ok(references)
+    }
+
+    /// Compute rename operation
+    pub fn compute_rename(&self, params: &RenameParams) -> Result<WorkspaceEdit> {
+        let uri = &params.text_document_position.text_document.uri;
+        let position = params.text_document_position.position;
+        let new_name = &params.new_name;
+
+        // Get document content
+        let store = self.document_store.lock().unwrap();
+        let document = match store.get_document(uri) {
+            Some(doc) => doc,
+            None => return Ok(WorkspaceEdit {
+                changes: Some(HashMap::new()),
+                ..Default::default()
+            }), // No document found
+        };
+
+        // Find the symbol at the position
+        let symbol = self.analyze_rename_symbol(document, position)?;
+        if symbol.is_empty() {
+            return Ok(WorkspaceEdit {
+                changes: Some(HashMap::new()),
+                ..Default::default()
+            });
+        }
+
+        // Find all references to this symbol in the document
+        let references = self.find_symbol_references(document, &symbol, uri.clone());
+
+        // Create text edits for each reference
+        let text_edits: Vec<TextEdit> = references
+            .into_iter()
+            .map(|location| TextEdit {
+                range: location.range,
+                new_text: new_name.clone(),
+            })
+            .collect();
+
+        // Create workspace edit
+        let mut changes = HashMap::new();
+        changes.insert(uri.clone(), text_edits);
+
+        let workspace_edit = WorkspaceEdit {
+            changes: Some(changes),
+            document_changes: None,
+            change_annotations: None,
+        };
+
+        Ok(workspace_edit)
     }
 
     /// Analyze the completion context at the given position
@@ -1140,6 +1212,43 @@ impl LanguageServer {
         }
 
         references
+    }
+
+    /// Analyze the symbol at the given position for rename operation
+    fn analyze_rename_symbol(&self, document: &str, position: Position) -> Result<String> {
+        let symbol = self.analyze_references_symbol(document, position)?;
+
+        // Check if the symbol is a keyword that cannot be renamed
+        let keywords = [
+            "fn", "let", "const", "var", "if", "else", "for", "while", "loop", "match", "return",
+            "true", "false", "null", "undefined", "nil", "class", "interface", "enum", "struct",
+            "type", "public", "private", "protected", "static", "abstract", "override", "extends",
+            "implements", "async", "await", "try", "catch", "throw", "finally", "import", "export",
+            "from", "as", "module", "package", "namespace", "state", "computed", "effect", "watch",
+            "component", "widget", "service", "repository", "controller", "entity", "dto", "factory",
+            "builder", "strategy", "observer", "decorator", "pipe", "guard", "middleware", "interceptor",
+            "validator", "helper", "mapper", "serializer", "provider", "store", "task", "usecase",
+            "valueObject", "model", "void", "never", "Number", "Float", "String", "Bool", "Option",
+            "Result", "Some", "None", "Ok", "Err", "this", "super", "constructor", "mount", "update",
+            "destroy", "beforeUpdate", "afterUpdate", "StatefulWidget", "StatelessWidget", "extends",
+            "with", "in", "is", "and", "or", "not", "break", "continue", "switch", "case", "default",
+            "goto", "do", "defer", "yield", "where", "new", "delete", "sizeof", "typeof", "instanceof",
+            "keyof", "readonly", "required", "optional", "any", "unknown", "void", "never", "object",
+            "function", "symbol", "bigint", "string", "number", "boolean", "undefined", "null",
+            "Array", "Object", "Function", "RegExp", "Date", "Promise", "Map", "Set", "WeakMap",
+            "WeakSet", "ArrayBuffer", "DataView", "Int8Array", "Uint8Array", "Int16Array", "Uint16Array",
+            "Int32Array", "Uint32Array", "Float32Array", "Float64Array", "BigInt64Array", "BigUint64Array",
+            "console", "window", "document", "process", "global", "Buffer", "fs", "path", "http", "https",
+            "url", "querystring", "events", "stream", "crypto", "zlib", "os", "child_process", "cluster",
+            "worker_threads", "timers", "assert", "util", "v8", "vm", "repl", "readline", "tty", "dgram",
+            "dns", "net", "tls", "https", "http2", "perf_hooks", "async_hooks", "trace_events", "diagnostics_channel"
+        ];
+
+        if keywords.contains(&symbol.as_str()) {
+            return Ok(String::new()); // Return empty string to indicate no valid symbol
+        }
+
+        Ok(symbol)
     }
 
     /// Check if the symbol at the given range is a whole word
