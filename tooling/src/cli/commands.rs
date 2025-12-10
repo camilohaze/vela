@@ -580,6 +580,157 @@ pub fn execute_info() -> Result<()> {
     Ok(())
 }
 
+/// Execute doctor command
+pub fn execute_doctor() -> Result<()> {
+    println!("🔍 Vela Doctor - Installation Diagnostics");
+    println!("==========================================");
+
+    let mut issues = Vec::new();
+    let mut warnings = Vec::new();
+
+    // Check Vela version
+    println!("\n📦 Vela Version:");
+    println!("   Version: {}", env!("CARGO_PKG_VERSION"));
+    println!("   ✓ Version check passed");
+
+    // Check current directory
+    println!("\n📁 Current Directory:");
+    match std::env::current_dir() {
+        Ok(cwd) => {
+            println!("   Current: {}", cwd.display());
+            println!("   ✓ Directory accessible");
+        }
+        Err(e) => {
+            issues.push(format!("Cannot access current directory: {}", e));
+        }
+    }
+
+    // Check if we're in a Vela project
+    println!("\n🏗️  Project Detection:");
+    let is_project = std::fs::metadata("vela.toml").is_ok() ||
+                     std::fs::metadata("Cargo.toml").is_ok() ||
+                     std::fs::metadata("package.json").is_ok();
+
+    if is_project {
+        println!("   ✓ Vela project detected");
+    } else {
+        warnings.push("No Vela project files found in current directory".to_string());
+        println!("   ⚠️  No Vela project files detected");
+    }
+
+    // Check for source files
+    println!("\n📄 Source Files:");
+    let vela_files = find_vela_files(&std::env::current_dir()
+        .map_err(|e| crate::common::Error::Io(e))?)?;
+    println!("   Vela files found: {}", vela_files.len());
+    if vela_files.is_empty() {
+        warnings.push("No .vela source files found".to_string());
+    } else {
+        println!("   ✓ Source files detected");
+    }
+
+    // Check build directory
+    println!("\n🏭 Build Directory:");
+    let build_dir = std::env::current_dir()
+        .map_err(|e| crate::common::Error::Io(e))?
+        .join("target");
+
+    if build_dir.exists() {
+        match std::fs::read_dir(&build_dir) {
+            Ok(_) => println!("   ✓ Build directory accessible"),
+            Err(e) => issues.push(format!("Build directory not accessible: {}", e)),
+        }
+    } else {
+        println!("   ℹ️  Build directory not created yet");
+    }
+
+    // Check permissions
+    println!("\n🔐 Permissions:");
+    let test_file = std::env::current_dir()
+        .map_err(|e| crate::common::Error::Io(e))?
+        .join("vela-doctor-test.tmp");
+
+    match std::fs::write(&test_file, "test") {
+        Ok(_) => {
+            println!("   ✓ Write permissions OK");
+            let _ = std::fs::remove_file(&test_file); // Clean up
+        }
+        Err(e) => {
+            issues.push(format!("No write permissions: {}", e));
+        }
+    }
+
+    // Check environment variables
+    println!("\n🌍 Environment:");
+    if let Ok(home) = std::env::var("HOME") {
+        println!("   ✓ HOME directory: {}", home);
+    } else if let Ok(userprofile) = std::env::var("USERPROFILE") {
+        println!("   ✓ USERPROFILE directory: {}", userprofile);
+    } else {
+        warnings.push("No home directory environment variable found".to_string());
+    }
+
+    // Summary
+    println!("\n📊 Summary:");
+    if issues.is_empty() && warnings.is_empty() {
+        println!("   ✅ All checks passed! Vela is ready to use.");
+    } else {
+        if !issues.is_empty() {
+            println!("   ❌ Issues found: {}", issues.len());
+            for issue in &issues {
+                println!("      - {}", issue);
+            }
+        }
+        if !warnings.is_empty() {
+            println!("   ⚠️  Warnings: {}", warnings.len());
+            for warning in &warnings {
+                println!("      - {}", warning);
+            }
+        }
+    }
+
+    // Return error if there are critical issues
+    if !issues.is_empty() {
+        return Err(crate::common::Error::Generic {
+            message: format!("Doctor found {} critical issues", issues.len())
+        });
+    }
+
+    Ok(())
+}
+
+/// Helper function to find .vela files (reused from fmt command)
+fn find_vela_files(dir: &std::path::Path) -> Result<Vec<std::path::PathBuf>> {
+    let mut files = Vec::new();
+
+    fn visit_dir(dir: &std::path::Path, files: &mut Vec<std::path::PathBuf>) -> Result<()> {
+        // Skip common directories
+        let dir_name = dir.file_name().and_then(|n| n.to_str()).unwrap_or("");
+        if matches!(dir_name, "target" | "node_modules" | ".git" | "dist" | "build") {
+            return Ok(());
+        }
+
+        let entries = std::fs::read_dir(dir)
+            .map_err(|e| crate::common::Error::Io(e))?;
+
+        for entry in entries {
+            let entry = entry.map_err(|e| crate::common::Error::Io(e))?;
+            let path = entry.path();
+
+            if path.is_dir() {
+                visit_dir(&path, files)?;
+            } else if path.extension().and_then(|s| s.to_str()) == Some("vela") {
+                files.push(path);
+            }
+        }
+
+        Ok(())
+    }
+
+    visit_dir(dir, &mut files)?;
+    Ok(files)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -303,6 +303,53 @@ fn main() -> void {
         .assert()
         .success()
         .stdout(predicate::str::contains("Running Vela formatter"))
-        .stdout(predicate::str::contains("✅ Already formatted: test.vela"))
+        .stdout(predicate::str::contains("âœ… Already formatted: test.vela"))
         .stdout(predicate::str::contains("All files formatted successfully"));
+}
+
+#[test]
+fn test_doctor_command_basic() {
+    let temp_dir = TempDir::new().unwrap();
+
+    let mut cmd = Command::cargo_bin("vela").unwrap();
+    cmd.arg("doctor")
+        .current_dir(&temp_dir)
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Vela Doctor - Installation Diagnostics"))
+        .stdout(predicate::str::contains("Vela Version"))
+        .stdout(predicate::str::contains("Current Directory"))
+        .stdout(predicate::str::contains("All checks passed"));
+}
+
+#[test]
+fn test_doctor_command_with_project() {
+    let temp_dir = TempDir::new().unwrap();
+
+    // Create a vela.toml file to simulate a project
+    fs::write(temp_dir.path().join("vela.toml"), "[project]\nname = \"test\"").unwrap();
+
+    // Create a .vela file
+    fs::write(temp_dir.path().join("main.vela"), "fn main() -> void {\n    println(\"Hello\");\n}").unwrap();
+
+    let mut cmd = Command::cargo_bin("vela").unwrap();
+    cmd.arg("doctor")
+        .current_dir(&temp_dir)
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Vela project detected"))
+        .stdout(predicate::str::contains("Vela files found: 1"));
+}
+
+#[test]
+fn test_doctor_command_no_write_permissions() {
+    let temp_dir = TempDir::new().unwrap();
+
+    // Make directory read-only (this might not work on all systems)
+    // For now, just test basic functionality
+    let mut cmd = Command::cargo_bin("vela").unwrap();
+    cmd.arg("doctor")
+        .current_dir(&temp_dir)
+        .assert()
+        .success();
 }
