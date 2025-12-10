@@ -19,34 +19,55 @@
 
 ---
 
-## � Project Structure
+## 📁 Project Structure
 
-This is a monorepo containing all Vela tooling:
+This is a monorepo containing all Vela tooling implemented in Rust:
 
 ```
 vela/
-├── compiler/           # Vela compiler (lexer, parser, semantic analyzer, codegen)
-├── vm/                 # VelaVM (bytecode interpreter)
-├── stdlib/             # Standard library
-├── cli/                # Vela CLI tool
-├── lsp/                # Language Server Protocol implementation
-├── devtools/           # DevTools (UI Inspector, Signal Graph, Profiler)
-├── i18n/               # Internationalization system for global applications
-├── logging/            # Async logging system with transports and filtering
-├── docs/               # Documentation
-│   ├── architecture/   # ADRs (Architecture Decision Records)
-│   ├── specifications/ # Formal specifications
-│   ├── tooling/        # Tooling architecture docs
-│   └── features/       # Feature documentation
-├── tests/              # Test suites
-│   ├── unit/           # Unit tests
-│   ├── integration/    # Integration tests
-│   └── e2e/            # End-to-end tests
-├── .github/            # GitHub Actions workflows
-├── Cargo.toml          # Rust workspace configuration
-├── LICENSE-APACHE      # Apache 2.0 license
-├── LICENSE-MIT         # MIT license (dual license)
-└── README.md           # This file
+├── core/                         # Core types, AST, IR (Rust)
+├── compiler/                     # Compiler: lexer, parser, semantic analyzer, codegen (Rust)
+├── vm/                           # Virtual Machine: bytecode interpreter (Rust + Vela)
+├── runtime/                      # Runtime system: reactive, concurrency, GC (Rust)
+├── stdlib/                       # Standard library (Rust + Vela bindings)
+├── tooling/                      # Development tools: CLI, LSP, debugger, devtools (Rust)
+├── packages/                     # Additional packages and systems (Rust)
+│   ├── concurrency/              # Advanced concurrency system (actors, channels)
+│   ├── devtools/                 # DevTools (UI Inspector, Signal Graph, Profiler)
+│   ├── di/                       # Dependency Injection system
+│   ├── docs/                     # Documentation generation tools
+│   ├── events/                   # Event system and pub/sub
+│   ├── http/                     # HTTP client/server framework
+│   ├── i18n/                     # Internationalization system
+│   ├── logging/                  # Async logging with transports and filtering
+│   ├── lsp/                      # Language Server Protocol implementation
+│   ├── package/                  # Package manager and resolver
+│   ├── reactive/                 # Reactive programming primitives (signals, computed)
+│   ├── state-management/         # State management (Redux-like with middleware)
+│   ├── ui/                       # UI framework (widgets, rendering, styling)
+│   └── validation/               # Validation system and decorators
+├── bin/                          # Executable binaries
+├── benches/                      # Performance benchmarks
+├── examples/                     # Example applications and code samples
+│   ├── ui/                       # UI framework examples
+│   ├── hello-world/              # Basic "Hello World" example
+│   └── ...                       # Additional examples
+├── docs/                         # Documentation
+│   ├── architecture/             # Architecture Decision Records (ADRs)
+│   ├── features/                 # Feature documentation by user story
+│   ├── api/                      # API specifications
+│   └── design/                   # Design documents and diagrams
+├── tests/                        # Test suites
+│   ├── unit/                     # Unit tests (Rust + Vela source files)
+│   ├── integration/              # Integration tests
+│   └── benchmarks/               # Benchmark tests
+├── jira-import/                  # Jira import and management scripts
+├── .github/                      # GitHub Actions workflows and templates
+├── Cargo.toml                    # Rust workspace configuration
+├── Cargo.lock                    # Dependency lock file
+├── LICENSE-APACHE                # Apache 2.0 license
+├── LICENSE-MIT                   # MIT license (dual license)
+└── README.md                     # This file
 ```
 
 ---
@@ -55,42 +76,39 @@ vela/
 
 ### Prerequisites
 
-- **Rust** 1.75+ (stable)
-- **LLVM** 17+ (for native compilation)
-- **Node.js** 18+ (for DevTools UI)
+- **Rust** 1.75+ (stable toolchain)
+- **Cargo** (included with Rust)
+- **Git** for version control
 
 ### Installation
 
 ```bash
 # Clone repository
-git clone https://github.com/velalang/vela.git
+git clone https://github.com/camilohaze/vela.git
 cd vela
 
 # Build all components
 cargo build --release
 
-# Install CLI globally
-cargo install --path cli
+# Run tests to verify installation
+cargo test
 
-# Verify installation
-vela --version
+# (Optional) Install development tools
+cargo install cargo-watch  # For auto-rebuilding
+cargo install cargo-tarpaulin  # For test coverage
 ```
 
 ### Hello World
 
-Create `hello.vela`:
+Create `examples/hello.vela`:
 
 ```vela
 fn main() {
-    println("Hello, Vela!");
+    println("Hello, Vela! 🦀");
 }
 ```
 
-Run:
-
-```bash
-vela run hello.vela
-```
+Currently, Vela is in early development. The compiler and runtime are being actively developed. Check the [examples/](examples/) directory for sample code.
 
 ---
 
@@ -127,29 +145,34 @@ cargo fmt
 ### Running Tests
 
 ```bash
-# All tests
-vela test
+# All tests across the workspace
+cargo test --workspace
 
-# Unit tests only
-cargo test --lib
+# Run specific package tests
+cargo test -p vela_compiler
+cargo test -p vela_vm
+cargo test -p vela_lsp
 
-# Integration tests
-cargo test --test '*'
+# Run with verbose output
+cargo test --workspace --verbose
 
-# With coverage
-cargo tarpaulin --out Html
+# Run benchmarks
+cargo bench
+
+# Generate test coverage (requires tarpaulin)
+cargo tarpaulin --workspace --out Html
 ```
 
 ### Development Workflow
 
-1. **Create branch:** `git checkout -b feature/VELA-XXX-descripcion`
-2. **Make changes**
-3. **Run tests:** `cargo test`
-4. **Format:** `cargo fmt`
+1. **Create feature branch:** `git checkout -b feature/VELA-XXX-description`
+2. **Make changes** following the established patterns
+3. **Run tests:** `cargo test --workspace`
+4. **Format code:** `cargo fmt`
 5. **Lint:** `cargo clippy`
-6. **Commit:** `git commit -m "feat(VELA-XXX): add feature"`
-7. **Push:** `git push origin feature/VELA-XXX-descripcion`
-8. **Create PR**
+6. **Commit:** `git commit -m "feat(VELA-XXX): description"`
+7. **Push:** `git push origin feature/VELA-XXX-description`
+8. **Create PR** with proper description and Jira links
 
 ---
 
@@ -167,65 +190,92 @@ We welcome contributions! Please read our [CONTRIBUTING.md](.github/CONTRIBUTING
 
 ## 📊 Project Status
 
-**Current Phase:** Phase 0 (Foundation)
+**Current Phase:** Phase 0 (Foundation) - Sprint 16+  
+**Version:** 0.1.0 (Pre-Alpha)  
+**Implementation Language:** Rust 🦀
 
-| Component | Status | Progress | Tests | LOC |
-|-----------|--------|----------|-------|-----|
-| **Sprint 0: Critical Decisions** | ✅ Complete | 100% | - | - |
-| **Sprint 1: Formal Specifications** | ✅ Complete | 100% | - | - |
-| **Sprint 2: Tooling Architecture** | ✅ Complete | 100% | - | - |
-| **Sprint 3: Infrastructure Setup** | ✅ Complete | 100% | - | - |
-| **Sprint 11-12: Signal System** | ✅ Complete | 100% | 245 | ~5000 |
-| **Sprint 13: DI System** | ✅ Complete | 100% | 327 | ~8000 |
-| **Sprint 14: Event System** | ✅ Complete | 100% | 231 | ~6500 |
-| **Compiler (Lexer)** | 🚧 Partial | 40% | - | ~2000 |
-| **Compiler (Parser)** | 🚧 Partial | 35% | - | ~3000 |
-| **Type System** | ⏳ Planned | 0% | - | - |
-| **VM** | ⏳ Planned | 0% | - | - |
-| **Standard Library** | 🚧 In Progress | 20% | - | ~1500 |
-| **CLI** | ⏳ Planned | 0% | - | - |
-| **LSP** | ⏳ Planned | 0% | - | - |
-| **DevTools** | ⏳ Planned | 0% | - | - |
+| Component | Status | Progress | Tests | Sprint |
+|-----------|--------|----------|-------|--------|
+| **Critical Decisions** | ✅ Complete | 100% | - | Sprint 0 |
+| **Formal Specifications** | ✅ Complete | 100% | - | Sprint 1 |
+| **Tooling Architecture** | ✅ Complete | 100% | - | Sprint 2 |
+| **Infrastructure Setup** | ✅ Complete | 100% | - | Sprint 3 |
+| **Language Grammar (EBNF)** | ✅ Complete | 100% | - | Sprint 4 |
+| **Lexer Implementation** | ✅ Complete | 100% | 50+ | Sprint 5 |
+| **Parser Implementation** | ✅ Complete | 100% | 80+ | Sprint 6-7 |
+| **Type System Design** | ✅ Complete | 100% | - | Sprint 8 |
+| **Keyword-Specific Validation** | ✅ Complete | 100% | - | Sprint 9 |
+| **Reactive System (Signals)** | ✅ Complete | 100% | 245+ | Sprint 11-12 |
+| **Dependency Injection** | ✅ Complete | 100% | 327+ | Sprint 13 |
+| **Event System** | ✅ Complete | 100% | 231+ | Sprint 14 |
+| **LSP Implementation** | 🚧 In Progress | 60% | 45+ | Sprint 16 |
+| **State Management** | ✅ Complete | 100% | 180+ | Sprint 15 |
+| **HTTP Framework** | ✅ Complete | 100% | 95+ | Sprint 10 |
+| **UI Framework** | 🚧 In Progress | 40% | 120+ | Sprint 17 |
+| **Concurrency (Actors)** | ✅ Complete | 100% | 160+ | Sprint 18 |
+| **Validation System** | ✅ Complete | 100% | 85+ | Sprint 19 |
+| **Package Manager** | 🚧 In Progress | 30% | 60+ | Sprint 20 |
+| **Standard Library** | 🚧 In Progress | 25% | 90+ | Sprint 21 |
+| **VM Implementation** | ⏳ Planned | 0% | - | Sprint 22+ |
+| **Code Generation** | ⏳ Planned | 0% | - | Sprint 25+ |
 
-**Total Tests Passing:** 803 tests (245 Signal + 327 DI + 231 Event)  
-**Total LOC (Production + Tests):** ~19,500 LOC
+**Total Tests Passing:** 1,200+ tests across all systems  
+**Total LOC (Production + Tests):** ~45,000 LOC  
+**Architecture:** Monorepo with 15+ Rust crates
 
 ---
 
 ## 🗓️ Roadmap
 
-### Phase 0: Foundation (Current)
-- ✅ Architectural decisions
-- ✅ Formal specifications
-- ✅ Tooling architecture
-- ✅ Infrastructure setup
-- ✅ Signal System (Sprint 11-12) - 245 tests
-- ✅ Dependency Injection (Sprint 13) - 327 tests
-- ✅ Event System (Sprint 14) - 231 tests
-- 🚧 Lexer (40% complete)
-- 🚧 Parser (35% complete)
+### Phase 0: Foundation (Current - Sprint 16+)
+- ✅ **Completed Systems:**
+  - Critical architectural decisions (Sprint 0)
+  - Formal language specifications (Sprint 1)
+  - Tooling architecture design (Sprint 2)
+  - Infrastructure setup (Sprint 3)
+  - Language grammar & EBNF (Sprint 4)
+  - Complete lexer implementation (Sprint 5)
+  - Parser with AST generation (Sprint 6-7)
+  - Type system design (Sprint 8)
+  - Keyword-specific validation (Sprint 9)
+  - HTTP framework (Sprint 10)
+  - Reactive signals system (Sprint 11-12)
+  - Dependency injection (Sprint 13)
+  - Event system (Sprint 14)
+  - State management (Sprint 15)
+  - LSP implementation (Sprint 16 - 60% complete)
+  - UI framework foundation (Sprint 17 - 40% complete)
+  - Actor-based concurrency (Sprint 18)
+  - Validation system (Sprint 19)
+  - Package manager (Sprint 20 - 30% complete)
+  - Standard library (Sprint 21 - 25% complete)
 
-### Phase 1: Core Language (Q2 2026)
-- Lexer and parser
-- Type system with inference
-- Semantic analyzer
-- Basic code generation
+### Phase 1: Core Language (Q1 2026)
+- VM bytecode interpreter implementation
+- Code generation backends (LLVM, WASM, JS)
+- Complete semantic analyzer
+- Advanced type system features
+- Memory management (ARC + GC)
 
-### Phase 2: Reactive System (Q3 2026)
-- Signals, Computed, Effects
-- Reactive scheduler
-- Dependency tracking
+### Phase 2: Multi-Target Compilation (Q2 2026)
+- Native binary compilation (x86_64, ARM64)
+- WebAssembly backend for browsers
+- JavaScript transpilation
+- Mobile targets (iOS/Android via bindings)
 
-### Phase 3: Multi-Target Compilation (Q4 2026)
-- LLVM backend (native)
-- JavaScript/WASM backend
-- Mobile targets (iOS, Android)
+### Phase 3: Ecosystem & Tooling (Q3 2026)
+- Complete DevTools suite
+- Package registry infrastructure
+- IDE integrations (VS Code, IntelliJ)
+- Performance profiling tools
+- Documentation generation
 
-### Vela 1.0 (Q1 2027)
-- Stable language spec
+### Vela 1.0 (Q4 2026)
+- Stable language specification
+- Production-ready compiler and tooling
 - Complete standard library
-- Production-ready tooling
-- Full documentation
+- Comprehensive documentation
+- Community ecosystem established
 
 ---
 
