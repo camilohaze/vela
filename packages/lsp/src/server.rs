@@ -629,29 +629,35 @@ impl LanguageServer {
     fn find_symbol_definition(&self, document: &str, symbol: &str, uri: &lsp_types::Url) -> Option<Location> {
         let lines: Vec<&str> = document.lines().collect();
 
-        // Simple pattern matching for function definitions
-        // fn function_name(...) -> ...
+        // Vela-specific pattern matching for symbol definitions
+
+        // Function definitions: fn symbol_name(...) -> ...
         let fn_pattern = format!("fn {}", symbol);
 
-        // Simple pattern matching for variable declarations
-        // let variable_name: Type = ...
-        // state variable_name: Type = ...
-        let let_pattern = format!("let {}:", symbol);
+        // State variable declarations: state symbol_name: Type = ...
         let state_pattern = format!("state {}:", symbol);
 
-        // Simple pattern matching for class definitions
-        // class ClassName ...
+        // Class definitions: class ClassName ...
         let class_pattern = format!("class {}", symbol);
 
-        // Simple pattern matching for interface definitions
-        // interface InterfaceName ...
+        // Interface definitions: interface InterfaceName ...
         let interface_pattern = format!("interface {}", symbol);
+
+        // Enum definitions: enum EnumName ...
+        let enum_pattern = format!("enum {}", symbol);
+
+        // Type aliases: type TypeName = ...
+        let type_pattern = format!("type {} =", symbol);
+
+        // Variable declarations: symbol_name: Type = ...
+        // This is trickier as we need to find lines where symbol appears before :
+        let var_pattern = format!("{}:", symbol);
 
         for (line_idx, line) in lines.iter().enumerate() {
             let trimmed = line.trim();
 
             // Check for function definition
-            if trimmed.starts_with(&fn_pattern) {
+            if trimmed.starts_with(&fn_pattern) && (trimmed.len() == fn_pattern.len() || trimmed.chars().nth(fn_pattern.len()).unwrap_or(' ').is_whitespace() || trimmed.chars().nth(fn_pattern.len()).unwrap_or(' ') == '(') {
                 let char_start = line.find(&fn_pattern).unwrap_or(0);
                 let char_end = char_start + fn_pattern.len();
 
@@ -664,11 +670,10 @@ impl LanguageServer {
                 });
             }
 
-            // Check for variable declarations
-            if trimmed.starts_with(&let_pattern) || trimmed.starts_with(&state_pattern) {
-                let pattern = if trimmed.starts_with(&let_pattern) { &let_pattern } else { &state_pattern };
-                let char_start = line.find(pattern).unwrap_or(0);
-                let char_end = char_start + pattern.len();
+            // Check for state variable declarations
+            if trimmed.starts_with(&state_pattern) {
+                let char_start = line.find(&state_pattern).unwrap_or(0);
+                let char_end = char_start + state_pattern.len();
 
                 return Some(Location {
                     uri: uri.clone(),
@@ -680,7 +685,7 @@ impl LanguageServer {
             }
 
             // Check for class definition
-            if trimmed.starts_with(&class_pattern) {
+            if trimmed.starts_with(&class_pattern) && (trimmed.len() == class_pattern.len() || trimmed.chars().nth(class_pattern.len()).unwrap_or(' ').is_whitespace()) {
                 let char_start = line.find(&class_pattern).unwrap_or(0);
                 let char_end = char_start + class_pattern.len();
 
@@ -694,7 +699,7 @@ impl LanguageServer {
             }
 
             // Check for interface definition
-            if trimmed.starts_with(&interface_pattern) {
+            if trimmed.starts_with(&interface_pattern) && (trimmed.len() == interface_pattern.len() || trimmed.chars().nth(interface_pattern.len()).unwrap_or(' ').is_whitespace()) {
                 let char_start = line.find(&interface_pattern).unwrap_or(0);
                 let char_end = char_start + interface_pattern.len();
 
@@ -705,6 +710,52 @@ impl LanguageServer {
                         end: Position { line: line_idx as u32, character: char_end as u32 },
                     },
                 });
+            }
+
+            // Check for enum definition
+            if trimmed.starts_with(&enum_pattern) && (trimmed.len() == enum_pattern.len() || trimmed.chars().nth(enum_pattern.len()).unwrap_or(' ').is_whitespace()) {
+                let char_start = line.find(&enum_pattern).unwrap_or(0);
+                let char_end = char_start + enum_pattern.len();
+
+                return Some(Location {
+                    uri: uri.clone(),
+                    range: Range {
+                        start: Position { line: line_idx as u32, character: char_start as u32 },
+                        end: Position { line: line_idx as u32, character: char_end as u32 },
+                    },
+                });
+            }
+
+            // Check for type alias
+            if trimmed.starts_with(&type_pattern) {
+                let char_start = line.find(&type_pattern).unwrap_or(0);
+                let char_end = char_start + type_pattern.len();
+
+                return Some(Location {
+                    uri: uri.clone(),
+                    range: Range {
+                        start: Position { line: line_idx as u32, character: char_start as u32 },
+                        end: Position { line: line_idx as u32, character: char_end as u32 },
+                    },
+                });
+            }
+
+            // Check for variable declarations: symbol: Type = ...
+            // Look for symbol followed by : (but not part of other constructs)
+            if let Some(colon_pos) = line.find(':') {
+                let before_colon = &line[..colon_pos];
+                if before_colon.trim() == symbol && !before_colon.contains("fn ") && !before_colon.contains("class ") && !before_colon.contains("interface ") && !before_colon.contains("enum ") && !before_colon.contains("type ") && !before_colon.contains("state ") {
+                    let char_start = line.find(symbol).unwrap_or(0);
+                    let char_end = char_start + symbol.len();
+
+                    return Some(Location {
+                        uri: uri.clone(),
+                        range: Range {
+                            start: Position { line: line_idx as u32, character: char_start as u32 },
+                            end: Position { line: line_idx as u32, character: char_end as u32 },
+                        },
+                    });
+                }
             }
         }
 

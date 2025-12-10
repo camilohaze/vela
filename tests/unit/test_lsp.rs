@@ -350,38 +350,73 @@ interface Printable {
     fn test_analyze_definition_symbol() {
         let server = create_test_server();
 
-        // Test definition analysis on sample code
+        // Test definition analysis on sample Vela code
         let code = r#"fn add(a: Number, b: Number) -> Number {
   return a + b
 }
 
 state count: Number = 0
 
+name: String = "Vela"
+
 class Person {
   constructor(name: String) {
     this.name = name
   }
 }
+
+interface Printable {
+  fn print() -> void
+}
+
+enum Color {
+  Red,
+  Green,
+  Blue
+}
+
+type UserId = Number
 "#;
 
         let uri = Url::parse("file:///test.vela").unwrap();
 
         let test_cases = vec![
-            (Position { line: 0, character: 3 }, Some("add")), // "fn" keyword, should find "add"
-            (Position { line: 0, character: 6 }, Some("add")), // function name "add"
-            (Position { line: 2, character: 6 }, Some("count")), // state variable "count"
-            (Position { line: 4, character: 6 }, Some("Person")), // class name "Person"
-            (Position { line: 10, character: 0 }, None), // Out of bounds
+            // Function definition
+            (Position { line: 0, character: 3 }, Some(("add", 0, 3))), // "fn" keyword -> find "add"
+            (Position { line: 0, character: 6 }, Some(("add", 0, 3))), // function name "add"
+
+            // State variable
+            (Position { line: 4, character: 6 }, Some(("count", 4, 6))), // state variable "count"
+
+            // Immutable variable
+            (Position { line: 6, character: 0 }, Some(("name", 6, 0))), // variable "name"
+
+            // Class definition
+            (Position { line: 8, character: 6 }, Some(("Person", 8, 6))), // class name "Person"
+
+            // Interface definition
+            (Position { line: 13, character: 10 }, Some(("Printable", 13, 10))), // interface name "Printable"
+
+            // Enum definition
+            (Position { line: 17, character: 5 }, Some(("Color", 17, 5))), // enum name "Color"
+
+            // Type alias
+            (Position { line: 22, character: 5 }, Some(("UserId", 22, 5))), // type alias "UserId"
+
+            // Out of bounds
+            (Position { line: 25, character: 0 }, None),
         ];
 
-        for (position, expected_symbol) in test_cases {
+        for (position, expected) in test_cases {
             let location = server.analyze_definition_symbol(code, position, &uri);
-            match expected_symbol {
-                Some(symbol) => {
-                    assert!(location.is_some(), "Expected definition location at position {:?}", position);
+            match expected {
+                Some((symbol, expected_line, expected_char)) => {
+                    assert!(location.is_some(), "Expected definition location for '{}' at position {:?}", symbol, position);
                     let location = location.unwrap();
-                    // Verify the location points to the definition
-                    assert!(location.range.start.line <= position.line, "Definition should be before or at cursor position");
+                    // Verify the location points to the correct definition
+                    assert_eq!(location.range.start.line, expected_line as u32, "Wrong line for symbol '{}'", symbol);
+                    assert_eq!(location.range.start.character, expected_char as u32, "Wrong character for symbol '{}'", symbol);
+                    assert_eq!(location.range.end.character, (expected_char + symbol.len()) as u32, "Wrong end character for symbol '{}'", symbol);
                 }
                 None => {
                     assert!(location.is_none(), "Expected no definition at position {:?}", position);
