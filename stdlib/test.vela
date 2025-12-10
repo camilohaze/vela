@@ -1,0 +1,63 @@
+"""
+Vela Test Framework
+
+Framework básico para ejecutar tests en Vela.
+"""
+
+class TestResult {
+    passed: Number
+    failed: Number
+    errors: List<String>
+
+    constructor() {
+        this.passed = 0
+        this.failed = 0
+        this.errors = []
+    }
+
+    fn add_pass() -> void {
+        this.passed = this.passed + 1
+    }
+
+    fn add_fail(error: String) -> void {
+        this.failed = this.failed + 1
+        this.errors.add(error)
+    }
+}
+
+global test_results: TestResult = TestResult()
+
+fn assert(condition: Bool, message: String) -> void {
+    if !condition {
+        throw Error(message)
+    }
+}
+
+fn run_test(test_fn: () -> void, test_name: String) -> void {
+    try {
+        print("▶️  Running: ${test_name}")
+        start_time = now()
+        test_fn()
+        duration = now() - start_time
+        print("✅ PASSED: ${test_name} (${duration}ms)")
+        test_results.add_pass()
+    } catch (e: Error) {
+        print("❌ FAILED: ${test_name} - ${e.message}")
+        test_results.add_fail("${test_name}: ${e.message}")
+    }
+}
+
+fn report_results() -> void {
+    print("\n📊 Test Results:")
+    print("   Passed: ${test_results.passed} ✅")
+    print("   Failed: ${test_results.failed} ❌")
+
+    if test_results.failed > 0 {
+        print("\n❌ Failed tests:")
+        for error in test_results.errors {
+            print("   ${error}")
+        }
+    } else {
+        print("\n✅ All tests passed!")
+    }
+}

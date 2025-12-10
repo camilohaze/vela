@@ -30,7 +30,7 @@ fn main() -> void {
 }
 "#;
 
-    fs::write(temp_dir.path().join("tests").join("test_math.vela"), test_content).unwrap();
+    fs::write(temp_dir.path().join("tests").join("test_math.spec.vela"), test_content).unwrap();
 
     // Create another test file
     let test_content2 = r#"
@@ -45,7 +45,7 @@ fn main() -> void {
 }
 "#;
 
-    fs::write(temp_dir.path().join("tests").join("test_multiply.vela"), test_content2).unwrap();
+    fs::write(temp_dir.path().join("tests").join("test_multiply.spec.vela"), test_content2).unwrap();
 
     temp_dir
 }
@@ -102,8 +102,8 @@ fn test_test_command_verbose_output() {
         .success()
         .stdout(predicate::str::contains("Running Vela tests"))
         .stdout(predicate::str::contains("Found 2 test files"))
-        .stdout(predicate::str::contains("tests/test_math.vela"))
-        .stdout(predicate::str::contains("tests/test_multiply.vela"))
+        .stdout(predicate::str::contains("tests/test_math.spec.vela"))
+        .stdout(predicate::str::contains("tests/test_multiply.spec.vela"))
         .stdout(predicate::str::contains("Running tests in"))
         .stdout(predicate::str::contains("✅"))
         .stdout(predicate::str::contains("All tests passed"));
@@ -122,7 +122,7 @@ fn test_test_command_with_filter() {
         .success()
         .stdout(predicate::str::contains("Running Vela tests"))
         .stdout(predicate::str::contains("Found 2 test files"))
-        .stdout(predicate::str::contains("test_math.vela"))
+        .stdout(predicate::str::contains("test_math.spec.vela"))
         .stdout(predicate::str::contains("✅"))
         .stdout(predicate::str::contains("Tests run: 1"));
 }
@@ -149,12 +149,12 @@ fn test_test_command_specific_files() {
 
     let mut cmd = Command::cargo_bin("vela").unwrap();
     cmd.arg("test")
-        .arg("tests/test_math.vela")
+        .arg("tests/test_math.spec.vela")
         .current_dir(&temp_dir)
         .assert()
         .success()
         .stdout(predicate::str::contains("Running Vela tests"))
-        .stdout(predicate::str::contains("✅ tests/test_math.vela"))
+        .stdout(predicate::str::contains("✅ tests/test_math.spec.vela"))
         .stdout(predicate::str::contains("Tests run: 1"));
 }
 
@@ -201,7 +201,7 @@ fn broken() -> Number {
 }
 "#;
 
-    fs::write(temp_dir.path().join("tests").join("test_broken.vela"), invalid_content).unwrap();
+    fs::write(temp_dir.path().join("tests").join("test_broken.spec.vela"), invalid_content).unwrap();
 
     let mut cmd = Command::cargo_bin("vela").unwrap();
     cmd.arg("test")
