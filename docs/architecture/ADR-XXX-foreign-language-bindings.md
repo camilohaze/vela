@@ -1,7 +1,7 @@
 # ADR-XXX: Foreign Language Bindings for Package Registry
 
 ## Estado
-🔄 Propuesto
+✅ Aceptado
 
 ## Fecha
 2025-12-10
