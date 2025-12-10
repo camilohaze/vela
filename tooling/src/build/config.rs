@@ -99,8 +99,8 @@ mod tests {
 
     #[test]
     fn test_builder_pattern() {
-        let config = BuildConfig::new()
-            .with_release(true)
+        let config = BuildConfig::new(PathBuf::from("/tmp/project"))
+            .release(true)
             .with_target("linux")
             .with_jobs(4);
 
@@ -111,13 +111,13 @@ mod tests {
 
     #[test]
     fn test_with_output_dir() {
-        let config = BuildConfig::new().with_output_dir("build");
+        let config = BuildConfig::new(PathBuf::from("/tmp/project")).with_output_dir("build");
         assert_eq!(config.output_dir, PathBuf::from("build"));
     }
 
     #[test]
     fn test_with_incremental() {
-        let config = BuildConfig::new().with_incremental(false);
+        let config = BuildConfig::new(PathBuf::from("/tmp/project")).with_incremental(false);
         assert!(!config.incremental);
     }
 }

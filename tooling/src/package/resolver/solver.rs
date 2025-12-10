@@ -385,7 +385,7 @@ mod tests {
         let v2 = Version::parse("2.0.0").unwrap();
 
         let mut assignments = HashMap::new();
-        assignments.insert(package_id.clone(), v2.clone());
+        assignments.insert(package_id.clone(), (v2.clone(), 0));
 
         let clause = Clause::new(vec![
             Literal::positive(package_id.clone(), v1.clone()),

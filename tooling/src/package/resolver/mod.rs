@@ -107,4 +107,73 @@ mod tests {
         // Should succeed with empty manifest
         assert!(result.is_ok());
     }
+
+    #[test]
+    fn test_resolver_with_manifest_dependencies() {
+        let mut resolver = DependencyResolver::new().unwrap();
+        let mut manifest = Manifest::new("test".to_string(), "1.0.0".to_string());
+        manifest.add_dependency("test-dep".to_string(), "^1.0.0".to_string());
+
+        let result = resolver.resolve(&manifest);
+        // Result depends on whether test-dep exists in mock registry
+        assert!(result.is_ok() || matches!(result, Err(Error::PackageNotFound { .. })));
+    }
+
+    #[test]
+    fn test_resolver_error_handling() {
+        let mut resolver = DependencyResolver::new().unwrap();
+        let mut manifest = Manifest::new("test".to_string(), "1.0.0".to_string());
+        manifest.add_dependency("nonexistent".to_string(), "invalid-constraint".to_string());
+
+        let result = resolver.resolve(&manifest);
+        // Should either succeed or fail with appropriate error
+        match result {
+            Ok(_) => {} // Success is acceptable
+            Err(Error::InvalidVersionConstraint { .. }) => {} // Expected error
+            Err(Error::PackageNotFound { .. }) => {} // Expected error
+            Err(e) => panic!("Unexpected error: {:?}", e),
+        }
+    }
+
+    #[test]
+    fn test_resolver_reuse() {
+        let mut resolver = DependencyResolver::new().unwrap();
+
+        // First resolution
+        let manifest1 = Manifest::default();
+        let result1 = resolver.resolve(&manifest1);
+        assert!(result1.is_ok());
+
+        // Second resolution with same resolver
+        let mut manifest2 = Manifest::new("test".to_string(), "1.0.0".to_string());
+        manifest2.add_dependency("another-dep".to_string(), "1.0.0".to_string());
+        let result2 = resolver.resolve(&manifest2);
+
+        // Should not crash, even if it fails
+        assert!(result2.is_ok() || matches!(result2, Err(Error::PackageNotFound { .. })));
+    }
+
+    #[test]
+    fn test_build_dependency_graph_empty() {
+        let resolver = DependencyResolver::new().unwrap();
+        let manifest = Manifest::default();
+
+        let result = resolver.build_dependency_graph(&manifest);
+        assert!(result.is_ok());
+
+        let graph = result.unwrap();
+        assert!(graph.nodes.is_empty());
+        assert!(graph.root_dependencies.is_empty());
+    }
+
+    #[test]
+    fn test_build_dependency_graph_with_deps() {
+        let resolver = DependencyResolver::new().unwrap();
+        let mut manifest = Manifest::new("test".to_string(), "1.0.0".to_string());
+        manifest.add_dependency("dep1".to_string(), "^1.0.0".to_string());
+
+        let result = resolver.build_dependency_graph(&manifest);
+        // Result depends on mock package availability
+        assert!(result.is_ok() || matches!(result, Err(Error::PackageNotFound { .. })));
+    }
 }

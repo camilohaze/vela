@@ -313,7 +313,7 @@ mod tests {
 
         graph.add_node(package_id.clone(), package_info).unwrap();
 
-        let resolver = BacktrackingResolver::new(graph);
+        let mut resolver = BacktrackingResolver::new(graph);
         let assignments = HashMap::new();
 
         // Test with version that satisfies constraints (no violation)
@@ -343,7 +343,7 @@ mod tests {
         };
 
         graph.add_node(package_id.clone(), package_info).unwrap();
-        graph.add_root_dependency(package_id);
+        graph.add_root_dependency(package_id.clone());
 
         let mut resolver = BacktrackingResolver::new(graph);
         let result = resolver.resolve();

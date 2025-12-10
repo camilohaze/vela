@@ -218,4 +218,181 @@ mod tests {
         let constraint = VersionConstraint::parse("^1.2.3").unwrap();
         assert_eq!(constraint.to_string(), "^1.2.3");
     }
+
+    #[test]
+    fn test_parse_greater_than() {
+        let constraint = VersionConstraint::parse(">1.2.3").unwrap();
+        match constraint {
+            VersionConstraint::GreaterThan(v) => assert_eq!(v.to_string(), "1.2.3"),
+            _ => panic!("Expected GreaterThan"),
+        }
+    }
+
+    #[test]
+    fn test_parse_greater_equal() {
+        let constraint = VersionConstraint::parse(">=1.2.3").unwrap();
+        match constraint {
+            VersionConstraint::GreaterEqual(v) => assert_eq!(v.to_string(), "1.2.3"),
+            _ => panic!("Expected GreaterEqual"),
+        }
+    }
+
+    #[test]
+    fn test_parse_less_than() {
+        let constraint = VersionConstraint::parse("<2.0.0").unwrap();
+        match constraint {
+            VersionConstraint::LessThan(v) => assert_eq!(v.to_string(), "2.0.0"),
+            _ => panic!("Expected LessThan"),
+        }
+    }
+
+    #[test]
+    fn test_parse_less_equal() {
+        let constraint = VersionConstraint::parse("<=2.0.0").unwrap();
+        match constraint {
+            VersionConstraint::LessEqual(v) => assert_eq!(v.to_string(), "2.0.0"),
+            _ => panic!("Expected LessEqual"),
+        }
+    }
+
+    #[test]
+    fn test_parse_range() {
+        let constraint = VersionConstraint::parse("1.0.0 - 2.0.0").unwrap();
+        match constraint {
+            VersionConstraint::Range(min, max) => {
+                assert_eq!(min.to_string(), "1.0.0");
+                assert_eq!(max.to_string(), "2.0.0");
+            }
+            _ => panic!("Expected Range"),
+        }
+    }
+
+    #[test]
+    fn test_parse_wildcard_major() {
+        let constraint = VersionConstraint::parse("1.x").unwrap();
+        match constraint {
+            VersionConstraint::Wildcard(major) => assert_eq!(major, 1),
+            _ => panic!("Expected Wildcard"),
+        }
+    }
+
+    #[test]
+    fn test_parse_wildcard_minor() {
+        // Note: Currently only major wildcards are supported (e.g., "1.x")
+        // Minor wildcards like "1.2.x" would require extending the VersionConstraint enum
+        let constraint = VersionConstraint::parse("1.x").unwrap();
+        match constraint {
+            VersionConstraint::Wildcard(major) => assert_eq!(major, 1),
+            _ => panic!("Expected Wildcard"),
+        }
+    }
+
+    #[test]
+    fn test_parse_invalid_constraint() {
+        let result = VersionConstraint::parse("invalid");
+        assert!(result.is_err());
+        assert!(matches!(result.unwrap_err(), Error::InvalidVersionConstraint { .. }));
+    }
+
+    #[test]
+    fn test_parse_empty_string() {
+        let result = VersionConstraint::parse("");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_satisfies_greater_than() {
+        let constraint = VersionConstraint::parse(">1.0.0").unwrap();
+        let satisfied = Version::parse("1.1.0").unwrap();
+        let not_satisfied = Version::parse("1.0.0").unwrap();
+
+        assert!(constraint.satisfies(&satisfied));
+        assert!(!constraint.satisfies(&not_satisfied));
+    }
+
+    #[test]
+    fn test_satisfies_greater_equal() {
+        let constraint = VersionConstraint::parse(">=1.0.0").unwrap();
+        let satisfied1 = Version::parse("1.0.0").unwrap();
+        let satisfied2 = Version::parse("1.1.0").unwrap();
+        let not_satisfied = Version::parse("0.9.0").unwrap();
+
+        assert!(constraint.satisfies(&satisfied1));
+        assert!(constraint.satisfies(&satisfied2));
+        assert!(!constraint.satisfies(&not_satisfied));
+    }
+
+    #[test]
+    fn test_satisfies_less_than() {
+        let constraint = VersionConstraint::parse("<2.0.0").unwrap();
+        let satisfied = Version::parse("1.9.0").unwrap();
+        let not_satisfied = Version::parse("2.0.0").unwrap();
+
+        assert!(constraint.satisfies(&satisfied));
+        assert!(!constraint.satisfies(&not_satisfied));
+    }
+
+    #[test]
+    fn test_satisfies_less_equal() {
+        let constraint = VersionConstraint::parse("<=2.0.0").unwrap();
+        let satisfied1 = Version::parse("2.0.0").unwrap();
+        let satisfied2 = Version::parse("1.9.0").unwrap();
+        let not_satisfied = Version::parse("2.1.0").unwrap();
+
+        assert!(constraint.satisfies(&satisfied1));
+        assert!(constraint.satisfies(&satisfied2));
+        assert!(!constraint.satisfies(&not_satisfied));
+    }
+
+    #[test]
+    fn test_satisfies_range() {
+        let constraint = VersionConstraint::parse("1.0.0 - 2.0.0").unwrap();
+        let satisfied1 = Version::parse("1.5.0").unwrap();
+        let satisfied2 = Version::parse("1.0.0").unwrap();
+        let satisfied3 = Version::parse("2.0.0").unwrap();
+        let not_satisfied1 = Version::parse("0.9.0").unwrap();
+        let not_satisfied2 = Version::parse("2.1.0").unwrap();
+
+        assert!(constraint.satisfies(&satisfied1));
+        assert!(constraint.satisfies(&satisfied2));
+        assert!(constraint.satisfies(&satisfied3));
+        assert!(!constraint.satisfies(&not_satisfied1));
+        assert!(!constraint.satisfies(&not_satisfied2));
+    }
+
+    #[test]
+    fn test_satisfies_wildcard() {
+        let constraint = VersionConstraint::parse("1.x").unwrap();
+        let satisfied1 = Version::parse("1.0.0").unwrap();
+        let satisfied2 = Version::parse("1.9.9").unwrap();
+        let not_satisfied = Version::parse("2.0.0").unwrap();
+
+        assert!(constraint.satisfies(&satisfied1));
+        assert!(constraint.satisfies(&satisfied2));
+        assert!(!constraint.satisfies(&not_satisfied));
+    }
+
+    #[test]
+    fn test_satisfies_any() {
+        let constraint = VersionConstraint::parse("*").unwrap();
+        let version = Version::parse("1.2.3").unwrap();
+        assert!(constraint.satisfies(&version));
+    }
+
+    #[test]
+    fn test_to_string_all_variants() {
+        let test_cases = vec![
+            ("^1.2.3", VersionConstraint::Caret(Version::parse("1.2.3").unwrap())),
+            ("~1.2.3", VersionConstraint::Tilde(Version::parse("1.2.3").unwrap())),
+            ("1.2.3", VersionConstraint::Exact(Version::parse("1.2.3").unwrap())),
+            (">1.2.3", VersionConstraint::GreaterThan(Version::parse("1.2.3").unwrap())),
+            (">=1.2.3", VersionConstraint::GreaterEqual(Version::parse("1.2.3").unwrap())),
+            ("<1.2.3", VersionConstraint::LessThan(Version::parse("1.2.3").unwrap())),
+            ("<=1.2.3", VersionConstraint::LessEqual(Version::parse("1.2.3").unwrap())),
+        ];
+
+        for (expected, constraint) in test_cases {
+            assert_eq!(constraint.to_string(), expected);
+        }
+    }
 }

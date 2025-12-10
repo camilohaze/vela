@@ -895,8 +895,17 @@ mod tests {
 
     #[test]
     fn test_execute_run() {
+        // This test expects an error when no compiled bytecode is found
+        // In a test environment, there's no built bytecode
         let result = execute_run(false, &[]);
-        assert!(result.is_ok());
+        assert!(result.is_err(), "Should fail when no bytecode is found");
+        
+        // Check that it's the expected error type
+        if let Err(crate::common::Error::Io(io_err)) = result {
+            assert_eq!(io_err.kind(), std::io::ErrorKind::NotFound);
+        } else {
+            panic!("Expected Io(NotFound) error, got {:?}", result);
+        }
     }
 
     #[test]

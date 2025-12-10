@@ -205,7 +205,7 @@ impl DependencyGraph {
             }
         }
 
-        result.reverse(); // Reverse to get dependencies first
+        // No need to reverse - result already has dependencies first
         Ok(result)
     }
 
@@ -334,11 +334,11 @@ mod tests {
         graph.add_edge(a_id.clone(), b_id.clone(), constraint.clone()).unwrap();
         graph.add_edge(b_id.clone(), c_id.clone(), constraint).unwrap();
 
-        graph.add_root_dependency(a_id);
+        graph.add_root_dependency(a_id.clone());
 
         let sorted = graph.topological_sort().unwrap();
         assert_eq!(sorted.len(), 3);
-        // C should come before B, B before A
+        // Dependencies should come first: C, then B, then A
         assert_eq!(sorted[0], c_id);
         assert_eq!(sorted[1], b_id);
         assert_eq!(sorted[2], a_id);

@@ -30,12 +30,15 @@ vela add http@^2.0
 ```rust
 use vela_tooling::build::{BuildExecutor, BuildConfig};
 
-// Execute build
-let config = BuildConfig::default();
-let executor = BuildExecutor::new(config);
-let result = executor.execute()?;
-
-println!("Build successful: {} modules compiled", result.modules_count);
+fn example() -> Result<(), Box<dyn std::error::Error>> {
+    // Execute build
+    let config = BuildConfig::default();
+    let executor = BuildExecutor::new(config);
+    let result = executor.execute()?;
+    
+    println!("Build successful: {} modules compiled", result.modules_compiled);
+    Ok(())
+}
 ```
 
 ## Architecture
