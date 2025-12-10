@@ -20,6 +20,8 @@ sha2 = "0.10"
 walkdir = "2.5"
 tempfile = "3.10"
 vela-lsp = { path = "../packages/lsp" }
+vela-compiler = { path = "../compiler" }
+vela-vm = { path = "../vm" }
 
 [dev-dependencies]
 criterion = "0.5"

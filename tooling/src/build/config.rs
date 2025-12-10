@@ -7,6 +7,9 @@ use std::path::PathBuf;
 /// Build configuration
 #[derive(Debug, Clone)]
 pub struct BuildConfig {
+    /// Project root directory
+    pub project_root: PathBuf,
+
     /// Build in release mode
     pub release: bool,
 
@@ -26,6 +29,7 @@ pub struct BuildConfig {
 impl Default for BuildConfig {
     fn default() -> Self {
         Self {
+            project_root: std::env::current_dir().unwrap_or(PathBuf::from(".")),
             release: false,
             target: None,
             jobs: Some(num_cpus::get()),
@@ -36,13 +40,16 @@ impl Default for BuildConfig {
 }
 
 impl BuildConfig {
-    /// Create new build config
-    pub fn new() -> Self {
-        Self::default()
+    /// Create new build config with project root
+    pub fn new(project_root: PathBuf) -> Self {
+        Self {
+            project_root,
+            ..Self::default()
+        }
     }
 
     /// Set release mode
-    pub fn with_release(mut self, release: bool) -> Self {
+    pub fn release(mut self, release: bool) -> Self {
         self.release = release;
         self
     }
@@ -50,6 +57,12 @@ impl BuildConfig {
     /// Set target platform
     pub fn with_target(mut self, target: impl Into<String>) -> Self {
         self.target = Some(target.into());
+        self
+    }
+
+    /// Set number of jobs
+    pub fn jobs(mut self, jobs: usize) -> Self {
+        self.jobs = Some(jobs);
         self
     }
 

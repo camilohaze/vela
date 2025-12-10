@@ -5,6 +5,7 @@ Build executor with parallel compilation
 use crate::build::{BuildCache, BuildConfig, BuildGraph};
 use crate::common::Result;
 use rayon::prelude::*;
+use std::path::Path;
 
 /// Build result
 #[derive(Debug, Clone)]
@@ -62,11 +63,26 @@ impl BuildExecutor {
     pub fn execute(&self) -> Result<BuildResult> {
         let start = std::time::Instant::now();
 
-        // Get build levels (topological sort)
-        let levels = match self.graph.topological_sort() {
+        // Encontrar archivos .vela en el proyecto
+        let vela_files = self.find_vela_files()?;
+        if vela_files.is_empty() {
+            println!("⚠️  No .vela files found in project");
+            return Ok(BuildResult::success(0, 0, start.elapsed().as_millis()));
+        }
+
+        println!("📁 Found {} Vela files to compile", vela_files.len());
+
+        // Construir grafo de dependencias desde archivos
+        let mut temp_executor = BuildExecutor::new(self.config.clone());
+        for file_path in &vela_files {
+            temp_executor.graph_mut().add_module(file_path.clone());
+        }
+
+        // Obtener niveles de compilación (orden topológico)
+        let levels = match temp_executor.graph.topological_sort() {
             Ok(l) => l,
             Err(e) => {
-                eprintln!("Build failed: {}", e);
+                eprintln!("❌ Build failed: {}", e);
                 return Ok(BuildResult::failed(start.elapsed().as_millis()));
             }
         };
@@ -74,32 +90,45 @@ impl BuildExecutor {
         let mut compiled = 0;
         let mut cached = 0;
 
-        // Compile each level in parallel
+        // Compilar cada nivel en paralelo
         for level in levels {
-            let results: Vec<_> = level
+            let results: Vec<Result<_>> = level
                 .par_iter()
                 .map(|&module_id| {
-                    if let Some(module) = self.graph.get_module(module_id) {
-                        // Check cache
+                    // Crear un executor separado para cada módulo para evitar problemas de mutabilidad
+                    let mut module_executor = BuildExecutor::new(self.config.clone());
+                    *module_executor.graph_mut() = temp_executor.graph.clone();
+
+                    if let Some(module) = module_executor.graph.get_module(module_id) {
+                        // Verificar cache
                         if self.config.incremental && self.cache.is_valid(&module.path).unwrap_or(false) {
-                            return (false, true); // Not compiled, but cached
+                            return Ok((false, true)); // No compilado, pero en cache
                         }
 
-                        // Compile module (stub)
-                        self.compile_module(module_id);
-                        (true, false) // Compiled
+                        // Compilar módulo
+                        module_executor.compile_module(module_id)?;
+                        Ok((true, false)) // Compilado
                     } else {
-                        (false, false)
+                        Ok((false, false))
                     }
                 })
                 .collect();
 
-            for (was_compiled, was_cached) in results {
-                if was_compiled {
-                    compiled += 1;
-                }
-                if was_cached {
-                    cached += 1;
+            // Procesar resultados
+            for result in results {
+                match result {
+                    Ok((was_compiled, was_cached)) => {
+                        if was_compiled {
+                            compiled += 1;
+                        }
+                        if was_cached {
+                            cached += 1;
+                        }
+                    }
+                    Err(e) => {
+                        eprintln!("❌ Compilation error: {}", e);
+                        return Ok(BuildResult::failed(start.elapsed().as_millis()));
+                    }
                 }
             }
         }
@@ -108,11 +137,121 @@ impl BuildExecutor {
         Ok(BuildResult::success(compiled, cached, duration))
     }
 
-    /// Compile a single module (stub)
-    fn compile_module(&self, _module_id: crate::build::ModuleId) {
-        // TODO: Implement actual compilation
-        // This would call into vela-compiler crate
-        std::thread::sleep(std::time::Duration::from_millis(1));
+    /// Compile a single module
+    fn compile_module(&mut self, module_id: crate::build::ModuleId) -> Result<()> {
+        use std::path::Path;
+        use vela_compiler::Compiler;
+        use vela_compiler::config::Config;
+
+        // Obtener información del módulo
+        let module = self.graph.get_module(module_id)
+            .ok_or_else(|| crate::common::Error::BuildFailed { message: format!("Module {} not found", module_id.0) })?;
+
+        let module_name = module.path.file_stem()
+            .and_then(|s| s.to_str())
+            .unwrap_or("unknown");
+
+        println!("🔨 Compiling module: {} ({})", module_name, module.path.display());
+
+        // Verificar cache para compilación incremental
+        if self.config.incremental && self.cache.is_valid(&module.path).unwrap_or(false) {
+            println!("⚡ Module {} is up to date", module_name);
+            return Ok(());
+        }
+
+        // Compilar usando el compilador Vela
+        let mut compiler = Compiler::new(Config::default());
+        let bytecode = compiler.compile_file(&module.path)
+            .map_err(|e| crate::common::Error::BuildFailed { message: format!("Compilation failed: {:?}", e) })?;
+
+        if compiler.has_errors() {
+            let diagnostics = compiler.diagnostics();
+            return Err(crate::common::Error::BuildFailed { message: format!("Compilation errors: {:?}", diagnostics) });
+        }
+
+        // Generar ruta de salida
+        let output_path = self.get_output_path(&module.path);
+
+        // Crear directorio de salida si no existe
+        if let Some(parent) = output_path.parent() {
+            std::fs::create_dir_all(parent)
+                .map_err(|e| crate::common::Error::Io(e))?;
+        }
+
+        // Escribir bytecode
+        let bytecode_len = bytecode.len();
+        std::fs::write(&output_path, bytecode)
+            .map_err(|e| crate::common::Error::Io(e))?;
+
+        // Actualizar cache
+        self.cache.store(module.path.clone(), Vec::new())
+            .map_err(|e| crate::common::Error::BuildFailed { message: format!("Failed to update cache: {}", e) })?;
+
+        println!("✅ Compiled {} -> {} ({} bytes)", module_name, output_path.display(), bytecode_len);
+
+        Ok(())
+    }
+
+    /// Obtener ruta de salida para un archivo fuente
+    fn get_output_path(&self, source_path: &Path) -> std::path::PathBuf {
+        let relative_path = source_path.strip_prefix(&self.config.project_root)
+            .unwrap_or(source_path);
+
+        let mut output_path = self.config.output_dir.clone();
+        output_path.push(relative_path);
+        output_path.set_extension("velac"); // Extensión para bytecode compilado
+
+        output_path
+    }
+
+    /// Encontrar todos los archivos .vela en el proyecto
+    fn find_vela_files(&self) -> Result<Vec<std::path::PathBuf>> {
+        let mut vela_files = Vec::new();
+
+        // Directorios a buscar (src/, examples/, packages/)
+        let search_dirs = ["src", "examples", "packages"];
+
+        for dir_name in &search_dirs {
+            let dir_path = self.config.project_root.join(dir_name);
+            if dir_path.exists() {
+                self.collect_vela_files_recursive(&dir_path, &mut vela_files)?;
+            }
+        }
+
+        // También buscar en la raíz del proyecto
+        self.collect_vela_files_recursive(&self.config.project_root, &mut vela_files)?;
+
+        Ok(vela_files)
+    }
+
+    /// Recolectar archivos .vela recursivamente
+    fn collect_vela_files_recursive(&self, dir: &Path, files: &mut Vec<std::path::PathBuf>) -> Result<()> {
+        for entry in std::fs::read_dir(dir)
+            .map_err(|e| crate::common::Error::Io(e))? {
+
+            let entry = entry.map_err(|e| crate::common::Error::Io(e))?;
+            let path = entry.path();
+
+            if path.is_dir() {
+                // Saltar directorios de build y dependencias
+                if !self.should_skip_directory(&path) {
+                    self.collect_vela_files_recursive(&path, files)?;
+                }
+            } else if path.extension().and_then(|s| s.to_str()) == Some("vela") {
+                files.push(path);
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Verificar si un directorio debe ser saltado durante la búsqueda
+    fn should_skip_directory(&self, path: &Path) -> bool {
+        let dir_name = path.file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("");
+
+        matches!(dir_name, "target" | "node_modules" | ".git" | "dist" | "build")
     }
 
     /// Get mutable reference to graph

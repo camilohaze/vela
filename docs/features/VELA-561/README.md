@@ -45,6 +45,16 @@ Implementación completa de la Standard Library de Vela, incluyendo APIs de I/O,
   - `stdlib/tests/io_networking_integration.rs` - 12 tests de integración
   - Tests de: file/directory integration, HTTP file ops, WebSocket config, error handling, performance, concurrency
 
+### TASK-097: Implementar comando vela build ✅
+- **Estado:** Completada
+- **Entregables:**
+  - `tooling/src/build/executor.rs` - BuildExecutor con compilación paralela
+  - `tooling/src/build/config.rs` - BuildConfig con configuración flexible
+  - `tooling/src/cli/commands.rs` - Comando `vela build` integrado
+  - `bin/src/main.rs` - Binario CLI funcional
+  - `bin/Cargo.toml` - Configuración del binario
+  - Soporte para: compilación paralela, resolución de dependencias, builds incrementales
+
 ## 🔨 Implementación
 
 ### Arquitectura de la Standard Library

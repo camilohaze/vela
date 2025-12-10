@@ -19,6 +19,7 @@ members = [
     "packages/events",
     "packages/di",
     "packages/state-management",
+    "bin",
 ]
 exclude = [
     "examples",

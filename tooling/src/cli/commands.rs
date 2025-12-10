@@ -3,6 +3,8 @@ CLI commands implementation
 */
 
 use crate::common::Result;
+use crate::build::{BuildConfig, BuildExecutor};
+use std::path::PathBuf;
 
 /// Execute new command
 pub fn execute_new(name: &str, template: &str, path: Option<&str>) -> Result<()> {
@@ -16,14 +18,53 @@ pub fn execute_new(name: &str, template: &str, path: Option<&str>) -> Result<()>
 
 /// Execute build command
 pub fn execute_build(release: bool, target: Option<&str>, jobs: Option<usize>) -> Result<()> {
-    println!("Building project (release: {})", release);
+    println!("🏗️  Building Vela project...");
+    println!("📋 Configuration:");
+    println!("   Release mode: {}", release);
     if let Some(t) = target {
-        println!("Target: {}", t);
+        println!("   Target: {}", t);
     }
     if let Some(j) = jobs {
-        println!("Jobs: {}", j);
+        println!("   Parallel jobs: {}", j);
     }
-    // TODO: Implement build system
+
+    // Determinar directorio del proyecto (directorio actual)
+    let project_root = std::env::current_dir()
+        .map_err(|e| crate::common::Error::Io(e))?;
+
+    // Crear configuración del build
+    let mut config = BuildConfig::new(project_root);
+    config = config.release(release);
+
+    if let Some(j) = jobs {
+        config = config.jobs(j);
+    }
+
+    if let Some(t) = target {
+        // TODO: Implementar soporte para diferentes targets
+        println!("⚠️  Target specification not yet implemented, using default");
+    }
+
+    // Crear y ejecutar el build executor
+    let executor = BuildExecutor::new(config);
+    let result = executor.execute()?;
+
+    // Reportar resultados
+    if result.success {
+        println!("\n✅ Build completed successfully!");
+        println!("📊 Summary:");
+        println!("   Modules compiled: {}", result.modules_compiled);
+        println!("   Modules cached: {}", result.modules_cached);
+        println!("   Total time: {} ms", result.duration_ms);
+
+        if result.modules_compiled > 0 || result.modules_cached > 0 {
+            println!("\n📁 Output directory: target/vela");
+        }
+    } else {
+        println!("\n❌ Build failed after {} ms", result.duration_ms);
+        return Err(crate::common::Error::BuildFailed { message: "Build failed".to_string() });
+    }
+
     Ok(())
 }
 
