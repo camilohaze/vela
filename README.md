@@ -25,7 +25,6 @@ This is a monorepo containing all Vela tooling implemented in Rust:
 
 ```
 vela/
-├── core/                         # Core types, AST, IR (Rust)
 ├── compiler/                     # Compiler: lexer, parser, semantic analyzer, codegen (Rust)
 ├── vm/                           # Virtual Machine: bytecode interpreter (Rust + Vela)
 ├── runtime/                      # Runtime system: reactive, concurrency, GC (Rust)
