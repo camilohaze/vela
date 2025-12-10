@@ -826,150 +826,6 @@ impl LanguageServer {
         function_call.active_parameter as u32
     }
 
-    /// Generate keyword completions
-    fn keyword_completions(&self) -> Vec<CompletionItem> {
-        vec![
-            CompletionItem {
-                label: "fn".to_string(),
-                kind: Some(CompletionItemKind::KEYWORD),
-                detail: Some("Function declaration".to_string()),
-                documentation: Some(lsp_types::Documentation::String("Declare a function".to_string())),
-                ..Default::default()
-            },
-            CompletionItem {
-                label: "let".to_string(),
-                kind: Some(CompletionItemKind::KEYWORD),
-                detail: Some("Variable declaration".to_string()),
-                documentation: Some(lsp_types::Documentation::String("Declare an immutable variable".to_string())),
-                ..Default::default()
-            },
-            CompletionItem {
-                label: "state".to_string(),
-                kind: Some(CompletionItemKind::KEYWORD),
-                detail: Some("Reactive state variable".to_string()),
-                documentation: Some(lsp_types::Documentation::String("Declare a mutable reactive variable".to_string())),
-                ..Default::default()
-            },
-            CompletionItem {
-                label: "if".to_string(),
-                kind: Some(CompletionItemKind::KEYWORD),
-                detail: Some("Conditional statement".to_string()),
-                documentation: Some(lsp_types::Documentation::String("Conditional execution".to_string())),
-                ..Default::default()
-            },
-            CompletionItem {
-                label: "match".to_string(),
-                kind: Some(CompletionItemKind::KEYWORD),
-                detail: Some("Pattern matching".to_string()),
-                documentation: Some(lsp_types::Documentation::String("Pattern matching expression".to_string())),
-                ..Default::default()
-            },
-            CompletionItem {
-                label: "class".to_string(),
-                kind: Some(CompletionItemKind::KEYWORD),
-                detail: Some("Class declaration".to_string()),
-                documentation: Some(lsp_types::Documentation::String("Declare a class".to_string())),
-                ..Default::default()
-            },
-            CompletionItem {
-                label: "interface".to_string(),
-                kind: Some(CompletionItemKind::KEYWORD),
-                detail: Some("Interface declaration".to_string()),
-                documentation: Some(lsp_types::Documentation::String("Declare an interface".to_string())),
-                ..Default::default()
-            },
-            CompletionItem {
-                label: "public".to_string(),
-                kind: Some(CompletionItemKind::KEYWORD),
-                detail: Some("Public modifier".to_string()),
-                documentation: Some(lsp_types::Documentation::String("Make declaration public".to_string())),
-                ..Default::default()
-            },
-            CompletionItem {
-                label: "return".to_string(),
-                kind: Some(CompletionItemKind::KEYWORD),
-                detail: Some("Return statement".to_string()),
-                documentation: Some(lsp_types::Documentation::String("Return from function".to_string())),
-                ..Default::default()
-            },
-        ]
-    }
-
-    /// Generate type completions
-    fn type_completions(&self) -> Vec<CompletionItem> {
-        vec![
-            CompletionItem {
-                label: "String".to_string(),
-                kind: Some(CompletionItemKind::CLASS),
-                detail: Some("String type".to_string()),
-                documentation: Some(lsp_types::Documentation::String("Text string type".to_string())),
-                ..Default::default()
-            },
-            CompletionItem {
-                label: "Number".to_string(),
-                kind: Some(CompletionItemKind::CLASS),
-                detail: Some("Number type".to_string()),
-                documentation: Some(lsp_types::Documentation::String("Numeric type".to_string())),
-                ..Default::default()
-            },
-            CompletionItem {
-                label: "Float".to_string(),
-                kind: Some(CompletionItemKind::CLASS),
-                detail: Some("Float type".to_string()),
-                documentation: Some(lsp_types::Documentation::String("Floating point number type".to_string())),
-                ..Default::default()
-            },
-            CompletionItem {
-                label: "Bool".to_string(),
-                kind: Some(CompletionItemKind::CLASS),
-                detail: Some("Boolean type".to_string()),
-                documentation: Some(lsp_types::Documentation::String("True/false type".to_string())),
-                ..Default::default()
-            },
-            CompletionItem {
-                label: "void".to_string(),
-                kind: Some(CompletionItemKind::CLASS),
-                detail: Some("Void type".to_string()),
-                documentation: Some(lsp_types::Documentation::String("No return type".to_string())),
-                ..Default::default()
-            },
-        ]
-    }
-
-    /// Generate function completions
-    fn function_completions(&self) -> Vec<CompletionItem> {
-        vec![
-            CompletionItem {
-                label: "print".to_string(),
-                kind: Some(CompletionItemKind::FUNCTION),
-                detail: Some("print(value: any) -> void".to_string()),
-                documentation: Some(lsp_types::Documentation::String("Print value to console".to_string())),
-                ..Default::default()
-            },
-            CompletionItem {
-                label: "len".to_string(),
-                kind: Some(CompletionItemKind::FUNCTION),
-                detail: Some("len(collection) -> Number".to_string()),
-                documentation: Some(lsp_types::Documentation::String("Get length of collection".to_string())),
-                ..Default::default()
-            },
-        ]
-    }
-
-    /// Generate variable completions
-    fn variable_completions(&self) -> Vec<CompletionItem> {
-        // For now, return empty - this would need semantic analysis
-        vec![]
-    }
-
-    /// Generate basic completions when context is unknown
-    fn basic_completions(&self) -> Vec<CompletionItem> {
-        let mut completions = self.keyword_completions();
-        completions.extend(self.type_completions());
-        completions.extend(self.function_completions());
-        completions
-    }
-
     /// Analyze the symbol at the given position for references
     fn analyze_references_symbol(&self, document: &str, position: Position) -> Result<String> {
         // Convert position to byte offset
@@ -1049,5 +905,477 @@ impl LanguageServer {
         };
 
         before_ok && after_ok
+    }
+
+    /// Generate keyword completions
+    fn keyword_completions(&self) -> Vec<CompletionItem> {
+        vec![
+            // Control flow keywords
+            CompletionItem {
+                label: "if".to_string(),
+                kind: Some(CompletionItemKind::KEYWORD),
+                detail: Some("Conditional statement".to_string()),
+                documentation: Some(lsp_types::Documentation::MarkupContent(MarkupContent {
+                    kind: MarkupKind::Markdown,
+                    value: "Conditional execution based on a boolean expression.".to_string(),
+                })),
+                ..Default::default()
+            },
+            CompletionItem {
+                label: "else".to_string(),
+                kind: Some(CompletionItemKind::KEYWORD),
+                detail: Some("Alternative conditional branch".to_string()),
+                documentation: Some(lsp_types::Documentation::MarkupContent(MarkupContent {
+                    kind: MarkupKind::Markdown,
+                    value: "Alternative branch for conditional statements.".to_string(),
+                })),
+                ..Default::default()
+            },
+            CompletionItem {
+                label: "match".to_string(),
+                kind: Some(CompletionItemKind::KEYWORD),
+                detail: Some("Pattern matching".to_string()),
+                documentation: Some(lsp_types::Documentation::MarkupContent(MarkupContent {
+                    kind: MarkupKind::Markdown,
+                    value: "Pattern matching with exhaustive checking.".to_string(),
+                })),
+                ..Default::default()
+            },
+
+            // Function and type keywords
+            CompletionItem {
+                label: "fn".to_string(),
+                kind: Some(CompletionItemKind::KEYWORD),
+                detail: Some("Function declaration".to_string()),
+                documentation: Some(lsp_types::Documentation::MarkupContent(MarkupContent {
+                    kind: MarkupKind::Markdown,
+                    value: "Declare a function with parameters and return type.".to_string(),
+                })),
+                ..Default::default()
+            },
+            CompletionItem {
+                label: "class".to_string(),
+                kind: Some(CompletionItemKind::KEYWORD),
+                detail: Some("Class declaration".to_string()),
+                documentation: Some(lsp_types::Documentation::MarkupContent(MarkupContent {
+                    kind: MarkupKind::Markdown,
+                    value: "Declare a class with methods and properties.".to_string(),
+                })),
+                ..Default::default()
+            },
+            CompletionItem {
+                label: "struct".to_string(),
+                kind: Some(CompletionItemKind::KEYWORD),
+                detail: Some("Struct declaration".to_string()),
+                documentation: Some(lsp_types::Documentation::MarkupContent(MarkupContent {
+                    kind: MarkupKind::Markdown,
+                    value: "Declare a data structure with named fields.".to_string(),
+                })),
+                ..Default::default()
+            },
+            CompletionItem {
+                label: "enum".to_string(),
+                kind: Some(CompletionItemKind::KEYWORD),
+                detail: Some("Enumeration declaration".to_string()),
+                documentation: Some(lsp_types::Documentation::MarkupContent(MarkupContent {
+                    kind: MarkupKind::Markdown,
+                    value: "Declare an enumeration with variants.".to_string(),
+                })),
+                ..Default::default()
+            },
+
+            // Variable and state keywords
+            CompletionItem {
+                label: "state".to_string(),
+                kind: Some(CompletionItemKind::KEYWORD),
+                detail: Some("Reactive state variable".to_string()),
+                documentation: Some(lsp_types::Documentation::MarkupContent(MarkupContent {
+                    kind: MarkupKind::Markdown,
+                    value: "Declare a reactive state variable that triggers updates.".to_string(),
+                })),
+                ..Default::default()
+            },
+            CompletionItem {
+                label: "let".to_string(),
+                kind: Some(CompletionItemKind::KEYWORD),
+                detail: Some("Variable binding (deprecated)".to_string()),
+                documentation: Some(lsp_types::Documentation::MarkupContent(MarkupContent {
+                    kind: MarkupKind::Markdown,
+                    value: "**Deprecated**: Use direct assignment instead. Variables are immutable by default.".to_string(),
+                })),
+                deprecated: Some(true),
+                ..Default::default()
+            },
+
+            // Module and import keywords
+            CompletionItem {
+                label: "import".to_string(),
+                kind: Some(CompletionItemKind::KEYWORD),
+                detail: Some("Import statement".to_string()),
+                documentation: Some(lsp_types::Documentation::MarkupContent(MarkupContent {
+                    kind: MarkupKind::Markdown,
+                    value: "Import modules, types, or functions from other files.".to_string(),
+                })),
+                ..Default::default()
+            },
+            CompletionItem {
+                label: "public".to_string(),
+                kind: Some(CompletionItemKind::KEYWORD),
+                detail: Some("Public visibility modifier".to_string()),
+                documentation: Some(lsp_types::Documentation::MarkupContent(MarkupContent {
+                    kind: MarkupKind::Markdown,
+                    value: "Make a declaration visible outside its module.".to_string(),
+                })),
+                ..Default::default()
+            },
+            CompletionItem {
+                label: "async".to_string(),
+                kind: Some(CompletionItemKind::KEYWORD),
+                detail: Some("Asynchronous function".to_string()),
+                documentation: Some(lsp_types::Documentation::MarkupContent(MarkupContent {
+                    kind: MarkupKind::Markdown,
+                    value: "Declare an asynchronous function.".to_string(),
+                })),
+                ..Default::default()
+            },
+            CompletionItem {
+                label: "await".to_string(),
+                kind: Some(CompletionItemKind::KEYWORD),
+                detail: Some("Await asynchronous operation".to_string()),
+                documentation: Some(lsp_types::Documentation::MarkupContent(MarkupContent {
+                    kind: MarkupKind::Markdown,
+                    value: "Wait for an asynchronous operation to complete.".to_string(),
+                })),
+                ..Default::default()
+            },
+
+            // Error handling
+            CompletionItem {
+                label: "try".to_string(),
+                kind: Some(CompletionItemKind::KEYWORD),
+                detail: Some("Try-catch block".to_string()),
+                documentation: Some(lsp_types::Documentation::MarkupContent(MarkupContent {
+                    kind: MarkupKind::Markdown,
+                    value: "Execute code that might throw exceptions.".to_string(),
+                })),
+                ..Default::default()
+            },
+            CompletionItem {
+                label: "catch".to_string(),
+                kind: Some(CompletionItemKind::KEYWORD),
+                detail: Some("Exception handler".to_string()),
+                documentation: Some(lsp_types::Documentation::MarkupContent(MarkupContent {
+                    kind: MarkupKind::Markdown,
+                    value: "Handle exceptions thrown in try blocks.".to_string(),
+                })),
+                ..Default::default()
+            },
+            CompletionItem {
+                label: "throw".to_string(),
+                kind: Some(CompletionItemKind::KEYWORD),
+                detail: Some("Throw exception".to_string()),
+                documentation: Some(lsp_types::Documentation::MarkupContent(MarkupContent {
+                    kind: MarkupKind::Markdown,
+                    value: "Throw an exception with an error message.".to_string(),
+                })),
+                ..Default::default()
+            },
+
+            // Reactive system
+            CompletionItem {
+                label: "computed".to_string(),
+                kind: Some(CompletionItemKind::KEYWORD),
+                detail: Some("Computed reactive value".to_string()),
+                documentation: Some(lsp_types::Documentation::MarkupContent(MarkupContent {
+                    kind: MarkupKind::Markdown,
+                    value: "Declare a computed value that updates reactively.".to_string(),
+                })),
+                ..Default::default()
+            },
+            CompletionItem {
+                label: "effect".to_string(),
+                kind: Some(CompletionItemKind::KEYWORD),
+                detail: Some("Reactive side effect".to_string()),
+                documentation: Some(lsp_types::Documentation::MarkupContent(MarkupContent {
+                    kind: MarkupKind::Markdown,
+                    value: "Declare a side effect that runs when dependencies change.".to_string(),
+                })),
+                ..Default::default()
+            },
+        ]
+    }
+
+    /// Generate type completions
+    fn type_completions(&self) -> Vec<CompletionItem> {
+        vec![
+            // Built-in types
+            CompletionItem {
+                label: "Number".to_string(),
+                kind: Some(CompletionItemKind::CLASS),
+                detail: Some("64-bit integer type".to_string()),
+                documentation: Some(lsp_types::Documentation::MarkupContent(MarkupContent {
+                    kind: MarkupKind::Markdown,
+                    value: "64-bit signed integer type for whole numbers.".to_string(),
+                })),
+                ..Default::default()
+            },
+            CompletionItem {
+                label: "Float".to_string(),
+                kind: Some(CompletionItemKind::CLASS),
+                detail: Some("64-bit floating point type".to_string()),
+                documentation: Some(lsp_types::Documentation::MarkupContent(MarkupContent {
+                    kind: MarkupKind::Markdown,
+                    value: "64-bit floating point type for decimal numbers.".to_string(),
+                })),
+                ..Default::default()
+            },
+            CompletionItem {
+                label: "String".to_string(),
+                kind: Some(CompletionItemKind::CLASS),
+                detail: Some("UTF-8 string type".to_string()),
+                documentation: Some(lsp_types::Documentation::MarkupContent(MarkupContent {
+                    kind: MarkupKind::Markdown,
+                    value: "UTF-8 encoded string type.".to_string(),
+                })),
+                ..Default::default()
+            },
+            CompletionItem {
+                label: "Bool".to_string(),
+                kind: Some(CompletionItemKind::CLASS),
+                detail: Some("Boolean type".to_string()),
+                documentation: Some(lsp_types::Documentation::MarkupContent(MarkupContent {
+                    kind: MarkupKind::Markdown,
+                    value: "Boolean type with values `true` and `false`.".to_string(),
+                })),
+                ..Default::default()
+            },
+
+            // Special types
+            CompletionItem {
+                label: "Option".to_string(),
+                kind: Some(CompletionItemKind::CLASS),
+                detail: Some("Optional value type".to_string()),
+                documentation: Some(lsp_types::Documentation::MarkupContent(MarkupContent {
+                    kind: MarkupKind::Markdown,
+                    value: "Represents optional values: `Some(value)` or `None`.".to_string(),
+                })),
+                ..Default::default()
+            },
+            CompletionItem {
+                label: "Result".to_string(),
+                kind: Some(CompletionItemKind::CLASS),
+                detail: Some("Result type for error handling".to_string()),
+                documentation: Some(lsp_types::Documentation::MarkupContent(MarkupContent {
+                    kind: MarkupKind::Markdown,
+                    value: "Represents operation results: `Ok(value)` or `Err(error)`.".to_string(),
+                })),
+                ..Default::default()
+            },
+
+            // Collection types
+            CompletionItem {
+                label: "List".to_string(),
+                kind: Some(CompletionItemKind::CLASS),
+                detail: Some("Dynamic array type".to_string()),
+                documentation: Some(lsp_types::Documentation::MarkupContent(MarkupContent {
+                    kind: MarkupKind::Markdown,
+                    value: "Dynamic array that can grow and shrink.".to_string(),
+                })),
+                ..Default::default()
+            },
+            CompletionItem {
+                label: "Set".to_string(),
+                kind: Some(CompletionItemKind::CLASS),
+                detail: Some("Unique value collection".to_string()),
+                documentation: Some(lsp_types::Documentation::MarkupContent(MarkupContent {
+                    kind: MarkupKind::Markdown,
+                    value: "Collection of unique values with fast lookup.".to_string(),
+                })),
+                ..Default::default()
+            },
+            CompletionItem {
+                label: "Dict".to_string(),
+                kind: Some(CompletionItemKind::CLASS),
+                detail: Some("Key-value dictionary".to_string()),
+                documentation: Some(lsp_types::Documentation::MarkupContent(MarkupContent {
+                    kind: MarkupKind::Markdown,
+                    value: "Dictionary mapping keys to values.".to_string(),
+                })),
+                ..Default::default()
+            },
+        ]
+    }
+
+    /// Generate function completions
+    fn function_completions(&self) -> Vec<CompletionItem> {
+        vec![
+            // Built-in functions
+            CompletionItem {
+                label: "print".to_string(),
+                kind: Some(CompletionItemKind::FUNCTION),
+                detail: Some("fn print(value: any) -> void".to_string()),
+                documentation: Some(lsp_types::Documentation::MarkupContent(MarkupContent {
+                    kind: MarkupKind::Markdown,
+                    value: "Print a value to the console.\n\n**Parameters:**\n- `value`: The value to print\n\n**Returns:** Nothing".to_string(),
+                })),
+                insert_text: Some("print(${1:value})".to_string()),
+                insert_text_format: Some(lsp_types::InsertTextFormat::SNIPPET),
+                ..Default::default()
+            },
+            CompletionItem {
+                label: "println".to_string(),
+                kind: Some(CompletionItemKind::FUNCTION),
+                detail: Some("fn println(value: any) -> void".to_string()),
+                documentation: Some(lsp_types::Documentation::MarkupContent(MarkupContent {
+                    kind: MarkupKind::Markdown,
+                    value: "Print a value to the console with a newline.\n\n**Parameters:**\n- `value`: The value to print\n\n**Returns:** Nothing".to_string(),
+                })),
+                insert_text: Some("println(${1:value})".to_string()),
+                insert_text_format: Some(lsp_types::InsertTextFormat::SNIPPET),
+                ..Default::default()
+            },
+
+            // Collection methods
+            CompletionItem {
+                label: "map".to_string(),
+                kind: Some(CompletionItemKind::METHOD),
+                detail: Some("fn map<T, U>(self, f: fn(T) -> U) -> List<U>".to_string()),
+                documentation: Some(lsp_types::Documentation::MarkupContent(MarkupContent {
+                    kind: MarkupKind::Markdown,
+                    value: "Transform each element of a collection.\n\n**Parameters:**\n- `f`: Function to apply to each element\n\n**Returns:** New collection with transformed elements".to_string(),
+                })),
+                insert_text: Some("map(${1:item} => ${2:transformed})".to_string()),
+                insert_text_format: Some(lsp_types::InsertTextFormat::SNIPPET),
+                ..Default::default()
+            },
+            CompletionItem {
+                label: "filter".to_string(),
+                kind: Some(CompletionItemKind::METHOD),
+                detail: Some("fn filter<T>(self, predicate: fn(T) -> Bool) -> List<T>".to_string()),
+                documentation: Some(lsp_types::Documentation::MarkupContent(MarkupContent {
+                    kind: MarkupKind::Markdown,
+                    value: "Filter elements of a collection.\n\n**Parameters:**\n- `predicate`: Function that returns true for elements to keep\n\n**Returns:** New collection with filtered elements".to_string(),
+                })),
+                insert_text: Some("filter(${1:item} => ${2:condition})".to_string()),
+                insert_text_format: Some(lsp_types::InsertTextFormat::SNIPPET),
+                ..Default::default()
+            },
+            CompletionItem {
+                label: "forEach".to_string(),
+                kind: Some(CompletionItemKind::METHOD),
+                detail: Some("fn forEach<T>(self, action: fn(T) -> void) -> void".to_string()),
+                documentation: Some(lsp_types::Documentation::MarkupContent(MarkupContent {
+                    kind: MarkupKind::Markdown,
+                    value: "Execute an action for each element.\n\n**Parameters:**\n- `action`: Function to execute for each element\n\n**Returns:** Nothing".to_string(),
+                })),
+                insert_text: Some("forEach(${1:item} => ${2:action})".to_string()),
+                insert_text_format: Some(lsp_types::InsertTextFormat::SNIPPET),
+                ..Default::default()
+            },
+
+            // String methods
+            CompletionItem {
+                label: "toUpperCase".to_string(),
+                kind: Some(CompletionItemKind::METHOD),
+                detail: Some("fn toUpperCase(self) -> String".to_string()),
+                documentation: Some(lsp_types::Documentation::MarkupContent(MarkupContent {
+                    kind: MarkupKind::Markdown,
+                    value: "Convert string to uppercase.\n\n**Returns:** New uppercase string".to_string(),
+                })),
+                ..Default::default()
+            },
+            CompletionItem {
+                label: "toLowerCase".to_string(),
+                kind: Some(CompletionItemKind::METHOD),
+                detail: Some("fn toLowerCase(self) -> String".to_string()),
+                documentation: Some(lsp_types::Documentation::MarkupContent(MarkupContent {
+                    kind: MarkupKind::Markdown,
+                    value: "Convert string to lowercase.\n\n**Returns:** New lowercase string".to_string(),
+                })),
+                ..Default::default()
+            },
+            CompletionItem {
+                label: "trim".to_string(),
+                kind: Some(CompletionItemKind::METHOD),
+                detail: Some("fn trim(self) -> String".to_string()),
+                documentation: Some(lsp_types::Documentation::MarkupContent(MarkupContent {
+                    kind: MarkupKind::Markdown,
+                    value: "Remove whitespace from both ends.\n\n**Returns:** Trimmed string".to_string(),
+                })),
+                ..Default::default()
+            },
+        ]
+    }
+
+    /// Generate variable completions
+    fn variable_completions(&self) -> Vec<CompletionItem> {
+        vec![
+            CompletionItem {
+                label: "value".to_string(),
+                kind: Some(CompletionItemKind::VARIABLE),
+                detail: Some("Generic value variable".to_string()),
+                documentation: Some(lsp_types::Documentation::MarkupContent(MarkupContent {
+                    kind: MarkupKind::Markdown,
+                    value: "A generic variable for storing values.".to_string(),
+                })),
+                ..Default::default()
+            },
+            CompletionItem {
+                label: "result".to_string(),
+                kind: Some(CompletionItemKind::VARIABLE),
+                detail: Some("Result of an operation".to_string()),
+                documentation: Some(lsp_types::Documentation::MarkupContent(MarkupContent {
+                    kind: MarkupKind::Markdown,
+                    value: "Variable to store the result of an operation.".to_string(),
+                })),
+                ..Default::default()
+            },
+            CompletionItem {
+                label: "data".to_string(),
+                kind: Some(CompletionItemKind::VARIABLE),
+                detail: Some("Data variable".to_string()),
+                documentation: Some(lsp_types::Documentation::MarkupContent(MarkupContent {
+                    kind: MarkupKind::Markdown,
+                    value: "Variable for storing data structures.".to_string(),
+                })),
+                ..Default::default()
+            },
+            CompletionItem {
+                label: "item".to_string(),
+                kind: Some(CompletionItemKind::VARIABLE),
+                detail: Some("Collection item variable".to_string()),
+                documentation: Some(lsp_types::Documentation::MarkupContent(MarkupContent {
+                    kind: MarkupKind::Markdown,
+                    value: "Variable representing an item in a collection.".to_string(),
+                })),
+                ..Default::default()
+            },
+            CompletionItem {
+                label: "index".to_string(),
+                kind: Some(CompletionItemKind::VARIABLE),
+                detail: Some("Index variable".to_string()),
+                documentation: Some(lsp_types::Documentation::MarkupContent(MarkupContent {
+                    kind: MarkupKind::Markdown,
+                    value: "Variable for loop indices or array positions.".to_string(),
+                })),
+                ..Default::default()
+            },
+        ]
+    }
+
+    /// Generate basic completions when context is unknown
+    fn basic_completions(&self) -> Vec<CompletionItem> {
+        let mut completions = Vec::new();
+
+        // Add keywords
+        completions.extend(self.keyword_completions());
+
+        // Add common types
+        completions.extend(self.type_completions());
+
+        // Add common functions
+        completions.extend(self.function_completions());
+
+        completions
     }
 }
