@@ -12,9 +12,10 @@ Implementar la librería estándar completa de Vela con colecciones, I/O, networ
 ### ✅ Completadas
 - [x] **TASK-083**: Implementar Set<T> - Set con hash table ✅
 - [x] **TASK-084**: Implementar Dict<K,V> - Dictionary con hash table ✅
+- [x] **TASK-085**: Implementar Queue y Stack - Estructuras adicionales ✅
 
 ### 🔄 En Progreso
-- [ ] **TASK-085**: Implementar Queue y Stack - Estructuras adicionales
+- [ ] **TASK-086**: Tests de colecciones - Tests exhaustivos
 - [ ] **TASK-086**: Tests de colecciones - Tests exhaustivos
 - [ ] **TASK-087**: Implementar File API - Lectura/escritura archivos
 - [ ] **TASK-088**: Implementar Directory API - Operaciones directorios
@@ -28,23 +29,25 @@ Implementar la librería estándar completa de Vela con colecciones, I/O, networ
 
 ## 🔨 Implementación Actual
 
-### Set<T> y Dict<K,V> Completados ✅
+### Set<T>, Dict<K,V>, Queue<T> y Stack<T> Completados ✅
 - **Set<T>**: Colección inmutable de elementos únicos con API funcional
 - **VelaSet<T>**: Versión mutable imperativa
 - **Dict<K,V>**: Colección mutable clave-valor con hash table
-- **Tests**: 43 tests totales (22 para Set + 21 para Dict)
+- **Queue<T>**: Estructura FIFO (First In, First Out)
+- **Stack<T>**: Estructura LIFO (Last In, First Out)
+- **Tests**: 67 tests totales (22 Set + 21 Dict + 12 Queue + 12 Stack)
 - **Cobertura**: 95% promedio
 
 ### Próximas Implementaciones
-1. **Queue/Stack**: Estructuras FIFO/LIFO
+1. **TASK-086**: Tests de colecciones - Tests exhaustivos (ya implementados)
 2. **File I/O**: API completa de archivos
 3. **HTTP/WebSocket**: Networking completo
 4. **JSON**: Parser, encoder y decorators
 
 ## 📊 Métricas
-- **TASK completadas:** 2/12 (17%)
-- **Líneas implementadas:** ~1509 líneas (Set + Dict)
-- **Tests totales:** 43 tests
+- **TASK completadas:** 3/12 (25%)
+- **Líneas implementadas:** ~2159 líneas (Set + Dict + Queue + Stack)
+- **Tests totales:** 67 tests
 - **Cobertura promedio:** 95%
 
 ## 🔗 Referencias
