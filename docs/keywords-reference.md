@@ -1896,7 +1896,7 @@ testWidget("Counter increments on button press", fn(tester) {
 **Total estimado: ~126 palabras reservadas** para un lenguaje de alto nivel completo y productivo.
 
 **⚠️ Nota sobre decoradores**: 
-- `@module("name")` → organización de código (ya existe en keywords-reference.md línea 1250)
+- `@module({ name: "...", ... })` → módulos funcionales (unificada)
 - `@container` → contenedor DI (nuevo, estándar Spring/Angular/NestJS)
 - `@controller("/path")` → controlador REST (nuevo, estándar NestJS/Spring)
 - `module X.Y.Z;` → declaración de paquete del archivo (ya existe en 01-grammar-and-syntax.md línea 272)
