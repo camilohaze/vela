@@ -212,3 +212,97 @@ fn broken() -> Number {
         .stdout(predicate::str::contains("Tests run: 0"))
         .stdout(predicate::str::contains("Failed: 1"));
 }
+
+#[test]
+fn test_fmt_command_no_files() {
+    let temp_dir = TempDir::new().unwrap();
+
+    let mut cmd = Command::cargo_bin("vela").unwrap();
+    cmd.arg("fmt")
+        .current_dir(&temp_dir)
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("No .vela files found"));
+}
+
+#[test]
+fn test_fmt_command_formats_files() {
+    let temp_dir = TempDir::new().unwrap();
+
+    // Create a poorly formatted file
+    let unformatted_content = r#"
+fn add(a: Number,b: Number) -> Number {
+return a+b;
+}
+fn main() -> void {
+println("Hello");
+}
+"#;
+
+    fs::write(temp_dir.path().join("test.vela"), unformatted_content).unwrap();
+
+    let mut cmd = Command::cargo_bin("vela").unwrap();
+    cmd.arg("fmt")
+        .current_dir(&temp_dir)
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Running Vela formatter"))
+        .stdout(predicate::str::contains("Found 1 .vela files"))
+        .stdout(predicate::str::contains("✅ Formatted: test.vela"))
+        .stdout(predicate::str::contains("All files formatted successfully"));
+
+    // Verify the file was formatted
+    let formatted_content = fs::read_to_string(temp_dir.path().join("test.vela")).unwrap();
+    assert!(formatted_content.contains("fn add(a: Number, b: Number) -> Number {"));
+    assert!(formatted_content.contains("    return a + b;"));
+}
+
+#[test]
+fn test_fmt_command_check_mode() {
+    let temp_dir = TempDir::new().unwrap();
+
+    // Create a poorly formatted file
+    let unformatted_content = r#"
+fn add(a: Number,b: Number) -> Number {
+return a+b;
+}
+"#;
+
+    fs::write(temp_dir.path().join("test.vela"), unformatted_content).unwrap();
+
+    let mut cmd = Command::cargo_bin("vela").unwrap();
+    cmd.arg("fmt")
+        .arg("--check")
+        .current_dir(&temp_dir)
+        .assert()
+        .failure()
+        .stdout(predicate::str::contains("Running Vela formatter"))
+        .stdout(predicate::str::contains("❌ Needs formatting: test.vela"))
+        .stdout(predicate::str::contains("Some files need formatting"));
+}
+
+#[test]
+fn test_fmt_command_already_formatted() {
+    let temp_dir = TempDir::new().unwrap();
+
+    // Create a properly formatted file
+    let formatted_content = r#"fn add(a: Number, b: Number) -> Number {
+    return a + b;
+}
+
+fn main() -> void {
+    println("Hello");
+}
+"#;
+
+    fs::write(temp_dir.path().join("test.vela"), formatted_content).unwrap();
+
+    let mut cmd = Command::cargo_bin("vela").unwrap();
+    cmd.arg("fmt")
+        .current_dir(&temp_dir)
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Running Vela formatter"))
+        .stdout(predicate::str::contains("✅ Already formatted: test.vela"))
+        .stdout(predicate::str::contains("All files formatted successfully"));
+}

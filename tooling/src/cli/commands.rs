@@ -333,9 +333,205 @@ pub fn execute_test(filter: Option<&str>, release: bool) -> Result<()> {
 
 /// Execute fmt command
 pub fn execute_fmt(check: bool) -> Result<()> {
-    println!("Formatting code (check: {})", check);
-    // TODO: Implement formatter
-    Ok(())
+    println!("🛠️  Running Vela formatter...");
+    println!("📋 Configuration:");
+    println!("   Check mode: {}", check);
+
+    // Determinar directorio del proyecto
+    let project_root = std::env::current_dir()
+        .map_err(|e| crate::common::Error::Io(e))?;
+
+    // Buscar archivos .vela recursivamente
+    let mut vela_files = Vec::new();
+    fn find_vela_files(dir: &std::path::Path, vela_files: &mut Vec<std::path::PathBuf>) -> Result<()> {
+        for entry in std::fs::read_dir(dir)? {
+            let entry = entry?;
+            let path = entry.path();
+            if path.is_dir() {
+                // Skip common directories that shouldn't be formatted
+                let dir_name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
+                if !["target", ".git", "node_modules", "__pycache__"].contains(&dir_name) {
+                    find_vela_files(&path, vela_files)?;
+                }
+            } else if let Some(ext) = path.extension().and_then(|s| s.to_str()) {
+                if ext == "vela" {
+                    vela_files.push(path);
+                }
+            }
+        }
+        Ok(())
+    }
+
+    find_vela_files(&project_root, &mut vela_files)?;
+
+    if vela_files.is_empty() {
+        println!("\n❌ No .vela files found!");
+        return Ok(());
+    }
+
+    println!("\n📂 Found {} .vela files:", vela_files.len());
+    for file in &vela_files {
+        println!("   {}", file.strip_prefix(&project_root).unwrap_or(file).display());
+    }
+
+    // Formatear cada archivo
+    let mut formatted = 0;
+    let mut errors = 0;
+
+    for file_path in &vela_files {
+        match format_file(file_path, check) {
+            Ok(needs_format) => {
+                if needs_format {
+                    formatted += 1;
+                    if !check {
+                        println!("✅ Formatted: {}", file_path.strip_prefix(&project_root).unwrap_or(file_path).display());
+                    } else {
+                        println!("❌ Needs formatting: {}", file_path.strip_prefix(&project_root).unwrap_or(file_path).display());
+                    }
+                } else {
+                    println!("✅ Already formatted: {}", file_path.strip_prefix(&project_root).unwrap_or(file_path).display());
+                }
+            }
+            Err(e) => {
+                println!("❌ Error formatting {}: {}", file_path.strip_prefix(&project_root).unwrap_or(file_path).display(), e);
+                errors += 1;
+            }
+        }
+    }
+
+    // Reporte final
+    println!("\n📊 Format Results:");
+    if check {
+        println!("   Files checked: {}", vela_files.len());
+        println!("   Need formatting: {} ❌", formatted);
+        println!("   Already formatted: {} ✅", vela_files.len() - formatted - errors);
+        if errors > 0 {
+            println!("   Errors: {} ⚠️", errors);
+        }
+
+        if formatted > 0 {
+            println!("\n❌ Some files need formatting!");
+            println!("   Run 'vela fmt' to format them.");
+            Err(crate::common::Error::Io(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                format!("{} files need formatting", formatted)
+            )))
+        } else {
+            println!("\n✅ All files are properly formatted!");
+            Ok(())
+        }
+    } else {
+        println!("   Files processed: {}", vela_files.len());
+        println!("   Formatted: {} ✅", formatted);
+        println!("   Already formatted: {} ✅", vela_files.len() - formatted - errors);
+        if errors > 0 {
+            println!("   Errors: {} ⚠️", errors);
+        }
+
+        if errors > 0 {
+            println!("\n⚠️  Some files had formatting errors!");
+            Err(crate::common::Error::Io(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                format!("{} files had formatting errors", errors)
+            )))
+        } else {
+            println!("\n✅ All files formatted successfully!");
+            Ok(())
+        }
+    }
+}
+
+/// Format a single Vela file
+fn format_file(file_path: &std::path::Path, check: bool) -> Result<bool> {
+    // Leer el archivo
+    let content = std::fs::read_to_string(file_path)?;
+
+    // Aplicar formato básico
+    let formatted = basic_format(&content);
+
+    // Verificar si necesita formato
+    let needs_format = content != formatted;
+
+    if !check && needs_format {
+        // Escribir el archivo formateado
+        std::fs::write(file_path, formatted)?;
+    }
+
+    Ok(needs_format)
+}
+
+/// Apply basic formatting rules to Vela code
+fn basic_format(content: &str) -> String {
+    let mut result = String::new();
+    let mut indent_level = 0;
+    let indent_size = 4;
+
+    for line in content.lines() {
+        let trimmed = line.trim();
+
+        // Skip empty lines
+        if trimmed.is_empty() {
+            result.push('\n');
+            continue;
+        }
+
+        // Decrease indent for closing braces
+        if trimmed.starts_with('}') || trimmed.starts_with(')') || trimmed.starts_with(']') {
+            indent_level = indent_level.saturating_sub(1);
+        }
+
+        // Add indentation
+        for _ in 0..indent_level {
+            for _ in 0..indent_size {
+                result.push(' ');
+            }
+        }
+
+        // Add the line content
+        result.push_str(trimmed);
+        result.push('\n');
+
+        // Increase indent for opening braces
+        if trimmed.ends_with('{') || trimmed.ends_with('(') || trimmed.ends_with('[') {
+            indent_level += 1;
+        }
+
+        // Handle function declarations and other constructs
+        if trimmed.starts_with("fn ") ||
+           trimmed.starts_with("if ") ||
+           trimmed.starts_with("else") ||
+           trimmed.starts_with("for ") ||
+           trimmed.starts_with("while ") ||
+           trimmed.starts_with("match ") {
+            if !trimmed.ends_with('{') && !trimmed.ends_with('(') {
+                indent_level += 1;
+            }
+        }
+
+        // Decrease indent after single statements
+        if !trimmed.ends_with('{') && !trimmed.ends_with(',') && indent_level > 0 {
+            if !(trimmed.starts_with("fn ") ||
+                 trimmed.starts_with("if ") ||
+                 trimmed.starts_with("else") ||
+                 trimmed.starts_with("for ") ||
+                 trimmed.starts_with("while ") ||
+                 trimmed.starts_with("match ")) {
+                indent_level = indent_level.saturating_sub(1);
+            }
+        }
+    }
+
+    // Remove trailing whitespace and empty lines at end
+    let mut lines: Vec<&str> = result.lines().collect();
+    while let Some(last) = lines.last() {
+        if last.trim().is_empty() {
+            lines.pop();
+        } else {
+            break;
+        }
+    }
+
+    lines.join("\n") + "\n"
 }
 
 /// Execute lint command
