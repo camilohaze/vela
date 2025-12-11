@@ -28,14 +28,21 @@ Como desarrollador, quiero message brokers para implementar arquitecturas event-
    - Consumer management con ack
    - Tests unitarios implementados
 
-4. **TASK-113AH**: Implementar Kafka integration ✅
+4. **TASK-113AG**: Implementar decoradores @consumer y @subscribe ✅
+   - Decoradores @consumer y @subscribe implementados
+   - Parsing de argumentos con validación type-safe
+   - Generación automática de código de registro
+   - Integración en pipeline de compilación
+   - Tests unitarios implementados
+
+5. **TASK-113AH**: Implementar Kafka integration ✅
    - KafkaBroker implementa MessageBroker trait
    - Topic-based messaging con simulación
    - Consumer simulation para testing
    - Mock implementation sin dependencias nativas
    - Tests unitarios implementados
 
-5. **TASK-113AI**: Implementar Redis integration ✅
+6. **TASK-113AI**: Implementar Redis integration ✅
    - RedisBroker implementa MessageBroker trait
    - Pub/Sub nativo con simulación
    - Topic parsing automático (dots → colons)
@@ -51,25 +58,28 @@ Ver archivos en:
 - `docs/features/VELA-600/TASK-113AE.md` - Documentación de interfaces
 - `packages/message-brokers/src/rabbitmq.rs` - Implementación RabbitMQ
 - `docs/features/VELA-600/TASK-113AF.md` - Documentación de RabbitMQ
+- `compiler/src/message_broker_decorators.rs` - Decoradores @consumer/@subscribe
+- `docs/architecture/ADR-113AG-001-decoradores-consumer-subscribe.md` - ADR de decoradores
+- `docs/features/VELA-600/TASK-113AG.md` - Documentación de decoradores
 - `packages/message-brokers/src/kafka.rs` - Implementación Kafka
 - `docs/features/VELA-600/TASK-113AH.md` - Documentación de Kafka
 - `packages/message-brokers/src/redis.rs` - Implementación Redis
 - `docs/features/VELA-600/TASK-113AI.md` - Documentación de Redis
 
 ## 📊 Métricas
-- **Subtasks completadas:** 5/7
-- **Archivos creados:** 17 (docs + código + tests)
-- **ADRs:** 1
-- **Tests:** 10 unitarios pasando
-- **Líneas de código:** 850+ en message-brokers
+- **Subtasks completadas:** 6/7
+- **Archivos creados:** 21 (docs + código + tests)
+- **ADRs:** 2
+- **Tests:** 15+ unitarios pasando
+- **Líneas de código:** 1100+ en message-brokers + compiler
 
 ## ✅ Definición de Hecho
 - [x] Arquitectura de message brokers diseñada
 - [x] MessageBroker interface implementada
 - [x] RabbitMQ integration completada
+- [x] Decoradores @consumer y @subscribe implementados
 - [x] Kafka integration completada
 - [x] Redis integration completada
-- [ ] Decoradores @consumer y @subscribe implementados
 - [ ] Retry y dead letter queues implementados
 
 ## 🔗 Referencias
