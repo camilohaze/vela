@@ -34,6 +34,7 @@ pub mod codegen;
 pub mod json_decorators;
 pub mod message_broker_decorators;
 pub mod resilience_decorators;
+pub mod observability_decorators;
 
 use std::path::Path;
 use config::Config;

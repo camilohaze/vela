@@ -18,6 +18,7 @@ use crate::types::Type;
 use crate::ir::{IRModule, IRFunction, IRInstruction, IRType, Value as IRValue, BinaryOp, UnaryOp, IRExpr, Label};
 use crate::error::{CompileError, CompileResult, CodegenError};
 use crate::message_broker_decorators::{parse_message_broker_decorators, validate_consumer_function, generate_consumer_registration, MessageBrokerDecorator};
+use crate::observability_decorators::{parse_observability_decorators, generate_observability_code, ObservabilityDecorator};
 
 /// Convertidor de AST a IR
 pub struct ASTToIRConverter {
@@ -85,6 +86,20 @@ impl ASTToIRConverter {
             // Add registration as metadata to the function
             // This will be used by the runtime to register consumers
             println!("Generated consumer registration: {}", registration_code);
+        }
+
+        // Process observability decorators
+        if let Some(decorator) = parse_observability_decorators(&func.decorators)? {
+            // Generate observability instrumentation code
+            let instrumentation_code = generate_observability_code(
+                &decorator,
+                &func.name,
+                "main" // TODO: Get actual module name
+            );
+
+            // Add instrumentation as metadata to the function
+            // This will be used by the runtime to inject observability
+            println!("Generated observability instrumentation: {}", instrumentation_code);
         }
 
         let return_type = if let Some(return_type_annotation) = &func.return_type {

@@ -1,0 +1,125 @@
+"""
+Ejemplo de uso de decoradores de observability en Vela
+
+Implementación de: TASK-113AS (Prometheus metrics decorators)
+Historia: VELA-602 (US-24H observability)
+Fecha: 2025-01-30
+
+Este archivo demuestra el uso de decoradores de observability:
+- @traced: Para distributed tracing con OpenTelemetry
+- @metered: Para métricas de Prometheus
+- @logged: Para logging estructurado
+"""
+
+import 'system:observability'
+
+// Servicio de ejemplo con métricas
+service UserService {
+    repository: UserRepository = inject(UserRepository)
+
+    @metered(name="user_service_create_user_total", help="Total number of user creation attempts")
+    @traced(name="create_user", tags={"service": "user-service", "operation": "create"})
+    @logged(level="info", message="Creating new user: ${name}")
+    fn createUser(name: String, email: String) -> Result<User, Error> {
+        // Validar input
+        if name.isEmpty() {
+            return Err(Error("Name cannot be empty"))
+        }
+
+        // Crear usuario
+        user = User {
+            id: generateId(),
+            name: name,
+            email: email,
+            createdAt: now()
+        }
+
+        // Guardar en base de datos
+        match repository.save(user) {
+            Ok(savedUser) => {
+                // Log success
+                @logged(level="info", message="User created successfully: ${savedUser.id}")
+                return Ok(savedUser)
+            }
+            Err(dbError) => {
+                // Log error
+                @logged(level="error", message="Failed to create user: ${dbError.message}", fields={"error": dbError})
+                return Err(dbError)
+            }
+        }
+    }
+
+    @metered(name="user_service_get_user_total", help="Total number of user retrieval attempts")
+    @traced(name="get_user", tags={"service": "user-service", "operation": "get"})
+    fn getUser(id: String) -> Option<User> {
+        @logged(level="debug", message="Retrieving user: ${id}")
+        return repository.findById(id)
+    }
+
+    @metered(name="user_service_list_users_total", help="Total number of user list requests")
+    @traced(name="list_users", tags={"service": "user-service", "operation": "list"})
+    fn listUsers(limit: Number = 10) -> List<User> {
+        @logged(level="debug", message="Listing users with limit: ${limit}")
+        return repository.findAll().take(limit)
+    }
+}
+
+// Controlador HTTP con observability
+controller UserController {
+    service: UserService = inject(UserService)
+
+    @get("/users")
+    @metered(name="http_requests_total", labels={"method": "GET", "endpoint": "/users"})
+    @traced(name="list_users_endpoint", tags={"controller": "UserController", "method": "GET"})
+    async fn listUsers() -> Result<List<User>, HttpError> {
+        @logged(level="info", message="HTTP GET /users")
+        return Ok(service.listUsers())
+    }
+
+    @post("/users")
+    @metered(name="http_requests_total", labels={"method": "POST", "endpoint": "/users"})
+    @traced(name="create_user_endpoint", tags={"controller": "UserController", "method": "POST"})
+    @logged(level="info", message="HTTP POST /users")
+    async fn createUser(@body request: CreateUserRequest) -> Result<User, HttpError> {
+        match service.createUser(request.name, request.email) {
+            Ok(user) => Ok(user)
+            Err(error) => Err(HttpError(400, error.message))
+        }
+    }
+
+    @get("/users/:id")
+    @metered(name="http_requests_total", labels={"method": "GET", "endpoint": "/users/:id"})
+    @traced(name="get_user_endpoint", tags={"controller": "UserController", "method": "GET"})
+    async fn getUser(@path id: String) -> Result<User, HttpError> {
+        @logged(level="info", message="HTTP GET /users/${id}")
+        match service.getUser(id) {
+            Some(user) => Ok(user)
+            None => Err(HttpError(404, "User not found"))
+        }
+    }
+}
+
+// Función utilitaria con métricas
+@metered(name="utility_generate_id_total", help="Total number of ID generations")
+fn generateId() -> String {
+    return randomUUID()
+}
+
+// Función con timeout y métricas
+@metered(name="external_api_calls_total", help="Total number of external API calls")
+@timeout(5000) // 5 segundos timeout
+async fn callExternalAPI(url: String) -> Result<String, Error> {
+    @logged(level="debug", message="Calling external API: ${url}")
+    return await httpClient.get(url)
+}
+
+// Función con circuit breaker
+@circuitBreaker(failureThreshold=5, recoveryTimeout=30000)
+@metered(name="circuit_breaker_calls_total", help="Total number of circuit breaker protected calls")
+async fn unreliableServiceCall() -> Result<String, Error> {
+    // Simular servicio poco confiable
+    if random() < 0.3 { // 30% de probabilidad de fallo
+        throw Error("Service temporarily unavailable")
+    }
+    return "Success"
+}
