@@ -181,11 +181,13 @@ mod tests {
 
 // Re-export modules
 pub mod advanced_consul;
+pub mod client;
 pub mod consul;
 pub mod eureka;
 pub mod in_memory;
 
 pub use advanced_consul::{AdvancedConsulRegistry, AdvancedConsulConfig, ConsulACLToken, ServiceIntention};
+pub use client::{ServiceDiscoveryHttpClient, ServiceDiscoveryClientConfig, HttpRequest, HttpResponse, HttpMethod, ServiceDiscoveryError, LoadBalancerStrategy, CircuitBreakerState};
 pub use consul::{ConsulRegistry, ConsulConfig};
 pub use eureka::{EurekaRegistry, EurekaConfig};
 pub use in_memory::InMemoryRegistry;
