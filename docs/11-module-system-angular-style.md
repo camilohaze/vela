@@ -45,10 +45,6 @@ import 'module:users'           # UsersModule
 import 'library:utils'          # Librería de utilidades interna (definida con @library)
 import 'library:validators'     # Librería de validadores interna
 
-# EXTENSIONES INTERNAS DEL PROYECTO (definidas con @extension)
-import 'extension:charts'       # Extensión de gráficos (definida con @extension)
-import 'extension:maps'         # Extensión de mapas
-
 # ASSETS
 import 'assets:images'          # Assets de imágenes
 import 'assets:fonts'           # Assets de fuentes
@@ -67,7 +63,6 @@ import 'system:ui'              // ✅ API interna de Vela
 import 'package:lodash'         // ✅ Dependencia externa
 import 'module:auth'            // ✅ Módulo del proyecto (@module)
 import 'library:utils'          // ✅ Librería interna (@library)
-import 'extension:charts'       // ✅ Extensión interna (@extension)
 ```
 
 ### 1. Organización por Estructura de Directorios
@@ -389,8 +384,7 @@ import 'module:shared/http'    // HttpModule
 import 'module:shared/logger'  // LoggerModule
 import 'module:database'    // DatabaseModule
 
-// ⭐ MÓDULO RAÍZ (con @container para DI)
-@container
+// ⭐ MÓDULO RAÍZ
 @module({
   imports: [
     // Módulos funcionales
@@ -620,8 +614,7 @@ public class CoreModule {
 ### Módulo + Container
 
 ```vela
-// AppModule es TANTO un @module COMO un @container
-@container  // Sistema DI (inyector raíz)
+// AppModule es un @module para organización
 @module({   // Sistema de módulos (organización)
   imports: [AuthModule, UsersModule],
   providers: [GlobalService]
@@ -705,7 +698,7 @@ public class AuthModule { }
 | TASK-035AE | Implementar validación de exports/providers | 32 | 14 |
 | TASK-035AF | Implementar resolución de visibilidad | 56 | 15 |
 | TASK-035AG | Detectar dependencias circulares | 32 | 15 |
-| TASK-035AH | Integrar con sistema DI (@container) | 48 | 16 |
+| TASK-035AH | Integrar con sistema DI | 48 | 16 |
 | TASK-035AI | Generar mensajes de error descriptivos | 24 | 16 |
 | TASK-035AJ | Tests de module system | 56 | 16 |
 

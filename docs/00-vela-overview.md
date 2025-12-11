@@ -123,7 +123,6 @@ Los decoradores son anotaciones que modifican el comportamiento de módulos, cla
 - `@package`: define un paquete
 - `@module`: define un módulo
 - `@library`: define una biblioteca
-- `@extension`: define una extensión
 - `@deprecated`: marca como obsoleto
 - `@override`: marca explícitamente un override (opcional pero recomendado)
 - `@test`: marca una función como test

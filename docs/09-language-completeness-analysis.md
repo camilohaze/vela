@@ -102,22 +102,8 @@ class HttpClient {
 }
 
 # ============================================
-# Uso: Container de DI
+# Uso: Sistema DI Básico
 # ============================================
-
-# Definir contenedor DI (✅ usar @container, estándar de industria)
-@container
-class AppContainer {
-  @provides
-  fn provideApiClient() -> ApiClient {
-    return ApiClient(baseUrl: "https://api.example.com")
-  }
-  
-  @provides
-  fn provideDatabase() -> Database {
-    return Database.connect("mongodb://localhost")
-  }
-}
 
 # Inyectar en widgets/clases
 class UserProfileWidget extends StatefulWidget {
@@ -906,9 +892,9 @@ comments = results[2]
 
 **Respuesta**: ❌ **NO actualmente**. 
 
-**Recomendación**: Agregar sistema de DI con decoradores (`@injectable`, `@inject`, `@container`, `@provides`) en **Vela 1.0**.
+**Recomendación**: Agregar sistema de DI con decoradores (`@injectable`, `@inject`) en **Vela 1.0**.
 
-**✅ Nota**: Se usa `@container` (estándar Spring/Angular/NestJS) para contenedores DI. El decorador `@module` existente se mantiene para organización de código.
+**✅ Nota**: El decorador `@module` existente se mantiene para organización de código.
 
 ---
 

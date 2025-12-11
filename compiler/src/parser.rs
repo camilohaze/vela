@@ -78,25 +78,109 @@ impl Parser {
     /// Parsea una declaración.
     fn parse_declaration(&mut self) -> CompileResult<Declaration> {
         println!("🔧 parse_declaration called, current token: {:?}", self.current_token());
-        
+
         let is_public = self.check(TokenKind::Public);
         if is_public {
             self.advance();
         }
 
+        // Parse decorators before any declaration
+        let decorators = self.parse_decorators()?;
+
+        // Base language declarations
         if self.check(TokenKind::Fn) {
             println!("🔧 Found fn token, parsing function declaration");
-            self.parse_function_declaration(is_public)
+            self.parse_function_declaration(is_public, decorators)
         } else if self.check(TokenKind::Struct) {
-            self.parse_struct_declaration(is_public)
+            self.parse_struct_declaration(is_public, decorators)
         } else if self.check(TokenKind::Enum) {
             self.parse_enum_declaration(is_public)
         } else if self.check(TokenKind::Type) {
             self.parse_type_alias_declaration(is_public)
         } else if self.check(TokenKind::State) {
-            // Variable declarations at top level
             let var_decl = self.parse_variable_declaration()?;
             Ok(Declaration::Variable(var_decl))
+        } else if self.check(TokenKind::Class) {
+            self.parse_class_declaration(is_public, decorators)
+        } else if self.check(TokenKind::Abstract) {
+            self.parse_abstract_class_declaration(is_public)
+        } else if self.check(TokenKind::Interface) {
+            self.parse_interface_declaration(is_public)
+        } else if self.check(TokenKind::Mixin) {
+            self.parse_mixin_declaration(is_public)
+
+        // Business logic declarations
+        } else if self.check(TokenKind::Service) {
+            self.parse_service_declaration(is_public, decorators)
+        } else if self.check(TokenKind::Repository) {
+            self.parse_repository_declaration(is_public)
+        } else if self.check(TokenKind::Controller) {
+            self.parse_controller_declaration(is_public, decorators)
+        } else if self.check(TokenKind::UseCase) {
+            self.parse_usecase_declaration(is_public)
+        } else if self.check(TokenKind::Entity) {
+            self.parse_entity_declaration(is_public)
+        } else if self.check(TokenKind::ValueObject) {
+            self.parse_valueobject_declaration(is_public)
+        } else if self.check(TokenKind::Dto) {
+            self.parse_dto_declaration(is_public)
+        } else if self.check(TokenKind::Model) {
+            self.parse_model_declaration(is_public)
+
+        // UI declarations
+        } else if self.check(TokenKind::Widget) {
+            self.parse_widget_declaration(is_public)
+        } else if self.check(TokenKind::Component) {
+            self.parse_component_declaration(is_public)
+
+        // Pattern declarations
+        } else if self.check(TokenKind::Factory) {
+            self.parse_factory_declaration(is_public)
+        } else if self.check(TokenKind::Builder) {
+            self.parse_builder_declaration(is_public)
+        } else if self.check(TokenKind::Strategy) {
+            self.parse_strategy_declaration(is_public)
+        } else if self.check(TokenKind::Observer) {
+            self.parse_observer_declaration(is_public)
+        } else if self.check(TokenKind::Singleton) {
+            self.parse_singleton_declaration(is_public)
+        } else if self.check(TokenKind::Adapter) {
+            self.parse_adapter_declaration(is_public)
+        } else if self.check(TokenKind::Decorator) {
+            self.parse_decorator_declaration(is_public)
+
+        // Security declarations
+        } else if self.check(TokenKind::Guard) {
+            self.parse_guard_declaration(is_public)
+        } else if self.check(TokenKind::Middleware) {
+            self.parse_middleware_declaration(is_public)
+        } else if self.check(TokenKind::Interceptor) {
+            self.parse_interceptor_declaration(is_public)
+        } else if self.check(TokenKind::Validator) {
+            self.parse_validator_declaration(is_public)
+
+        // Architecture declarations
+        } else if self.check(TokenKind::Store) {
+            self.parse_store_declaration(is_public)
+        } else if self.check(TokenKind::Provider) {
+            self.parse_provider_declaration(is_public)
+        } else if self.check(TokenKind::Actor) {
+            self.parse_actor_declaration(is_public)
+        } else if self.check(TokenKind::Pipe) {
+            self.parse_pipe_declaration(is_public)
+        } else if self.check(TokenKind::Task) {
+            self.parse_task_declaration(is_public)
+        } else if self.check(TokenKind::Helper) {
+            self.parse_helper_declaration(is_public)
+        } else if self.check(TokenKind::Mapper) {
+            self.parse_mapper_declaration(is_public)
+        } else if self.check(TokenKind::Serializer) {
+            self.parse_serializer_declaration(is_public)
+
+        // Module declaration
+        } else if self.check(TokenKind::Module) {
+            self.parse_module_declaration(is_public)
+
         } else {
             println!("🔧 No valid declaration token found, current token: {:?}", self.current_token());
             Err(CompileError::Parse(self.error("Expected declaration")))
@@ -104,7 +188,7 @@ impl Parser {
     }
 
     /// Parsea una declaración de función.
-    fn parse_function_declaration(&mut self, is_public: bool) -> CompileResult<Declaration> {
+    fn parse_function_declaration(&mut self, is_public: bool, decorators: Vec<Decorator>) -> CompileResult<Declaration> {
         println!("🔧 parse_function_declaration called");
         let start_pos = self.current_token().range.start.clone();
 
@@ -133,6 +217,7 @@ impl Parser {
             range,
             is_public,
             name,
+            decorators,
             parameters,
             return_type,
             body,
@@ -144,7 +229,7 @@ impl Parser {
     }
 
     /// Parsea una declaración de struct.
-    fn parse_struct_declaration(&mut self, is_public: bool) -> CompileResult<Declaration> {
+    fn parse_struct_declaration(&mut self, is_public: bool, decorators: Vec<Decorator>) -> CompileResult<Declaration> {
         let start_pos = self.current_token().range.start.clone();
 
         self.consume(TokenKind::Struct)?;
@@ -157,7 +242,7 @@ impl Parser {
         let end_pos = self.previous_token().range.end.clone();
         let range = Range::new(start_pos, end_pos);
 
-        let struct_decl = StructDeclaration::new(range, is_public, name, fields, generic_params);
+        let struct_decl = StructDeclaration::new(range, is_public, name, decorators, fields, generic_params);
         Ok(Declaration::Struct(struct_decl))
     }
 
@@ -826,6 +911,439 @@ impl Parser {
             ),
             expected: Vec::new(),
         }
+    }
+
+    // ===================================================================
+    // PARSING FUNCTIONS FOR ALL KEYWORDS
+    // ===================================================================
+
+    /// Parsea una declaración de clase.
+    fn parse_class_declaration(&mut self, is_public: bool, decorators: Vec<Decorator>) -> CompileResult<Declaration> {
+        let start_pos = self.current_token().range.start.clone();
+        self.consume(TokenKind::Class)?;
+        let name = self.consume_identifier()?;
+        // TODO: Implementar parsing completo de clases
+        let end_pos = self.previous_token().range.end.clone();
+        let range = Range::new(start_pos, end_pos);
+        let class_decl = ClassDeclaration::new(range, is_public, name, decorators, None, Vec::new(), Vec::new(), None, Vec::new(), Vec::new());
+        Ok(Declaration::Class(class_decl))
+    }
+
+    /// Parsea una declaración de clase abstracta.
+    fn parse_abstract_class_declaration(&mut self, is_public: bool) -> CompileResult<Declaration> {
+        let start_pos = self.current_token().range.start.clone();
+        self.consume(TokenKind::Abstract)?;
+        self.consume(TokenKind::Class)?;
+        let name = self.consume_identifier()?;
+        // TODO: Implementar parsing completo de clases abstractas
+        let end_pos = self.previous_token().range.end.clone();
+        let range = Range::new(start_pos, end_pos);
+        let class_decl = ClassDeclaration::new(range, is_public, name, None, Vec::new(), Vec::new(), None, Vec::new(), Vec::new());
+        Ok(Declaration::Class(class_decl))
+    }
+
+    /// Parsea una declaración de interfaz.
+    fn parse_interface_declaration(&mut self, is_public: bool) -> CompileResult<Declaration> {
+        let start_pos = self.current_token().range.start.clone();
+        self.consume(TokenKind::Interface)?;
+        let name = self.consume_identifier()?;
+        // TODO: Implementar parsing completo de interfaces
+        let end_pos = self.previous_token().range.end.clone();
+        let range = Range::new(start_pos, end_pos);
+        let interface_decl = InterfaceDeclaration::new(range, is_public, name, Vec::new(), Vec::new());
+        Ok(Declaration::Interface(interface_decl))
+    }
+
+    /// Parsea una declaración de mixin.
+    fn parse_mixin_declaration(&mut self, is_public: bool) -> CompileResult<Declaration> {
+        let start_pos = self.current_token().range.start.clone();
+        self.consume(TokenKind::Mixin)?;
+        let name = self.consume_identifier()?;
+        // TODO: Implementar parsing completo de mixins
+        let end_pos = self.previous_token().range.end.clone();
+        let range = Range::new(start_pos, end_pos);
+        // Usar una declaración existente como placeholder
+        let struct_decl = StructDeclaration::new(range, is_public, name, Vec::new(), Vec::new());
+        Ok(Declaration::Struct(struct_decl))
+    }
+
+    /// Parsea una declaración de servicio.
+    fn parse_service_declaration(&mut self, is_public: bool, decorators: Vec<Decorator>) -> CompileResult<Declaration> {
+        let start_pos = self.current_token().range.start.clone();
+        self.consume(TokenKind::Service)?;
+        let name = self.consume_identifier()?;
+        let end_pos = self.previous_token().range.end.clone();
+        let range = Range::new(start_pos, end_pos);
+        let service_decl = ServiceDeclaration::new(range, is_public, name, decorators, Vec::new(), Vec::new());
+        Ok(Declaration::Service(service_decl))
+    }
+
+    /// Parsea una declaración de repositorio.
+    fn parse_repository_declaration(&mut self, is_public: bool) -> CompileResult<Declaration> {
+        let start_pos = self.current_token().range.start.clone();
+        self.consume(TokenKind::Repository)?;
+        let name = self.consume_identifier()?;
+        let end_pos = self.previous_token().range.end.clone();
+        let range = Range::new(start_pos, end_pos);
+        let repo_decl = RepositoryDeclaration::new(range, is_public, name, String::new(), Vec::new());
+        Ok(Declaration::Repository(repo_decl))
+    }
+
+    /// Parsea una declaración de controlador.
+    fn parse_controller_declaration(&mut self, is_public: bool, decorators: Vec<Decorator>) -> CompileResult<Declaration> {
+        let start_pos = self.current_token().range.start.clone();
+        self.consume(TokenKind::Controller)?;
+        let name = self.consume_identifier()?;
+        let end_pos = self.previous_token().range.end.clone();
+        let range = Range::new(start_pos, end_pos);
+        let controller_decl = ControllerDeclaration::new(range, is_public, name, decorators, Vec::new());
+        Ok(Declaration::Controller(controller_decl))
+    }
+
+    /// Parsea una declaración de caso de uso.
+    fn parse_usecase_declaration(&mut self, is_public: bool) -> CompileResult<Declaration> {
+        let start_pos = self.current_token().range.start.clone();
+        self.consume(TokenKind::UseCase)?;
+        let name = self.consume_identifier()?;
+        let end_pos = self.previous_token().range.end.clone();
+        let range = Range::new(start_pos, end_pos);
+        // Crear MethodDeclaration por defecto con BlockStatement vacío
+        let empty_body = BlockStatement::new(range.clone(), Vec::new());
+        let default_method = MethodDeclaration::new(
+            String::from("execute"),
+            Vec::new(),
+            None,
+            empty_body,
+            range.clone(),
+            false, // is_async
+            false, // is_override
+            true,  // is_public
+            false, // is_protected
+            false  // is_private
+        );
+        let usecase_decl = UseCaseDeclaration::new(range, is_public, name, default_method, Vec::new());
+        Ok(Declaration::UseCase(usecase_decl))
+    }
+
+    /// Parsea una declaración de entidad.
+    fn parse_entity_declaration(&mut self, is_public: bool) -> CompileResult<Declaration> {
+        let start_pos = self.current_token().range.start.clone();
+        self.consume(TokenKind::Entity)?;
+        let name = self.consume_identifier()?;
+        let end_pos = self.previous_token().range.end.clone();
+        let range = Range::new(start_pos, end_pos);
+        // Crear StructField por defecto para id_field
+        let id_type = TypeAnnotation::Named(NamedType::new(range.clone(), "Number".to_string()));
+        let default_id_field = StructField::new(
+            String::from("id"),
+            id_type,
+            true, // is_public
+            range.clone()
+        );
+        let entity_decl = EntityDeclaration::new(range, is_public, name, default_id_field, Vec::new());
+        Ok(Declaration::Entity(entity_decl))
+    }
+
+    /// Parsea una declaración de value object.
+    fn parse_valueobject_declaration(&mut self, is_public: bool) -> CompileResult<Declaration> {
+        let start_pos = self.current_token().range.start.clone();
+        self.consume(TokenKind::ValueObject)?;
+        let name = self.consume_identifier()?;
+        let end_pos = self.previous_token().range.end.clone();
+        let range = Range::new(start_pos, end_pos);
+        let vo_decl = ValueObjectDeclaration::new(range, is_public, name, Vec::new());
+        Ok(Declaration::ValueObject(vo_decl))
+    }
+
+    /// Parsea una declaración de DTO.
+    fn parse_dto_declaration(&mut self, is_public: bool) -> CompileResult<Declaration> {
+        let start_pos = self.current_token().range.start.clone();
+        self.consume(TokenKind::Dto)?;
+        let name = self.consume_identifier()?;
+        let end_pos = self.previous_token().range.end.clone();
+        let range = Range::new(start_pos, end_pos);
+        let dto_decl = DTODeclaration::new(range, is_public, name, Vec::new());
+        Ok(Declaration::DTO(dto_decl))
+    }
+
+    /// Parsea una declaración de modelo.
+    fn parse_model_declaration(&mut self, is_public: bool) -> CompileResult<Declaration> {
+        let start_pos = self.current_token().range.start.clone();
+        self.consume(TokenKind::Model)?;
+        let name = self.consume_identifier()?;
+        let end_pos = self.previous_token().range.end.clone();
+        let range = Range::new(start_pos, end_pos);
+        let model_decl = ModelDeclaration::new(range, is_public, name, Vec::new());
+        Ok(Declaration::Model(model_decl))
+    }
+
+    /// Parsea una declaración de widget.
+    fn parse_widget_declaration(&mut self, is_public: bool) -> CompileResult<Declaration> {
+        let start_pos = self.current_token().range.start.clone();
+        self.consume(TokenKind::Widget)?;
+        let name = self.consume_identifier()?;
+        let end_pos = self.previous_token().range.end.clone();
+        let range = Range::new(start_pos, end_pos);
+        let widget_decl = WidgetDeclaration::new(range, is_public, name, Vec::new(), Vec::new());
+        Ok(Declaration::Widget(widget_decl))
+    }
+
+    /// Parsea una declaración de componente.
+    fn parse_component_declaration(&mut self, is_public: bool) -> CompileResult<Declaration> {
+        let start_pos = self.current_token().range.start.clone();
+        self.consume(TokenKind::Component)?;
+        let name = self.consume_identifier()?;
+        let end_pos = self.previous_token().range.end.clone();
+        let range = Range::new(start_pos, end_pos);
+        let component_decl = ComponentDeclaration::new(range, is_public, name, Vec::new(), Vec::new());
+        Ok(Declaration::Component(component_decl))
+    }
+
+    /// Parsea una declaración de factory.
+    fn parse_factory_declaration(&mut self, is_public: bool) -> CompileResult<Declaration> {
+        let start_pos = self.current_token().range.start.clone();
+        self.consume(TokenKind::Factory)?;
+        let name = self.consume_identifier()?;
+        let end_pos = self.previous_token().range.end.clone();
+        let range = Range::new(start_pos, end_pos);
+        let factory_decl = FactoryDeclaration::new(range, is_public, name, Vec::new());
+        Ok(Declaration::Factory(factory_decl))
+    }
+
+    /// Parsea una declaración de builder.
+    fn parse_builder_declaration(&mut self, is_public: bool) -> CompileResult<Declaration> {
+        let start_pos = self.current_token().range.start.clone();
+        self.consume(TokenKind::Builder)?;
+        let name = self.consume_identifier()?;
+        let end_pos = self.previous_token().range.end.clone();
+        let range = Range::new(start_pos, end_pos);
+        let builder_decl = BuilderDeclaration::new(range, is_public, name, Vec::new());
+        Ok(Declaration::Builder(builder_decl))
+    }
+
+    /// Parsea una declaración de strategy.
+    fn parse_strategy_declaration(&mut self, is_public: bool) -> CompileResult<Declaration> {
+        let start_pos = self.current_token().range.start.clone();
+        self.consume(TokenKind::Strategy)?;
+        let name = self.consume_identifier()?;
+        let end_pos = self.previous_token().range.end.clone();
+        let range = Range::new(start_pos, end_pos);
+        let strategy_decl = StrategyDeclaration::new(range, is_public, name, Vec::new());
+        Ok(Declaration::Strategy(strategy_decl))
+    }
+
+    /// Parsea una declaración de observer.
+    fn parse_observer_declaration(&mut self, is_public: bool) -> CompileResult<Declaration> {
+        let start_pos = self.current_token().range.start.clone();
+        self.consume(TokenKind::Observer)?;
+        let name = self.consume_identifier()?;
+        let end_pos = self.previous_token().range.end.clone();
+        let range = Range::new(start_pos, end_pos);
+        let observer_decl = ObserverDeclaration::new(range, is_public, name, Vec::new());
+        Ok(Declaration::Observer(observer_decl))
+    }
+
+    /// Parsea una declaración de singleton.
+    fn parse_singleton_declaration(&mut self, is_public: bool) -> CompileResult<Declaration> {
+        let start_pos = self.current_token().range.start.clone();
+        self.consume(TokenKind::Singleton)?;
+        let name = self.consume_identifier()?;
+        let end_pos = self.previous_token().range.end.clone();
+        let range = Range::new(start_pos, end_pos);
+        let singleton_decl = SingletonDeclaration::new(range, is_public, name, Vec::new(), Vec::new());
+        Ok(Declaration::Singleton(singleton_decl))
+    }
+
+    /// Parsea una declaración de adapter.
+    fn parse_adapter_declaration(&mut self, is_public: bool) -> CompileResult<Declaration> {
+        let start_pos = self.current_token().range.start.clone();
+        self.consume(TokenKind::Adapter)?;
+        let name = self.consume_identifier()?;
+        let end_pos = self.previous_token().range.end.clone();
+        let range = Range::new(start_pos, end_pos);
+        let adapter_decl = AdapterDeclaration::new(range, is_public, name, Vec::new());
+        Ok(Declaration::Adapter(adapter_decl))
+    }
+
+    /// Parsea decoradores aplicados (con @) antes de una declaración.
+    fn parse_decorators(&mut self) -> CompileResult<Vec<Decorator>> {
+        let mut decorators = Vec::new();
+
+        while self.check(TokenKind::At) {
+            let start_pos = self.current_token().range.start.clone();
+            self.consume(TokenKind::At)?;
+
+            let name = self.consume_identifier()?;
+
+            // Parse arguments if present
+            let arguments = if self.check(TokenKind::LeftParen) {
+                self.consume(TokenKind::LeftParen)?;
+                let args = self.parse_expression_list(TokenKind::RightParen)?;
+                self.consume(TokenKind::RightParen)?;
+                args
+            } else {
+                Vec::new()
+            };
+
+            let end_pos = self.previous_token().range.end.clone();
+            let range = Range::new(start_pos, end_pos);
+
+            decorators.push(Decorator::new(name, arguments, range));
+        }
+
+        Ok(decorators)
+    }
+
+    /// Parsea una declaración de decorator.
+    fn parse_decorator_declaration(&mut self, is_public: bool) -> CompileResult<Declaration> {
+        let start_pos = self.current_token().range.start.clone();
+        self.consume(TokenKind::Decorator)?;
+        let name = self.consume_identifier()?;
+        let end_pos = self.previous_token().range.end.clone();
+        let range = Range::new(start_pos, end_pos);
+        let decorator_decl = DecoratorDeclaration::new(range, is_public, name, Vec::new());
+        Ok(Declaration::Decorator(decorator_decl))
+    }
+
+    /// Parsea una declaración de guard.
+    fn parse_guard_declaration(&mut self, is_public: bool) -> CompileResult<Declaration> {
+        let start_pos = self.current_token().range.start.clone();
+        self.consume(TokenKind::Guard)?;
+        let name = self.consume_identifier()?;
+        let end_pos = self.previous_token().range.end.clone();
+        let range = Range::new(start_pos, end_pos);
+        let guard_decl = GuardDeclaration::new(range, is_public, name, Vec::new());
+        Ok(Declaration::Guard(guard_decl))
+    }
+
+    /// Parsea una declaración de middleware.
+    fn parse_middleware_declaration(&mut self, is_public: bool) -> CompileResult<Declaration> {
+        let start_pos = self.current_token().range.start.clone();
+        self.consume(TokenKind::Middleware)?;
+        let name = self.consume_identifier()?;
+        let end_pos = self.previous_token().range.end.clone();
+        let range = Range::new(start_pos, end_pos);
+        let middleware_decl = MiddlewareDeclaration::new(range, is_public, name, Vec::new());
+        Ok(Declaration::Middleware(middleware_decl))
+    }
+
+    /// Parsea una declaración de interceptor.
+    fn parse_interceptor_declaration(&mut self, is_public: bool) -> CompileResult<Declaration> {
+        let start_pos = self.current_token().range.start.clone();
+        self.consume(TokenKind::Interceptor)?;
+        let name = self.consume_identifier()?;
+        let end_pos = self.previous_token().range.end.clone();
+        let range = Range::new(start_pos, end_pos);
+        let interceptor_decl = InterceptorDeclaration::new(range, is_public, name, Vec::new());
+        Ok(Declaration::Interceptor(interceptor_decl))
+    }
+
+    /// Parsea una declaración de validator.
+    fn parse_validator_declaration(&mut self, is_public: bool) -> CompileResult<Declaration> {
+        let start_pos = self.current_token().range.start.clone();
+        self.consume(TokenKind::Validator)?;
+        let name = self.consume_identifier()?;
+        let end_pos = self.previous_token().range.end.clone();
+        let range = Range::new(start_pos, end_pos);
+        let validator_decl = ValidatorDeclaration::new(range, is_public, name, Vec::new());
+        Ok(Declaration::Validator(validator_decl))
+    }
+
+    /// Parsea una declaración de store.
+    fn parse_store_declaration(&mut self, is_public: bool) -> CompileResult<Declaration> {
+        let start_pos = self.current_token().range.start.clone();
+        self.consume(TokenKind::Store)?;
+        let name = self.consume_identifier()?;
+        let end_pos = self.previous_token().range.end.clone();
+        let range = Range::new(start_pos, end_pos);
+        let store_decl = StoreDeclaration::new(range, is_public, name, Vec::new(), Vec::new());
+        Ok(Declaration::Store(store_decl))
+    }
+
+    /// Parsea una declaración de provider.
+    fn parse_provider_declaration(&mut self, is_public: bool) -> CompileResult<Declaration> {
+        let start_pos = self.current_token().range.start.clone();
+        self.consume(TokenKind::Provider)?;
+        let name = self.consume_identifier()?;
+        let end_pos = self.previous_token().range.end.clone();
+        let range = Range::new(start_pos, end_pos);
+        let provider_decl = ProviderDeclaration::new(range, is_public, name, Vec::new());
+        Ok(Declaration::Provider(provider_decl))
+    }
+
+    /// Parsea una declaración de actor.
+    fn parse_actor_declaration(&mut self, is_public: bool) -> CompileResult<Declaration> {
+        let start_pos = self.current_token().range.start.clone();
+        self.consume(TokenKind::Actor)?;
+        let name = self.consume_identifier()?;
+        let end_pos = self.previous_token().range.end.clone();
+        let range = Range::new(start_pos, end_pos);
+        let actor_decl = ActorDeclaration::new(range, is_public, name, Vec::new(), Vec::new());
+        Ok(Declaration::Actor(actor_decl))
+    }
+
+    /// Parsea una declaración de pipe.
+    fn parse_pipe_declaration(&mut self, is_public: bool) -> CompileResult<Declaration> {
+        let start_pos = self.current_token().range.start.clone();
+        self.consume(TokenKind::Pipe)?;
+        let name = self.consume_identifier()?;
+        let end_pos = self.previous_token().range.end.clone();
+        let range = Range::new(start_pos, end_pos);
+        let pipe_decl = PipeDeclaration::new(range, is_public, name, Vec::new());
+        Ok(Declaration::Pipe(pipe_decl))
+    }
+
+    /// Parsea una declaración de task.
+    fn parse_task_declaration(&mut self, is_public: bool) -> CompileResult<Declaration> {
+        let start_pos = self.current_token().range.start.clone();
+        self.consume(TokenKind::Task)?;
+        let name = self.consume_identifier()?;
+        let end_pos = self.previous_token().range.end.clone();
+        let range = Range::new(start_pos, end_pos);
+        let task_decl = TaskDeclaration::new(range, is_public, name, Vec::new());
+        Ok(Declaration::Task(task_decl))
+    }
+
+    /// Parsea una declaración de helper.
+    fn parse_helper_declaration(&mut self, is_public: bool) -> CompileResult<Declaration> {
+        let start_pos = self.current_token().range.start.clone();
+        self.consume(TokenKind::Helper)?;
+        let name = self.consume_identifier()?;
+        let end_pos = self.previous_token().range.end.clone();
+        let range = Range::new(start_pos, end_pos);
+        let helper_decl = HelperDeclaration::new(range, is_public, name, Vec::new());
+        Ok(Declaration::Helper(helper_decl))
+    }
+
+    /// Parsea una declaración de mapper.
+    fn parse_mapper_declaration(&mut self, is_public: bool) -> CompileResult<Declaration> {
+        let start_pos = self.current_token().range.start.clone();
+        self.consume(TokenKind::Mapper)?;
+        let name = self.consume_identifier()?;
+        let end_pos = self.previous_token().range.end.clone();
+        let range = Range::new(start_pos, end_pos);
+        let mapper_decl = MapperDeclaration::new(range, is_public, name, Vec::new());
+        Ok(Declaration::Mapper(mapper_decl))
+    }
+
+    /// Parsea una declaración de serializer.
+    fn parse_serializer_declaration(&mut self, is_public: bool) -> CompileResult<Declaration> {
+        let start_pos = self.current_token().range.start.clone();
+        self.consume(TokenKind::Serializer)?;
+        let name = self.consume_identifier()?;
+        let end_pos = self.previous_token().range.end.clone();
+        let range = Range::new(start_pos, end_pos);
+        let serializer_decl = SerializerDeclaration::new(range, is_public, name, Vec::new());
+        Ok(Declaration::Serializer(serializer_decl))
+    }    /// Parsea una declaración de módulo.
+    fn parse_module_declaration(&mut self, is_public: bool) -> CompileResult<Declaration> {
+        let start_pos = self.current_token().range.start.clone();
+        self.consume(TokenKind::Module)?;
+        let name = self.consume_identifier()?;
+        let end_pos = self.previous_token().range.end.clone();
+        let range = Range::new(start_pos, end_pos);
+        let module_decl = ModuleDeclaration::new(range, is_public, name, Vec::new(), Vec::new(), Vec::new(), Vec::new(), Vec::new(), Vec::new());
+        Ok(Declaration::Module(module_decl))
     }
 }
 

@@ -346,7 +346,7 @@ controller LegacyController {
 **TASK-035D3 está COMPLETA** con los 7 decoradores de parámetros más importantes.
 
 **Recomendación:**
-1. ✅ Continuar con TASK-035E (@provides decorator) según roadmap original
+1. ✅ Sistema de decoradores HTTP completado
 2. 📋 Agregar **TASK-035E3** (16h): @file + @form decorators (ALTA PRIORIDAD)
 3. 📋 Agregar **TASK-035E4** (8h): @session decorator (MEDIA PRIORIDAD)
 4. 📋 Considerar **TASK-035E5** (6h): @status + @redirect (BAJA PRIORIDAD)

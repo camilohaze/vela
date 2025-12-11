@@ -117,8 +117,6 @@ Implementar parsing completo de **module declarations** con decoradores y **sist
 - `@injectable` - Clase inyectable (con scope opcional)
 - `@injectable({ scope: "singleton" | "transient" | "scoped" })`
 - `@inject({ token: string })` - Inyectar dependencia
-- `@container` - Contenedor DI principal
-- `@provides(Interface)` - Provee implementación de interfaz
 
 #### 2. REST/HTTP
 - `@controller(path)` - Controller HTTP con path base

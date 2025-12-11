@@ -11,10 +11,29 @@ use std::path::Path;
 /// Tipos de tokens reconocidos por el lexer
 #[derive(Debug, Clone, PartialEq)]
 pub enum TokenKind {
-    // Keywords
+    // Keywords - Base Language
     Fn, Async, Await, Return, If, Else, Match, State, Const, Dispatch,
     Struct, Enum, Interface, Impl, Type, Import, Export,
     Public, Private, Package, Module, Extension, Library,
+    Class, Abstract, Extends, Implements, Override, Overload,
+    Constructor, This, Super, Static, Get, Set,
+    Try, Catch, Throw, New, True, False,
+    Global, Mixin, As, Show, Hide,
+
+    // Keywords - Business Logic
+    Service, Repository, Controller, UseCase, Entity, ValueObject, Dto, Model,
+
+    // Keywords - UI
+    Widget, Component,
+
+    // Keywords - Patterns
+    Factory, Builder, Strategy, Observer, Singleton, Adapter, Decorator,
+
+    // Keywords - Security
+    Guard, Middleware, Interceptor, Validator,
+
+    // Keywords - Architecture
+    Store, Provider, Actor, Pipe, Task, Helper, Mapper, Serializer,
 
     // Literals
     Identifier(String),
@@ -493,7 +512,7 @@ impl Lexer {
 
         let text = &self.source[self.start..self.current];
         let kind = match text {
-            // Keywords
+            // Keywords - Base Language
             "fn" => TokenKind::Fn,
             "async" => TokenKind::Async,
             "await" => TokenKind::Await,
@@ -517,9 +536,79 @@ impl Lexer {
             "module" => TokenKind::Module,
             "extension" => TokenKind::Extension,
             "library" => TokenKind::Library,
+
+            // Keywords - OOP
+            "class" => TokenKind::Class,
+            "abstract" => TokenKind::Abstract,
+            "extends" => TokenKind::Extends,
+            "implements" => TokenKind::Implements,
+            "override" => TokenKind::Override,
+            "overload" => TokenKind::Overload,
+            "constructor" => TokenKind::Constructor,
+            "this" => TokenKind::This,
+            "super" => TokenKind::Super,
+            "static" => TokenKind::Static,
+            "get" => TokenKind::Get,
+            "set" => TokenKind::Set,
+
+            // Keywords - Control Flow
+            "try" => TokenKind::Try,
+            "catch" => TokenKind::Catch,
+            "throw" => TokenKind::Throw,
+
+            // Keywords - Declarations
+            "global" => TokenKind::Global,
+            "mixin" => TokenKind::Mixin,
+            "new" => TokenKind::New,
+
+            // Keywords - Imports
+            "as" => TokenKind::As,
+            "show" => TokenKind::Show,
+            "hide" => TokenKind::Hide,
+
+            // Keywords - Business Logic
+            "service" => TokenKind::Service,
+            "repository" => TokenKind::Repository,
+            "controller" => TokenKind::Controller,
+            "usecase" => TokenKind::UseCase,
+            "entity" => TokenKind::Entity,
+            "valueobject" => TokenKind::ValueObject,
+            "dto" => TokenKind::Dto,
+            "model" => TokenKind::Model,
+
+            // Keywords - UI
+            "widget" => TokenKind::Widget,
+            "component" => TokenKind::Component,
+
+            // Keywords - Patterns
+            "factory" => TokenKind::Factory,
+            "builder" => TokenKind::Builder,
+            "strategy" => TokenKind::Strategy,
+            "observer" => TokenKind::Observer,
+            "singleton" => TokenKind::Singleton,
+            "adapter" => TokenKind::Adapter,
+            "decorator" => TokenKind::Decorator,
+
+            // Keywords - Security
+            "guard" => TokenKind::Guard,
+            "middleware" => TokenKind::Middleware,
+            "interceptor" => TokenKind::Interceptor,
+            "validator" => TokenKind::Validator,
+
+            // Keywords - Architecture
+            "store" => TokenKind::Store,
+            "provider" => TokenKind::Provider,
+            "actor" => TokenKind::Actor,
+            "pipe" => TokenKind::Pipe,
+            "task" => TokenKind::Task,
+            "helper" => TokenKind::Helper,
+            "mapper" => TokenKind::Mapper,
+            "serializer" => TokenKind::Serializer,
+
             // Boolean literals
             "true" => TokenKind::BoolLiteral(true),
             "false" => TokenKind::BoolLiteral(false),
+
             // Identifier
             _ => TokenKind::Identifier(text.to_string()),
         };

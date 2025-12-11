@@ -768,21 +768,20 @@ for import_module in metadata.imports:
     injector.register_module(import_module)
 ```
 
-#### 6.4 Integración con @provides
+#### 6.4 Integración con Sistema DI
 
 ```python
 @injectable
-class DatabaseModule:
-    @provides(scope=Scope.SINGLETON)
-    def database_connection(self) -> DatabaseConnection:
-        return DatabaseConnection(
+class DatabaseService:
+    def __init__(self):
+        self.connection = DatabaseConnection(
             host=os.getenv("DB_HOST"),
             port=int(os.getenv("DB_PORT"))
         )
 
-# El injector detecta @provides y registra factory
-module = injector.get(DatabaseModule)
-metadata = get_provider_metadata(module.database_connection)
+# El injector detecta @injectable y registra automáticamente
+service = injector.get(DatabaseService)
+```
 # metadata.token → DatabaseConnection
 # metadata.scope → Scope.SINGLETON
 
@@ -1595,7 +1594,7 @@ session = injector.get(ScopedSession, new_context)
 - [x] **3 scopes** implementados (Singleton, Transient, Scoped)
 - [x] **Detección de ciclos** con resolution_stack
 - [x] **Cache por scope** para optimización
-- [x] **Integración con metadata** existente (@injectable, @inject, @module, @provides)
+- [x] **Integración con metadata** existente (@injectable, @inject, @module)
 - [x] **4 excepciones** definidas (InjectionError, CircularDependencyError, ProviderNotFoundError, InvalidScopeError)
 - [x] **3 helper functions** implementadas (create_injector, get_global_injector, create_container)
 - [x] **43/47 tests pasando** (91.5%), 4 skipped justificados
@@ -1649,7 +1648,6 @@ session = injector.get(ScopedSession, new_context)
   - TASK-035B: @injectable ✅
   - TASK-035C: @inject ✅
   - TASK-035D: @module ✅
-  - TASK-035E: @provides + file decorators ✅
   - TASK-035E2: @pipe, @middleware, @guard ✅
   - **TASK-035F: Injector Core ✅** (ACTUAL)
   - TASK-035G: Scopes avanzados (PENDIENTE)

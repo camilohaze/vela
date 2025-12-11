@@ -424,14 +424,11 @@ fn square(x: Number) -> Number {
 **Uso**:
 ```vela
 fn* fibonacci() -> Generator<Number> {
-  a: Number = 0
-  b: Number = 1
-  loop {
+  fn* generate(a: Number, b: Number) -> Generator<Number> {
     yield a
-    temp = a
-    a = b
-    b = temp + b
+    generate(b, a + b)
   }
+  generate(0, 1)
 }
 ```
 
@@ -972,49 +969,165 @@ component MyComponent {
 
 ---
 
-## 12. UI - Widgets (como Flutter)
+## 12. UI - Widgets y Components
 
-### `StatefulWidget`
-**Propósito**: Widget con estado mutable (similar a Flutter).
+Vela tiene dos tipos principales de elementos UI con propósitos diferentes:
+
+### 🎨 **Widget** (Elemento Visual de Bajo Nivel)
+**Propósito**: Unidad gráfica básica que representa elementos visuales primitivos.
+
+**Características**:
+- Elementos visuales: botones, texto, imágenes, layouts, contenedores
+- Descripción declarativa de UI
+- Bajo nivel, mapea a primitivas de rendering
+- Puede tener estado mutable si es necesario
+- Hereda de clase base `Widget`
+
+### 🧩 **Component** (Unidad Funcional Completa)
+**Propósito**: Unidad funcional completa que encapsula UI + estado + lógica.
+
+**Características**:
+- Modular y reutilizable
+- Contiene UI + estado + eventos + lógica de negocio
+- Ciclo de vida propio (mount, update, destroy)
+- Alto nivel, combina múltiples widgets
+- Puede tener estado mutable si es necesario
+- Hereda de clase base `Component`
+
+---
+
+### Keywords de UI
+
+#### `widget` (Elemento Visual de Bajo Nivel)
+**Propósito**: Define un elemento visual básico que representa primitivas de UI.
+
+**Características**:
+- Elementos visuales primitivos: botones, texto, inputs, contenedores
+- Bajo nivel, mapea directamente a elementos de rendering
+- Puede tener estado mutable opcional
+- Hereda de clase base `Widget`
+- Implementa `build(context: Context): Widget`
 
 **Uso**:
 ```vela
-widget Counter {
-  # Estado local
-  state count: Number = 0
+widget Button {
+  text: String
+  onClick: () -> void
+  state isPressed: Bool = false
   
-  # Computed values
-  computed isEven: Bool {
-    return this.count % 2 == 0
+  fn build(context: Context): Widget {
+    return Container(
+      padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      backgroundColor: this.isPressed ? Colors.blueDark : Colors.blue,
+      onTap: () => {
+        this.isPressed = true
+        this.onClick()
+      },
+      child: Text(this.text, color: Colors.white)
+    )
+  }
+}
+```
+
+#### `component` (Unidad Funcional Completa)
+**Propósito**: Define una unidad funcional completa que combina UI + estado + lógica.
+
+**Características**:
+- Alto nivel, combina múltiples widgets
+- Contiene UI + estado + eventos + lógica de negocio
+- Ciclo de vida completo (mount, update, destroy)
+- Puede tener estado mutable opcional
+- NO puede ser `@injectable` (componentes son UI, no servicios)
+- Hereda de clase base `Component`
+- Implementa `render(): Widget`
+
+**⚠️ Inyección de Dependencias en Componentes:**
+Aunque los componentes NO usan `@injectable`, PUEDEN recibir dependencias inyectadas de dos formas:
+1. **En constructor** usando `@inject` (igual que Angular)
+2. **En propiedades** usando `inject(ServiceType)` (más flexible, se puede usar en cualquier lugar)
+
+Los servicios inyectados se almacenan como campos de instancia para usarlos en métodos como `mount()`, `render()`, etc.
+
+**Uso**:
+```vela
+component UserProfile {
+  userId: Number
+  state user: Option<User> = None
+  state isLoading: Bool = false
+  
+  # ✅ Componentes PUEDEN recibir dependencias inyectadas (como Angular)
+  constructor(@inject userService: UserService) {
+    this.userService = userService
   }
   
-  # Métodos
-  fn increment() -> void {
-    this.count += 1
+  fn mount(): void {
+    this.loadUser()
   }
   
-  # Lifecycle hooks
-  mount() {
-    print("Counter mounted")
+  fn loadUser(): void {
+    this.isLoading = true
+    # ✅ Usar el servicio inyectado
+    this.user = this.userService.getUserById(this.userId)
+    this.isLoading = false
   }
   
-  update() {
-    print("Counter updated")
+  fn render(): Widget {
+    if this.isLoading {
+      return LoadingSpinner()
+    }
+    
+    match this.user {
+      Some(user) => return UserCard(user)
+      None => return ErrorMessage("User not found")
+    }
+  }
+}
+```
+
+---
+
+### Comparación: Widget vs Component
+
+```vela
+# Widget: Elemento visual básico
+widget TextField {
+  placeholder: String
+  value: String
+  
+  fn build(context: Context) -> Widget {
+    return Input(
+      placeholder: this.placeholder,
+      value: this.value
+    )
+  }
+}
+
+# Component: Unidad funcional completa
+component LoginForm {
+  state email: String = ""
+  state password: String = ""
+  state isLoading: Bool = false
+  
+  fn submit() -> void {
+    this.isLoading = true
+    // Lógica de login...
   }
   
-  destroy() {
-    print("Counter destroyed")
-  }
-  
-  # Build method (obligatorio)
-  fn build() -> Widget {
-    return Column(
+  fn render(): Widget {
+    return Form(
       children: [
-        Text("Count: ${this.count}"),
-        Text(this.isEven ? "Even" : "Odd"),
+        TextField(
+          placeholder: "Email",
+          value: this.email
+        ),
+        TextField(
+          placeholder: "Password",
+          value: this.password
+        ),
         Button(
-          text: "Increment",
-          onClick: this.increment
+          text: this.isLoading ? "Loading..." : "Login",
+          onClick: this.submit,
+          disabled: this.isLoading
         )
       ]
     )
@@ -1024,93 +1137,97 @@ widget Counter {
 
 ---
 
-### `StatelessWidget`
-**Propósito**: Widget sin estado (inmutable, solo presentacional).
+### Ejemplo Completo: Componente con Inyección de Dependencias
 
-**Uso**:
 ```vela
-component Card {
-  # Propiedades inmutables (pasadas en constructor)
-  title: String
-  content: String
-  color: Color
-  
-  constructor(title: String, content: String, color: Color) {
-    this.title = title
-    this.content = content
-    this.color = color
+# 1. Servicio inyectable (business logic)
+@injectable(scope: Scope.Singleton)
+service AuthService {
+  fn login(email: String, password: String) -> Result<User> {
+    // Lógica de autenticación
+    return Ok(mockUser)
   }
   
-  # Build method (obligatorio)
-  fn build() -> Widget {
-    return Container(
-      padding: EdgeInsets.all(16),
-      backgroundColor: this.color,
-      child: Column(
-        children: [
-          Text(
-            this.title,
-            style: TextStyle(
-              fontSize: 20,
-              fontWeight: FontWeight.bold
-            )
-          ),
-          SizedBox(height: 8),
-          Text(this.content)
-        ]
-      )
-    )
+  fn logout() -> void {
+    // Lógica de logout
+  }
+  
+  fn getCurrentUser() -> Option<User> {
+    // Retornar usuario actual
+    return Some(mockUser)
   }
 }
 
-# Uso
-card = Card(
-  title: "Welcome",
-  content: "Hello Vela!",
-  color: Color.blue
-)
-```
-
----
-
-### Comparación: StatefulWidget vs StatelessWidget
-
-```vela
-# StatefulWidget: tiene estado mutable
-widget TodoList {
-  state todos: List<String> = []
+# 2. Componente que USA el servicio (UI logic)
+component LoginForm {
+  state email: String = ""
+  state password: String = ""
+  state isLoading: Bool = false
   
-  fn addTodo(text: String) -> void {
-    this.todos = this.todos.append(text)  # muta el estado
+  # ✅ Componente recibe servicio inyectado (NO es @injectable)
+  constructor(@inject authService: AuthService) {
+    this.authService = authService
   }
   
-  fn build() -> Widget {
-    return ListView(
-      children: this.todos.map(todo => Text(todo))
-    )
+  fn submit() -> void {
+    this.isLoading = true
+    
+    # ✅ Usar el servicio inyectado
+    match this.authService.login(this.email, this.password) {
+      Ok(user) => {
+        // Login exitoso - navegar o mostrar mensaje
+        print("Login exitoso: ${user.name}")
+      }
+      Err(error) => {
+        // Mostrar error
+        print("Error: ${error}")
+      }
+    }
+    
+    this.isLoading = false
   }
-}
-
-# StatelessWidget: sin estado, puro
-component TodoItem {
-  text: String
-  isCompleted: Bool
   
-  constructor(text: String, isCompleted: Bool) {
-    this.text = text
-    this.isCompleted = isCompleted
-  }
-  
-  fn build() -> Widget {
-    return Row(
+  fn render(): Widget {
+    return Form(
       children: [
-        Checkbox(value: this.isCompleted),
-        Text(this.text)
+        TextField(
+          placeholder: "Email",
+          value: this.email,
+          onChange: (value) => this.email = value
+        ),
+        TextField(
+          placeholder: "Password", 
+          value: this.password,
+          onChange: (value) => this.password = value
+        ),
+        Button(
+          text: this.isLoading ? "Loading..." : "Login",
+          onClick: this.submit,
+          disabled: this.isLoading
+        )
       ]
     )
   }
 }
 ```
+
+**Resumen de DI en Vela:**
+- **Servicios**: Usan `@injectable` + se registran en `providers: []`
+- **Componentes**: NO usan `@injectable` pero PUEDEN usar `@inject` en constructor O `inject(ServiceType)` en propiedades/cuerpo
+- **Controllers**: NO usan `@injectable` pero PUEDEN usar `@inject` en constructor O `inject(ServiceType)` en cuerpo/propiedades
+
+---
+
+### Reglas de Herencia
+
+| Keyword | Hereda de | Método Obligatorio | Estado | Ciclo de Vida | Inyección de Dependencias | Uso Típico |
+|---------|-----------|-------------------|--------|---------------|--------------------------|-------------|
+| `widget` | `Widget` | `build(context: Context): Widget` | Opcional | No | NO | Elementos visuales básicos |
+| `component` | `Component` | `render(): Widget` | Opcional | Sí | NO | Unidades funcionales completas |
+
+**Ambos pueden tener estado mutable si lo necesitan:**
+- `widget` con estado: Para widgets interactivos (ej: botón con hover state)
+- `component` con estado: Para lógica compleja (ej: formularios, listas dinámicas)
 
 ---
 
@@ -1259,16 +1376,6 @@ class SortedList<T> where T: Comparable, T: Hashable {
 
 ---
 
-### `@extension`
-**Propósito**: Define una extensión.
-
-**Uso**:
-```vela
-@extension("charts")
-```
-
----
-
 ### `@injectable`
 **Propósito**: Marca una clase como inyectable en el sistema de DI (Dependency Injection).
 
@@ -1307,21 +1414,87 @@ class UserController {
 
 ---
 
-### `@provides`
-**Propósito**: Marca un método que provee una dependencia en un módulo de DI.
+### `inject()`
+**Propósito**: Función helper para inyección de dependencias en tiempo de ejecución (alternativa a `@inject`).
+
+**Sintaxis**: `inject(ServiceType) -> ServiceType`
+
+**Parámetros**:
+- `ServiceType`: El tipo/clase del servicio a inyectar (debe estar registrado en el contenedor DI)
 
 **Uso**:
 ```vela
-@module({
-  name: "NetworkModule",
-  providers: [HttpClient],
-  exports: [HttpClient]
-})
-module NetworkModule {
-  @provides
-  fn provideHttpClient() -> HttpClient {
-    return HttpClient()
+# En componentes (fuera del constructor)
+component UserProfile {
+  # ✅ Inyección directa como función con tipo
+  navigation: NavigationService = inject(NavigationService)
+  userService: UserService = inject(UserService)
+  
+  fn onUserClick() {
+    # Usar servicios inyectados
+    user = this.userService.getCurrentUser()
+    this.navigation.push("/profile")
   }
+}
+
+# En controllers
+controller UserController {
+  constructor() {
+    # ✅ Inyección en el cuerpo del constructor
+    this.userService = inject(UserService)
+    this.logger = inject(Logger)
+  }
+  
+  @get("/users")
+  fn getUsers() -> Response<List<User>> {
+    this.logger.info("Getting users")
+    users = this.userService.getAllUsers()
+    return Response.ok(users)
+  }
+}
+
+# En servicios (aunque no recomendado, ya que los servicios deberían usar @injectable)
+service DataService {
+  constructor() {
+    # ⚠️ No recomendado: mejor usar @inject en parámetros
+    this.httpClient = inject()
+  }
+}
+```
+
+**Ventajas de `inject()` sobre `@inject`:**
+- ✅ **Más flexible**: Se puede usar en cualquier lugar, no solo en constructores
+- ✅ **Menos boilerplate**: No requiere decoradores adicionales
+- ✅ **Tiempo de ejecución**: Permite inyección condicional o lazy
+- ✅ **Explícito**: Requiere especificar el tipo del servicio a inyectar
+
+**Cuándo usar cada uno:**
+- **`@inject`**: Para inyección en constructores (más explícito y type-safe)
+- **`inject(ServiceType)`**: Para inyección en propiedades, constructores o métodos (igual que Angular)
+
+**Comparación con Angular:**
+```typescript
+// Angular
+@Component({...})
+export class MyComponent {
+  // Inyección en constructor
+  constructor(private service: MyService) {}
+  
+  // O usando inject() (Angular 14+)
+  service = inject(MyService);
+}
+```
+
+```vela
+// Vela - Equivalente
+component MyComponent {
+  // Inyección en constructor
+  constructor(@inject service: MyService) {
+    this.service = service
+  }
+  
+  // O usando inject() (igual que Angular)
+  service: MyService = inject(MyService)
 }
 ```
 
@@ -1336,7 +1509,7 @@ widget UserProfile {
   @connect(AppStore)
   store: AppStore
   
-  fn build() -> Widget {
+  fn build(context: Context) -> Widget {
     return Text("User: ${this.store.user}")
   }
 }
@@ -1357,7 +1530,7 @@ widget UserWidget {
   @select((store) => store.user)
   user: Option<User>
   
-  fn build() -> Widget {
+  fn build(context: Context) -> Widget {
     return Text("User: ${this.user}")
   }
 }
@@ -1433,9 +1606,7 @@ button.onClick(() => print("Clicked!"))
 
 **Uso**:
 ```vela
-for i in 0..10 {  # 0, 1, 2, ..., 9
-  print(i)
-}
+(0..10).forEach(i => print(i))  # 0, 1, 2, ..., 9
 ```
 
 ---
@@ -1445,9 +1616,7 @@ for i in 0..10 {  # 0, 1, 2, ..., 9
 
 **Uso**:
 ```vela
-for i in 0..=10 {  # 0, 1, 2, ..., 10
-  print(i)
-}
+(0..=10).forEach(i => print(i))  # 0, 1, 2, ..., 10
 ```
 
 ---
@@ -1468,12 +1637,17 @@ result = data
 ## 17. Palabras de Contexto
 
 ### `in`
-**Propósito**: Usado en loops para iterar sobre colecciones.
+**Propósito**: Usado en destructuring y pattern matching.
 
 **Uso**:
 ```vela
-for item in items {
-  print(item)
+# En destructuring
+(first, _, third) = tuple
+
+# En pattern matching
+match value {
+  x if x is Number => print("Number: ${x}")
+  x if x is String => print("String: ${x}")
 }
 ```
 
@@ -1568,25 +1742,6 @@ match result {
   Ok(value) => print("Success: ${value}")
   Err(error) => print("Error: ${error}")
 }
----
-
-### `namespace`
-**Propósito**: Agrupa definiciones bajo un nombre común.
-
-**Uso**:
-```vela
-namespace Math {
-  const PI: Float = 3.14159
-  
-  fn sqrt(x: Float) -> Float {
-    # ...
-  }
-}
-
-# Uso
-value = Math.sqrt(16)
-```
-
 ---
 
 ### `static`
@@ -1692,7 +1847,7 @@ Para mantener la pureza funcional y simplicidad:
 - ❌ `?.`, `??`, `!` → null-safety operators NO existen (paradigma funcional puro)
 - ❌ `any` → tipado fuerte obligatorio
 - ❌ `@override` → keyword `override` es suficiente
-- ❌ `component`, `widget` → `StatefulWidget`, `StatelessWidget`
+- ❌ `component`, `widget` → `StatefulWidget`, `StatelessWidget` (obsoleto - ahora usan clases base `Widget` y `Component`)
 
 ---
 
@@ -1708,8 +1863,7 @@ Estas palabras clave permitirán un sistema DI completo y type-safe:
 |---------------|------|-----------|
 | `@injectable` | Decorator | Marca una clase como inyectable en el contenedor DI |
 | `@inject` | Decorator | Marca un parámetro como dependencia a inyectar |
-| `@container` | Decorator | Define contenedor DI que agrupa providers (estándar Spring/Angular/NestJS) |
-| `@provides` | Decorator | Marca un método factory que provee una dependencia |
+| `inject()` | Función | Helper para inyección de dependencias en tiempo de ejecución (recibe tipo como parámetro) |
 | `@controller` | Decorator | Define controlador REST/API con routing automático |
 
 **Ejemplo DI completo**:
@@ -1728,15 +1882,6 @@ controller AuthController {
     @inject logger: Logger
   ) { }
 }
-
-# Contenedor DI (✅ usar @container, estándar de industria)
-@container
-class AppContainer {
-  @provides(scope: Scope.Singleton)
-  fn provideDatabase() -> Database {
-    return Database(url: "mongodb://localhost")
-  }
-}
 ```
 
 **Ejemplo REST API completo**:
@@ -1754,6 +1899,60 @@ controller UserController {
   
   @get("/:id")
   fn getById(id: String) -> Response<User> { /* ... */ }
+}
+```
+
+**Ejemplo usando `inject()` en componentes y controllers:**
+```vela
+# Componente usando inject() (más flexible)
+component UserDashboard {
+  # ✅ Inyección directa en propiedades
+  userService: UserService = inject(UserService)
+  navigation: NavigationService = inject(NavigationService)
+  
+  state currentUser: Option<User> = None
+  
+  fn mount() {
+    # ✅ Usar servicios inyectados
+    self.currentUser = self.userService.getCurrentUser()
+  }
+  
+  fn logout() {
+    self.userService.logout()
+    self.navigation.push("/login")
+  }
+  
+  fn render(): Widget {
+    return match self.currentUser {
+      Some(user) => UserProfileWidget(user, onLogout: self.logout)
+      None => LoginPromptWidget()
+    }
+  }
+}
+
+# Controller usando inject() (alternativa a @inject)
+controller ProductController {
+  constructor() {
+    # ✅ Inyección en el cuerpo del constructor
+    self.productService = inject(ProductService)
+    self.cache = inject(CacheService)
+    self.metrics = inject(MetricsService)
+  }
+  
+  @get("/products")
+  fn getProducts() -> Response<List<Product>> {
+    # ✅ Usar servicios inyectados
+    products = self.cache.get("products") ?? self.productService.getAll()
+    self.metrics.increment("products_viewed")
+    return Response.ok(products)
+  }
+  
+  @post("/products")
+  fn createProduct(product: Product) -> Response<Product> {
+    created = self.productService.create(product)
+    self.cache.invalidate("products")  # Invalidar cache
+    return Response.ok(created)
+  }
 }
 ```
 
@@ -1794,11 +1993,11 @@ class AppStore extends Store<AppState> {
 @connect(AppStore)
 @select((store) => store.counter) # Solo re-renderiza si counter cambia
 widget CounterWidget {
-  fn render(context: Context) -> Widget {
-    dispatch(IncrementAction()) # Enviar acción
-    
+  counter: Number # Estado seleccionado del store
+  
+  fn build(context: Context) -> Widget {
     return Button(
-      text: "Count: ${props.counter}",
+      text: "Count: ${this.counter}",
       onClick: fn() { dispatch(IncrementAction()) }
     )
   }
@@ -1860,8 +2059,8 @@ testWidget("Counter increments on button press", fn(tester) {
 - ❌ Sin State Management GLOBAL
 - 🟡 Testing básico (sin mocks ni widget testing)
 
-**Con las extensiones propuestas** (+15 keywords):
-- ✅ Sistema DI completo (4 decorators: @injectable, @inject, @container, @provides)
+**Con las extensiones propuestas** (+12 keywords):
+- ✅ Sistema DI completo (2 decorators: @injectable, @inject)
 - ✅ REST/API Support (7 decorators: @controller, @get, @post, @put, @delete, @patch, @middleware, @guard)
 - ✅ State Management global (8 keywords: @connect, @select, @persistent, Store, Action, Reducer, dispatch, subscribe)
 - ✅ Testing avanzado (5 keywords: @mock, @spy, verify, when, testWidget)
@@ -1869,13 +2068,10 @@ testWidget("Counter increments on button press", fn(tester) {
 
 **Total estimado: ~126 palabras reservadas** para un lenguaje de alto nivel completo y productivo.
 
-**⚠️ Nota sobre decoradores**: 
+**⚠️ Nota sobre decoradores**:
 - `@module({ name: "...", ... })` → módulos funcionales (unificada)
-- `@container` → contenedor DI (nuevo, estándar Spring/Angular/NestJS)
 - `@controller("/path")` → controlador REST (nuevo, estándar NestJS/Spring)
-- `module X.Y.Z;` → declaración de paquete del archivo (ya existe en 01-grammar-and-syntax.md línea 272)
-
-### Prioridad de Implementación
+- `module X.Y.Z;` → declaración de paquete del archivo (ya existe en 01-grammar-and-syntax.md línea 272)### Prioridad de Implementación
 
 Según análisis en `09-language-completeness-analysis.md`:
 
@@ -1894,42 +2090,34 @@ Ver documento completo para detalles de implementación, ejemplos y comparación
 ### 🎨 UI Components
 
 #### `widget`
-**Propósito**: Componente de UI con estado (stateful).
+**Propósito**: Define un elemento visual de bajo nivel.
 
 **Características obligatorias**:
+- DEBE heredar de clase base `Widget`
 - DEBE implementar `build(context: Context): Widget`
-- DEBE implementar lifecycle: `init()`, `dispose()`
-- PUEDE tener `state` mutable
+- PUEDE tener `state` mutable (opcional)
+- NO tiene ciclo de vida obligatorio
 - NO puede ser `@injectable`
 
 **Uso**:
 ```vela
-widget LoginWidget {
-  state email: String = ""
-  state password: String = ""
+widget Button {
+  # Props inmutables
+  text: String
+  onClick: () -> void
+  disabled: Bool = false
   
-  fn init(): void {
-    print("Widget initialized")
-  }
-  
-  fn dispose(): void {
-    print("Widget disposed")
-  }
+  # Estado opcional
+  state isHovered: Bool = false
   
   fn build(context: Context): Widget {
-    return Container {
-      child: Column {
-        children: [
-          TextField { value: this.email },
-          TextField { value: this.password },
-          Button { label: "Login", click: () => this.login() }
-        ]
-      }
-    }
-  }
-  
-  fn login(): void {
-    # Lógica de login
+    return Container(
+      padding: EdgeInsets.all(8),
+      backgroundColor: this.isHovered ? Colors.blueLight : Colors.blue,
+      onHover: (hovered) => this.isHovered = hovered,
+      onClick: this.onClick,
+      child: Text(this.text)
+    )
   }
 }
 ```
@@ -1937,28 +2125,56 @@ widget LoginWidget {
 ---
 
 #### `component`
-**Propósito**: Componente de UI sin estado (stateless).
+**Propósito**: Define una unidad funcional de alto nivel.
 
 **Características obligatorias**:
-- DEBE implementar `build(context: Context): Widget`
-- SOLO puede tener `props` readonly
-- NO puede tener `state`
-- NO puede tener lifecycle hooks
+- DEBE heredar de clase base `Component`
+- DEBE implementar `render(): Widget`
+- PUEDE tener `state` mutable (opcional)
+- PUEDE tener ciclo de vida: `mount()`, `update()`, `destroy()`
+- NO puede ser `@injectable` (componentes son UI, no servicios)
+
+**⚠️ Inyección de Dependencias en Componentes:**
+Aunque los componentes NO usan `@injectable`, PUEDEN recibir dependencias inyectadas de dos formas:
+1. **En constructor** usando `@inject` (igual que Angular)
+2. **En propiedades** usando `inject(ServiceType)` (más flexible, se puede usar en cualquier lugar)
+
+Los servicios inyectados se almacenan como campos de instancia para usarlos en métodos como `mount()`, `render()`, etc.
 
 **Uso**:
 ```vela
-component Button {
-  props {
-    label: String
-    click: () => void
-    disabled: Bool = false
+component UserProfile {
+  # Props inmutables
+  userId: Number
+  
+  # Estado opcional
+  state user: Option<User> = None
+  state isLoading: Bool = false
+  
+  # ✅ Componentes PUEDEN recibir dependencias inyectadas (como Angular)
+  constructor(@inject userService: UserService) {
+    this.userService = userService
   }
   
-  fn build(context: Context): Widget {
-    return Container {
-      backgroundColor: this.disabled ? Colors.grey : Colors.blue,
-      click: this.click,
-      child: Text(this.label)
+  fn mount(): void {
+    this.loadUser()
+  }
+  
+  fn loadUser(): void {
+    this.isLoading = true
+    # ✅ Usar el servicio inyectado
+    this.user = this.userService.getUserById(this.userId)
+    this.isLoading = false
+  }
+  
+  fn render(): Widget {
+    if this.isLoading {
+      return LoadingSpinner()
+    }
+    
+    match this.user {
+      Some(user) => return UserCard(user)
+      None => return ErrorMessage("User not found")
     }
   }
 }
@@ -2038,6 +2254,7 @@ repository UserRepository {
 - Métodos públicos DEBEN tener decorador HTTP (`@get`, `@post`, `@put`, `@patch`, `@delete`)
 - DEBE retornar `Response<T>` o `Promise<Response<T>>`
 - PUEDE recibir dependencias con `@inject` en constructor (sin necesitar `@injectable`)
+- También puede usar `inject(ServiceType)` en el cuerpo del constructor o en propiedades
 - NO puede tener lógica de negocio (solo orchestración y delegación a services)
 
 **Uso**:
@@ -2063,6 +2280,35 @@ controller UserController {
   public async fn getById(@param id: String): Response<User> {
     return this.service.findById(id)
       .map(user => Response.ok(user))
+  }
+}
+```
+
+**Ejemplo usando `inject()` en controller:**
+```vela
+# ✅ CORRECTO: Controller usando inject() (alternativa a @inject)
+@controller("/api/products")
+controller ProductController {
+  constructor() {
+    # Inyección usando inject(ServiceType) en el cuerpo del constructor
+    this.productService = inject(ProductService)
+    this.cache = inject(CacheService)
+    this.metrics = inject(MetricsService)
+  }
+  
+  @get("/")
+  fn getAll(): Response<List<Product>> {
+    # Usar cache primero, luego servicio
+    cached = this.cache.get("products")
+    if cached != None {
+      this.metrics.increment("cache_hit")
+      return Response.ok(cached)
+    }
+    
+    products = this.productService.getAll()
+    this.cache.set("products", products)
+    this.metrics.increment("products_fetched")
+    return Response.ok(products)
   }
 }
 ```
@@ -2119,7 +2365,7 @@ dto CreateUserDto {
     if (!this.email.contains("@")) {
       return Result.err(ValidationError("Invalid email"))
     }
-    return Result.ok(())
+    return Result.ok(void)
   }
   
   fn toJson(): JsonObject {
@@ -2234,13 +2480,13 @@ model UserModel {
   public id: String
   public email: String
   public name: String
-  public age: Int
+  public age: Number
   
   fn validate(): Result<void, ValidationError> {
     if (this.age < 0 || this.age > 150) {
       return Result.err(ValidationError("Invalid age"))
     }
-    return Result.ok(())
+    return Result.ok(void)
   }
   
   fn toEntity(): Result<User, Error> {
@@ -2335,11 +2581,11 @@ builder UserBuilder {
 **Uso**:
 ```vela
 strategy PaymentStrategy {
-  abstract fn pay(amount: Decimal): Result<Receipt, Error>
+  abstract fn pay(amount: Float): Result<Receipt, Error>
 }
 
 strategy CreditCardPayment extends PaymentStrategy {
-  fn pay(amount: Decimal): Result<Receipt, Error> {
+  fn pay(amount: Float): Result<Receipt, Error> {
     return Result.ok(Receipt { amount, method: "Credit Card" })
   }
 }
@@ -2534,7 +2780,7 @@ validator EmailValidator {
     if (!value.contains("@")) {
       return Result.err(ValidationError("Invalid email"))
     }
-    return Result.ok(())
+    return Result.ok(void)
   }
 }
 ```
@@ -2674,7 +2920,7 @@ actor EmailActor {
   
   private fn handleSend(to: String, subject: String, body: String): Result<void, Error> {
     print("Sending email to ${to}")
-    return Result.ok(())
+    return Result.ok(void)
   }
 }
 ```

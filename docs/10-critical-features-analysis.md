@@ -76,7 +76,7 @@ module com.example.myapp;  # Declaración de paquete del archivo
 
 **Fuente**: `01-grammar-and-syntax.md` línea 272 muestra que `module X.Y.Z;` es solo para **declarar el paquete** del archivo, similar a Java/Kotlin.
 
-#### ✅ Solución: Usar `@container` para DI
+#### ✅ Solución: Sistema DI simplificado
 
 Para **evitar conflictos**, usamos el estándar de industria:
 
@@ -84,8 +84,6 @@ Para **evitar conflictos**, usamos el estándar de industria:
 |----------|-----------|-----------|
 | Servicio inyectable | `@injectable` | Marca clase como inyectable con scope |
 | Parámetro de inyección | `@inject` | Marca parámetro para inyección automática |
-| **Container DI** | `@container` | Módulo que agrupa providers (estándar Spring/Angular/NestJS) |
-| Provider factory | `@provides` | Marca método factory como provider |
 
 #### Código actualizado SIN conflictos:
 
@@ -122,40 +120,39 @@ class AuthController {
   ) { }
 }
 
-# ✅ SOLUCIÓN: Usar @container (estándar de industria)
-@container
-class AppContainer {
-  @provides(scope: Scope.Singleton)
-  fn provideDatabase() -> Database {
-    return Database(url: "mongodb://localhost")
-  }
-  
-  @provides
-  fn provideLogger() -> Logger {
-    return ConsoleLogger()
+  ) { }
+}
+
+# ✅ SOLUCIÓN: DI simplificado
+@injectable(scope: Scope.Singleton)
+class DatabaseService {
+  constructor() {
+    this.connection = Database(url: "mongodb://localhost")
   }
 }
 
-# Uso del contenedor DI
-injector = Injector(containers: [AppContainer()])
-controller = injector.get<AuthController>()
+@injectable
+class LoggerService {
+  fn log(message: String) -> void {
+    console.log(message)
+  }
+}
+
+# Uso del sistema DI
+controller = AuthController()
+# Dependencias se inyectan automáticamente
 ```
 
-#### Alternativas consideradas:
+#### Sistema DI simplificado:
 
-1. **`@container`** ⭐ (RECOMENDADO)
-   - Término estándar en DI (Spring, Angular, NestJS)
-   - Claro y universalmente reconocido
-   - No confunde con `module` existente
+1. **`@injectable`** ⭐ (USADO)
+   - Marca clases como inyectables
+   - Soporta scopes (Singleton, Transient, Scoped)
 
-2. **`@diModule`**
-   - Específico pero menos común
-   - Puede confundir con módulos del sistema
+2. **`@inject`** ⭐ (USADO)
+   - Inyección automática de dependencias
 
-3. **`@injectionModule`**
-   - Muy explícito pero demasiado verboso
-
-**Decisión final**: Usar **`@container`** para módulos DI (estándar de industria).
+**Decisión final**: Sistema DI simple con `@injectable` y `@inject` únicamente.
 
 ---
 
@@ -301,18 +298,15 @@ Para que Vela sea un lenguaje de **alto nivel completo** que soporte la **mayor�
 **Keywords nuevos**:
 - `@injectable` - Marca clase como inyectable
 - `@inject` - Marca parámetro para inyección
-- `@container` - Define contenedor DI que agrupa providers (estándar Spring/Angular/NestJS)
-- `@provides` - Factory method para providers
 - `@controller` - Define controlador REST/API con routing automático
 
 **Código de ejemplo DI**:
 ```vela
-# Container DI
-@container
-class AppContainer {
-  @provides(scope: Scope.Singleton)
-  fn provideDatabase() -> Database {
-    return Database(url: "mongodb://localhost")
+# Servicio inyectable
+@injectable(scope: Scope.Singleton)
+class DatabaseService {
+  constructor() {
+    this.connection = Database(url: "mongodb://localhost")
   }
 }
 ```
@@ -523,13 +517,13 @@ users.filter(fn(User(age: age, ..)) => age >= 18)
 **Respuestas resumidas**:
 
 1. **¿Eventos?** → 🟡 PARCIAL (solo UI, falta Event Bus genérico)
-2. **¿Conflicto @module?** → ✅ RESUELTO (usar `@container` para DI, `@module` para organización)
+2. **¿Conflicto @module?** → ✅ RESUELTO (`@module` para organización)
 3. **¿Patrones de diseño?** → 🟡 70% actual → 100% con extensiones
 4. **¿REST APIs?** → 🆕 Agregar `@controller` con decoradores HTTP (`@get`, `@post`, etc.)
 
 **Para ser un lenguaje de alto nivel completo**, Vela necesita implementar en **MVP 1.0**:
 
-1. 🔴 **DI System** (con `@injectable`, `@inject`, `@container`, `@provides`)
+1. 🔴 **DI System** (con `@injectable`, `@inject`)
 2. 🔴 **REST/API Support** (con `@controller`, `@get`, `@post`, `@put`, `@delete`, `@patch`)
 3. 🔴 **Event Bus genérico** (con `EventBus`, `on`, `emit`, `off`)
 4. 🔴 **State Management global** (con `Store`, `Action`, `dispatch`, `@connect`)
@@ -687,14 +681,17 @@ class UserController {
   }
 }
 
+    }
+  }
+}
+
 # ============================================
 # 6. Bootstrap de la aplicación
 # ============================================
-@container
-class AppContainer {
-  @provides(scope: Scope.Singleton)
-  fn provideDatabase() -> Database {
-    return Database(url: "mongodb://localhost:27017/myapp")
+@injectable(scope: Scope.Singleton)
+class DatabaseService {
+  constructor() {
+    this.connection = Database(url: "mongodb://localhost:27017/myapp")
   }
 }
 
@@ -731,6 +728,21 @@ fn main() {
 - ✅ Guard Pattern
 - ✅ DTO Pattern
 - ✅ Repository Pattern (con DI)
+
+---
+
+## Actualización: Decoradores DI Simplificados (2025-12-02)
+
+**Nota**: La implementación de DI se ha simplificado. Los decoradores `@container` y `@provides` han sido removidos de la implementación inicial para mantener el sistema más simple.
+
+**Decoradores DI actuales**:
+- ✅ `@injectable` - Marca clases como inyectables
+- ✅ `@inject` - Inyección de dependencias
+- ✅ `@module` - Organización de código
+
+**Decoradores removidos**:
+- ❌ `@container` - Contenedor DI explícito
+- ❌ `@provides` - Factory providers
 
 ---
 

@@ -657,12 +657,7 @@ def get_route_by_path(controller_cls: Type, path: str) -> Optional[tuple[str, Ro
 
 ## 🚀 Próximos Pasos
 
-**TASK-035E:** Implementar @provides decorator
-- Factory providers para DI
-- Custom providers
-- Async providers
-- Scoped providers
-- 24h estimadas
+**Sistema de decoradores completado**
 
 ## 📝 Notas Técnicas
 
@@ -1188,4 +1183,4 @@ def test_route_with_complex_path(self):
 **Tests:** 61/61 pasando (100%)
 **Bugs:** 0
 **Versión:** 0.2.0 (con @cookie, @request, @response)
-**Próxima Tarea:** TASK-035E (@provides decorator)
+**Estado:** Completado

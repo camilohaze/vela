@@ -286,7 +286,7 @@
 
 **TASK-006I: Architectural Decorators Parsing**
 - 🔄 **PARTIAL**: AST supports decorators, parser implementation needs validation
-- **Decorators**: @injectable, @inject, @container, @provides, @controller, @get/@post/@put/@delete/@patch, @middleware, @guard, @interceptor, @validate, @required, @email, @min, @max, etc.
+- **Decorators**: @injectable, @inject, @controller, @get/@post/@put/@delete/@patch, @middleware, @guard, @interceptor, @validate, @required, @email, @min, @max, etc.
 - **Status**: Mentioned in roadmap CSV as "Done" (TASK-016I) with 40+ test cases in Python
 
 **TASK-006J: Testing**

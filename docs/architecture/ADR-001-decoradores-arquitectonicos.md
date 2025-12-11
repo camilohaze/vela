@@ -73,30 +73,6 @@ class UserController {
 
 ---
 
-#### @container
-Marca una clase como contenedor DI principal.
-
-**Sintaxis:**
-```vela
-@container
-class AppContainer {
-  # Configuración de providers
-}
-```
-
----
-
-#### @provides
-Indica que una clase provee una implementación de interfaz.
-
-**Sintaxis:**
-```vela
-@provides(ILogger)
-class ConsoleLogger implements ILogger { }
-```
-
----
-
 ### 2. REST/HTTP
 
 #### @controller
@@ -439,6 +415,25 @@ class UserService { }
 
 ---
 
+## Actualización: Decoradores Removidos (2025-12-02)
+
+### Decoradores DI Simplificados
+
+**Decisión Original**: Implementar decoradores `@container` y `@provides` para DI avanzado
+
+**Decisión Modificada**: Remover `@container` y `@provides` de la implementación inicial
+
+**Decoradores Removidos**:
+- ❌ `@container` - Contenedor DI explícito
+- ❌ `@provides` - Factory providers por interfaz
+
+**Razones**:
+1. **Simplicidad**: Sistema DI inicial más simple con solo `@injectable` + `@inject`
+2. **Suficiencia**: Cubre casos de uso principales
+3. **Iteración**: Funcionalidad avanzada puede agregarse en versiones futuras
+
+---
+
 ## Próximos Pasos
 
 1. ✅ **Parser**: Implementado (Sprint 9)
@@ -448,6 +443,6 @@ class UserService { }
 
 ---
 
-**Última Actualización**: 2025-12-01  
-**Estado**: Aceptado e Implementado  
-**Versión**: 1.0.0
+**Última Actualización**: 2025-12-02  
+**Estado**: Aceptado e Implementado (con modificaciones)  
+**Versión**: 1.1.0

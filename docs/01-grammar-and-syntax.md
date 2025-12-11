@@ -290,7 +290,6 @@ SimplePath       ::= Identifier ('/' Identifier)*
 | `package:` | Dependencias externas instaladas | `import 'package:lodash'` |
 | `module:` | Módulos del proyecto (@module) | `import 'module:auth'` |
 | `library:` | Librerías internas (@library) | `import 'library:utils'` |
-| `extension:` | Extensiones internas (@extension) | `import 'extension:charts'` |
 | `assets:` | Recursos estáticos | `import 'assets:logo.png'` |
 
 ### Ejemplos de Imports
@@ -319,10 +318,6 @@ import 'module:auth/widgets'    # LoginWidget, RegisterWidget
 import 'library:utils'          # Utilidades internas
 import 'library:validators'     # Validadores internos
 import 'library:helpers'        # Helpers internos
-
-# Extensiones internas (definidas con @extension)
-import 'extension:charts'       # Gráficos internos
-import 'extension:maps'         # Mapas internos
 
 # Assets estáticos
 import 'assets:images/logo.png'
@@ -357,8 +352,7 @@ proyecto/
 2. **`package:`** - DEBE estar en `vela.yaml` y ejecutar `vela add <package>`
 3. **`module:`** - DEBE tener archivo `.module.vela` con decorador `@module`
 4. **`library:`** - DEBE tener decorador `@library`
-5. **`extension:`** - DEBE tener decorador `@extension`
-6. **`assets:`** - Archivos estáticos en carpeta `assets/`
+5. **`assets:`** - Archivos estáticos en carpeta `assets/`
 
 ---
 

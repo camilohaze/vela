@@ -18,6 +18,8 @@ members = [
     "packages/reactive",
     "packages/events",
     "packages/di",
+    "packages/pipe-decorators",
+    "packages/test-decorators",
     "packages/state-management",
     "bin",
 ]

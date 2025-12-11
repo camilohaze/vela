@@ -14,7 +14,7 @@
 
 Implementar un **sistema completo de Dependency Injection (DI)** inspirado en Angular, NestJS y Spring Boot, con:
 
-1. **Decoradores de DI** (@injectable, @inject, @singleton, @provides, @container)
+1. **Decoradores de DI** (@injectable, @inject, @singleton)
 2. **Factory Providers** con scopes (singleton, transient, request)
 3. **File Upload** (@file, @upload, @files, @form decorators)
 4. **Middleware, Guards, Pipes** (@middleware, @guard, @pipe decorators)
@@ -59,16 +59,6 @@ Implementar un **sistema completo de Dependency Injection (DI)** inspirado en An
 
 ---
 
-### ✅ TASK-035D: @container decorator
-
-**Fecha:** 2025-11-28  
-
-**Implementación:**
-- ✅ @container decorator para contenedores DI
-- ✅ providers, imports, exports configuration
-
----
-
 ### ✅ TASK-035D2: @controller decorator
 
 **Fecha:** 2025-11-29  
@@ -87,25 +77,6 @@ Implementar un **sistema completo de Dependency Injection (DI)** inspirado en An
 - ✅ @get, @post, @put, @delete, @patch decorators
 - ✅ Path params support ({id}, {name}, etc.)
 - ✅ Query params support
-
----
-
-### ✅ TASK-035E: @provides decorator + File Upload
-
-**Commit:** `b7e8b45`  
-**Fecha:** 2025-11-30  
-**Tests:** 89/89 pasando (100%)
-
-**Implementación:**
-- ✅ @provides decorator (factory providers)
-- ✅ File upload decorators (@file, @upload, @files, @form)
-- ✅ Factory providers con scopes (singleton, transient, request)
-- ✅ 89 tests unitarios (100% cobertura)
-
-**Archivos:**
-- `src/runtime/di/decorators.py` (270 LOC)
-- `tests/unit/runtime/di/test_decorators.py` (620 LOC)
-- `docs/features/VELA-575/TASK-035E.md`
 
 ---
 
@@ -272,23 +243,7 @@ class DatabaseConnection:
     # Solo una instancia en toda la app
     pass
 
-
-# Factory provider
-@provides(scope="singleton")
-def provide_http_client() -> HttpClient:
-    return HttpClient(timeout=30)
-
-
-# Container
-@container(providers=[
-    UserService,
-    UserRepository,
-    DatabaseConnection,
-    provide_http_client
-])
-class AppContainer:
-    pass
-```
+# Servicios se registran automáticamente
 
 ---
 

@@ -685,7 +685,7 @@ La implementación se divide en 15 subtasks:
 4. **TASK-035D**: Implementar `@module` decorator con DI support
 5. **TASK-035D2**: Implementar `@controller` decorator
 6. **TASK-035D3**: Implementar decoradores HTTP
-7. **TASK-035E**: Implementar `@provides` decorator
+7. **TASK-035E**: ❌ Implementar `@provides` decorator - **CANCELADA**
 8. **TASK-035E2**: Implementar `@middleware` y `@guard` decorators
 9. **TASK-035F**: Implementar Injector core
 10. **TASK-035G**: Implementar Scopes (Singleton, Transient, Scoped)
@@ -703,7 +703,6 @@ src/runtime/di/
 ├── injectable.py         # @injectable decorator
 ├── inject.py             # @inject decorator
 ├── module.py             # @module decorator
-├── provides.py           # @provides decorator
 ├── scopes.py             # Scope management
 └── circular_detection.py # Detección de ciclos
 
@@ -721,7 +720,6 @@ tests/unit/di/
 ├── test_injectable.py
 ├── test_inject.py
 ├── test_module.py
-├── test_provides.py
 ├── test_scopes.py
 └── test_circular_detection.py
 
@@ -1023,6 +1021,34 @@ Este diseño posiciona a Vela como un lenguaje moderno para backend development,
 
 ---
 
+## Actualización: Decisión Modificada (2025-12-02)
+
+### Cambio en Decoradores DI
+
+**Decisión Original**: Implementar 4 decoradores DI (`@injectable`, `@inject`, `@container`, `@provides`)
+
+**Decisión Modificada**: Implementar solo 2 decoradores DI (`@injectable`, `@inject`)
+
+**Decoradores Removidos**:
+- ❌ `@container` - Contenedor DI explícito
+- ❌ `@provides` - Factory providers
+
+**Razones del Cambio**:
+1. **Simplicidad**: Reducir complejidad del sistema DI inicial
+2. **Suficiencia**: `@injectable` + `@inject` cubren 80% de casos de uso
+3. **Iteración**: Factory providers pueden agregarse en versiones futuras si es necesario
+4. **Consistencia**: Alineación con lenguajes funcionales puros
+
+**Implementación Actual**:
+- ✅ `@injectable` - Marca clases como inyectables
+- ✅ `@inject` - Inyección de dependencias
+- ✅ `@module` - Organización de código (existente)
+- ✅ Sistema de scopes (Singleton, Transient, Scoped)
+
+**Task Cancelada**: TASK-035E (Implementar `@provides` decorator) - **CANCELADA**
+
+---
+
 **Autor**: GitHub Copilot Agent  
 **Revisores**: Cristian Naranjo  
-**Última actualización**: 2025-12-01
+**Última actualización**: 2025-12-02

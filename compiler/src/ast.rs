@@ -217,6 +217,7 @@ pub struct FunctionDeclaration {
     pub node: ASTNode,
     pub is_public: bool,
     pub name: String,
+    pub decorators: Vec<Decorator>,
     pub parameters: Vec<Parameter>,
     pub return_type: Option<TypeAnnotation>,
     pub body: BlockStatement,
@@ -229,6 +230,7 @@ impl FunctionDeclaration {
         range: Range,
         is_public: bool,
         name: String,
+        decorators: Vec<Decorator>,
         parameters: Vec<Parameter>,
         return_type: Option<TypeAnnotation>,
         body: BlockStatement,
@@ -239,6 +241,7 @@ impl FunctionDeclaration {
             node: ASTNode::new(range),
             is_public,
             name,
+            decorators,
             parameters,
             return_type,
             body,
@@ -305,6 +308,7 @@ pub struct StructDeclaration {
     pub node: ASTNode,
     pub is_public: bool,
     pub name: String,
+    pub decorators: Vec<Decorator>,
     pub fields: Vec<StructField>,
     pub generic_params: Vec<GenericParameter>,
 }
@@ -314,6 +318,7 @@ impl StructDeclaration {
         range: Range,
         is_public: bool,
         name: String,
+        decorators: Vec<Decorator>,
         fields: Vec<StructField>,
         generic_params: Vec<GenericParameter>,
     ) -> Self {
@@ -321,6 +326,7 @@ impl StructDeclaration {
             node: ASTNode::new(range),
             is_public,
             name,
+            decorators,
             fields,
             generic_params,
         }
@@ -509,6 +515,7 @@ pub struct ClassDeclaration {
     pub node: ASTNode,
     pub is_public: bool,
     pub name: String,
+    pub decorators: Vec<Decorator>,
     pub constructor: Option<ConstructorDeclaration>,
     pub fields: Vec<ClassField>,
     pub methods: Vec<MethodDeclaration>,
@@ -522,6 +529,7 @@ impl ClassDeclaration {
         range: Range,
         is_public: bool,
         name: String,
+        decorators: Vec<Decorator>,
         constructor: Option<ConstructorDeclaration>,
         fields: Vec<ClassField>,
         methods: Vec<MethodDeclaration>,
@@ -533,6 +541,7 @@ impl ClassDeclaration {
             node: ASTNode::new(range),
             is_public,
             name,
+            decorators,
             constructor,
             fields,
             methods,
@@ -649,6 +658,7 @@ pub struct ServiceDeclaration {
     pub node: ASTNode,
     pub is_public: bool,
     pub name: String,
+    pub decorators: Vec<Decorator>,
     pub methods: Vec<MethodDeclaration>,
     pub dependencies: Vec<Parameter>,
 }
@@ -658,6 +668,7 @@ impl ServiceDeclaration {
         range: Range,
         is_public: bool,
         name: String,
+        decorators: Vec<Decorator>,
         methods: Vec<MethodDeclaration>,
         dependencies: Vec<Parameter>,
     ) -> Self {
@@ -665,6 +676,7 @@ impl ServiceDeclaration {
             node: ASTNode::new(range),
             is_public,
             name,
+            decorators,
             methods,
             dependencies,
         }
@@ -705,6 +717,7 @@ pub struct ControllerDeclaration {
     pub node: ASTNode,
     pub is_public: bool,
     pub name: String,
+    pub decorators: Vec<Decorator>,
     pub routes: Vec<RouteDeclaration>,
 }
 
@@ -713,12 +726,14 @@ impl ControllerDeclaration {
         range: Range,
         is_public: bool,
         name: String,
+        decorators: Vec<Decorator>,
         routes: Vec<RouteDeclaration>,
     ) -> Self {
         Self {
             node: ASTNode::new(range),
             is_public,
             name,
+            decorators,
             routes,
         }
     }

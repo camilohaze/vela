@@ -64,8 +64,7 @@ Implementar el **sistema completo de análisis semántico** de Vela, validando:
   2. **`package:`** → Dependencias externas (npm, pub)
   3. **`module:`** → Módulos del proyecto (con `@module`)
   4. **`library:`** → Librerías internas reutilizables (con `@library`)
-  5. **`extension:`** → Extensiones del lenguaje (con `@extension`)
-  6. **`assets:`** → Assets estáticos (imágenes, fuentes, etc.)
+  5. **`assets:`** → Assets estáticos (imágenes, fuentes, etc.)
 - Lookup en filesystem con paths absolutos
 - Caché de resoluciones para performance
 - Enum ResolverPrefix con mapping a carpetas

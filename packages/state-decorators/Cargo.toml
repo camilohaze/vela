@@ -1,0 +1,9 @@
+[package]
+name = "state-decorators"
+version = "0.1.0"
+edition = "2021"
+description = "State management decorators for Vela programming language"
+license = "MIT"
+
+[dependencies]
+serde = { version = "1.0", features = ["derive"] }

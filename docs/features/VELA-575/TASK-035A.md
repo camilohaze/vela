@@ -16,7 +16,7 @@
 
 Diseñar la arquitectura completa del **sistema de Dependency Injection (DI)** de Vela, incluyendo:
 
-- Decoradores de DI (`@injectable`, `@inject`, `@module`, `@provides`)
+- Decoradores de DI (`@injectable`, `@inject`, `@module`)
 - Contenedor DI (Injector) con resolución de dependencias
 - Scopes de lifecycle (Singleton, Transient, Scoped)
 - Integración con REST (controllers, middleware, guards)
@@ -37,7 +37,7 @@ Diseñar la arquitectura completa del **sistema de Dependency Injection (DI)** d
 - **Contexto**: Problemas que resuelve DI (acoplamiento, testabilidad, lifecycle management)
 - **Decisión**: Implementar DI completo con decoradores first-class
 - **Componentes**:
-  1. Decoradores: `@injectable`, `@inject`, `@module`, `@provides`, `@controller`, `@middleware`, `@guard`
+  1. Decoradores: `@injectable`, `@inject`, `@module`, `@controller`, `@middleware`, `@guard`
   2. Injector core con algoritmo de resolución de dependencias
   3. Scopes: Singleton, Transient, Scoped
   4. Router HTTP con soporte para path params y query params
@@ -301,7 +301,7 @@ fn testUserService() -> void {
 - [x] **ADR completo creado** en `docs/architecture/ADR-035A-dependency-injection.md`
 - [x] **Contexto documentado**: Problemas que resuelve DI
 - [x] **Decisión explicada**: Por qué DI con decoradores
-- [x] **Decoradores diseñados**: `@injectable`, `@inject`, `@module`, `@provides`, `@controller`, `@middleware`, `@guard`
+- [x] **Decoradores diseñados**: `@injectable`, `@inject`, `@module`, `@controller`, `@middleware`, `@guard`
 - [x] **Injector core diseñado**: Algoritmo de resolución de dependencias
 - [x] **Scopes especificados**: Singleton, Transient, Scoped
 - [x] **Router HTTP diseñado**: Path matching, middleware, guards
@@ -319,7 +319,7 @@ fn testUserService() -> void {
 
 - **Documentos generados:** 2 (ADR + TASK doc)
 - **Páginas escritas:** ~50 páginas de diseño
-- **Decoradores diseñados:** 7 (`@injectable`, `@inject`, `@module`, `@provides`, `@controller`, `@middleware`, `@guard`)
+- **Decoradores diseñados:** 6 (`@injectable`, `@inject`, `@module`, `@controller`, `@middleware`, `@guard`)
 - **Scopes especificados:** 3 (Singleton, Transient, Scoped)
 - **Componentes arquitectónicos:** 7 (Injector, Router, Request/Response, Circular Detection, Test Container)
 - **Ejemplos completos:** 1 (Aplicación REST multi-layer)
@@ -354,15 +354,14 @@ Las siguientes 14 tareas implementarán el diseño arquitectónico:
 3. **TASK-035D**: Implementar `@module` decorator con DI support
 4. **TASK-035D2**: Implementar `@controller` decorator
 5. **TASK-035D3**: Implementar decoradores HTTP (`@get`, `@post`, `@put`, `@delete`, `@patch`)
-6. **TASK-035E**: Implementar `@provides` decorator
-7. **TASK-035E2**: Implementar `@middleware` y `@guard` decorators
-8. **TASK-035F**: Implementar Injector core
-9. **TASK-035G**: Implementar Scopes (Singleton, Transient, Scoped)
-10. **TASK-035G2**: Implementar Router HTTP
-11. **TASK-035G3**: Implementar Request/Response types
-12. **TASK-035H**: Implementar circular dependency detection
-13. **TASK-035I**: Integrar DI con testing framework
-14. **TASK-035J**: Tests de sistema DI y REST
+6. **TASK-035E2**: Implementar `@middleware` y `@guard` decorators
+7. **TASK-035F**: Implementar Injector core
+8. **TASK-035G**: Implementar Scopes (Singleton, Transient, Scoped)
+9. **TASK-035G2**: Implementar Router HTTP
+10. **TASK-035G3**: Implementar Request/Response types
+11. **TASK-035H**: Implementar circular dependency detection
+12. **TASK-035I**: Integrar DI con testing framework
+13. **TASK-035J**: Tests de sistema DI y REST
 
 ### Estructura de Directorios
 
@@ -374,7 +373,6 @@ src/runtime/
 │   ├── injectable.py         # @injectable decorator
 │   ├── inject.py             # @inject decorator
 │   ├── module.py             # @module decorator
-│   ├── provides.py           # @provides decorator
 │   ├── scopes.py             # Scope management
 │   └── circular_detection.py # Circular dependency detection
 └── web/

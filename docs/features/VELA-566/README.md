@@ -43,7 +43,7 @@ VELA-565 validó la arquitectura mediante prototipos. VELA-566 **formaliza** el 
   - Patterns (literal, identifier, tuple, struct, enum, or, range)
   - Types (primitives, arrays, tuples, functions, generics, references)
 - **Keywords Domain-Specific:** widget, component, service, repository, entity, dto, factory, builder, strategy, observer, singleton, adapter, decorator, controller, middleware, guard, interceptor, validator, pipe, task, helper, mapper, serializer, store, provider, actor
-- **Sistema Reactivo:** Signal, Computed, Effect, Watch, @injectable, @inject, @container, @provides, @get, @post, @put, @delete, @patch, store, dispatch
+- **Sistema Reactivo:** Signal, Computed, Effect, Watch, @injectable, @inject, @get, @post, @put, @delete, @patch, store, dispatch
 - **Features Modernos:** String interpolation `${}`, optional chaining `?.`, Option<T> coalescing `??`, exponentiation `**`, async/await, pattern matching, generics, error handling
 - **Tabla de Precedencia:** 15 niveles (assignment → logical → equality → comparison → bitwise → arithmetic → unary → postfix)
 
