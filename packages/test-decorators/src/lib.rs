@@ -226,10 +226,10 @@ fn generate_test_function(
         }
     };
 
+    // Generate the test function directly without #[test] to avoid recursion
     quote! {
         #ignore_attr
         #should_panic_attr
-        #[test]
         fn #function_name() {
             #timeout_check
         }
@@ -262,8 +262,8 @@ fn generate_describe_module(
 
                 if has_it_attr {
                     let func_name = &func.sig.ident;
+                    // Generate function without #[test] - it will be added by the it macro
                     test_functions.push(quote! {
-                        #[test]
                         fn #func_name() {
                             #func
                         }
@@ -319,9 +319,9 @@ fn generate_it_function(
         }
     };
 
+    // Generate function without #[test] - it will be added by the macro
     quote! {
         #skip_attr
-        #[test]
         fn #function_name() {
             println!("Running: {}", #description);
             #timeout_check
@@ -470,7 +470,11 @@ pub fn test(
 
     let generated = generate_test_function(&config, function_name, &quote!(#function_body));
 
-    generated.into()
+    // Add the #[test] attribute externally to avoid recursion
+    quote! {
+        #[test]
+        #generated
+    }.into()
 }
 
 /// Procedural macro for @describe decorator
@@ -518,7 +522,11 @@ pub fn it(
 
     let generated = generate_it_function(&config, function_name, &quote!(#function_body));
 
-    generated.into()
+    // Add the #[test] attribute externally to avoid recursion
+    quote! {
+        #[test]
+        #generated
+    }.into()
 }
 
 /// Alias for @describe - provides better readability in some contexts

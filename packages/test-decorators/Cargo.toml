@@ -8,6 +8,11 @@ serde = { version = "1.0", features = ["derive"] }
 proc-macro2 = "1.0"
 quote = "1.0"
 syn = { version = "2.0", features = ["full", "extra-traits"] }
+tokio = { version = "1.0", features = ["time"] }
 
 [lib]
 proc-macro = true
+
+[[example]]
+name = "bdd_example"
+path = "examples/bdd_example.rs"

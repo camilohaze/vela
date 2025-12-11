@@ -1,0 +1,76 @@
+//! Basic Specs - Simple test examples in Vela
+//! These specs demonstrate the fundamental testing patterns
+
+import 'stdlib:test'
+
+@describe("Basic Assertions")
+module BasicAssertionsSpec {
+
+    @it("should assert equality")
+    fn test_equality() -> void {
+        assert(2 + 2 == 4, "Basic math should work")
+        assert("hello" == "hello", "Strings should be equal")
+        assert(true == true, "Booleans should be equal")
+    }
+
+    @it("should assert truthiness")
+    fn test_truthiness() -> void {
+        assert(true, "true should be truthy")
+        assert(!false, "not false should be truthy")
+        assert(1 != 0, "1 should not equal 0")
+    }
+
+    @it("should handle different types")
+    fn test_types() -> void {
+        num: Number = 42
+        str: String = "test"
+        bool_val: Bool = false
+        list: List<Number> = [1, 2, 3]
+
+        // Basic type checks using simple assertions
+        assert(num == 42, "Should handle number type")
+        assert(str == "test", "Should handle string type")
+        assert(!bool_val, "Should handle boolean type")
+        assert(list != [], "List should not be empty")
+    }
+}
+
+@describe("Math Operations")
+module MathSpec {
+
+    @it("should perform basic arithmetic")
+    fn test_basic_math() -> void {
+        assert(10 + 5 == 15, "Addition should work")
+        assert(10 - 3 == 7, "Subtraction should work")
+        assert(6 * 7 == 42, "Multiplication should work")
+        assert(20 / 4 == 5, "Division should work")
+    }
+
+    @it("should handle operator precedence")
+    fn test_precedence() -> void {
+        assert(2 + 3 * 4 == 14, "Multiplication before addition")
+        assert(10 - 2 * 3 == 4, "Multiplication before subtraction")
+    }
+}
+
+@describe("String Operations")
+module StringSpec {
+
+    @it("should concatenate strings")
+    fn test_concatenation() -> void {
+        greeting: String = "Hello"
+        name: String = "World"
+        message: String = greeting + " " + name + "!"
+
+        assert(message == "Hello World!", "String concatenation should work")
+    }
+
+    @it("should interpolate variables")
+    fn test_interpolation() -> void {
+        age: Number = 25
+        city: String = "Madrid"
+        info: String = "I am ${age} years old and live in ${city}"
+
+        assert(info == "I am 25 years old and live in Madrid", "String interpolation should work")
+    }
+}

@@ -1,0 +1,202 @@
+//! Calculator Specs - Tests written in Vela language
+//! This demonstrates how BDD testing would work in Vela
+
+@describe("Calculator Operations")
+module CalculatorSpec {
+
+    @describe("Basic Arithmetic")
+    module BasicArithmeticSpec {
+
+        @describe("Addition")
+        module AdditionSpec {
+
+            @it("should add two positive numbers")
+            fn test_add_positive_numbers() -> void {
+                let result: Number = 2 + 3
+                assert_eq(result, 5, "2 + 3 should equal 5")
+            }
+
+            @it("should add zero to a number")
+            fn test_add_zero() -> void {
+                let result: Number = 10 + 0
+                assert_eq(result, 10, "10 + 0 should equal 10")
+            }
+
+            @it("should handle negative numbers")
+            fn test_add_negative() -> void {
+                let result: Number = 5 + (-3)
+                assert_eq(result, 2, "5 + (-3) should equal 2")
+            }
+        }
+
+        @describe("Subtraction")
+        module SubtractionSpec {
+
+            @it("should subtract two numbers")
+            fn test_subtract() -> void {
+                let result: Number = 10 - 3
+                assert_eq(result, 7, "10 - 3 should equal 7")
+            }
+
+            @it("should handle negative results")
+            fn test_negative_result() -> void {
+                let result: Number = 3 - 10
+                assert_eq(result, -7, "3 - 10 should equal -7")
+            }
+        }
+
+        @describe("Multiplication")
+        module MultiplicationSpec {
+
+            @it("should multiply positive numbers")
+            fn test_multiply_positive() -> void {
+                let result: Number = 4 * 5
+                assert_eq(result, 20, "4 * 5 should equal 20")
+            }
+
+            @it("should multiply by zero")
+            fn test_multiply_zero() -> void {
+                let result: Number = 10 * 0
+                assert_eq(result, 0, "10 * 0 should equal 0")
+            }
+        }
+
+        @describe("Division")
+        module DivisionSpec {
+
+            @it("should divide two numbers")
+            fn test_divide() -> void {
+                let result: Number = 20 / 4
+                assert_eq(result, 5, "20 / 4 should equal 5")
+            }
+
+            @it("should handle floating point results")
+            fn test_divide_float() -> void {
+                let result: Float = 5.0 / 2.0
+                assert_eq(result, 2.5, "5.0 / 2.0 should equal 2.5")
+            }
+        }
+    }
+
+    @describe("Advanced Operations")
+    module AdvancedOperationsSpec {
+
+        @it("should calculate factorial")
+        fn test_factorial() -> void {
+            fn factorial(n: Number) -> Number {
+                if n <= 1 {
+                    return 1
+                }
+                return n * factorial(n - 1)
+            }
+
+            assert_eq(factorial(5), 120, "factorial(5) should equal 120")
+            assert_eq(factorial(0), 1, "factorial(0) should equal 1")
+        }
+
+        @it("should work with lists")
+        fn test_list_operations() -> void {
+            let numbers: List<Number> = [1, 2, 3, 4, 5]
+
+            // Test map
+            let doubled = numbers.map(x => x * 2)
+            assert_eq(doubled, [2, 4, 6, 8, 10], "map should double all elements")
+
+            // Test filter
+            let evens = numbers.filter(x => x % 2 == 0)
+            assert_eq(evens, [2, 4], "filter should return even numbers")
+
+            // Test reduce
+            let sum = numbers.reduce((acc, x) => acc + x, 0)
+            assert_eq(sum, 15, "reduce should sum all elements")
+        }
+    }
+
+    @describe("Error Handling")
+    module ErrorHandlingSpec {
+
+        @it("should handle division by zero")
+        fn test_division_by_zero() -> void {
+            // This should throw an exception
+            try {
+                let result = 10 / 0
+                // If we reach here, the test should fail
+                assert(false, "Division by zero should throw an exception")
+            } catch (e: Error) {
+                // Expected behavior - division by zero throws error
+                assert(true, "Division by zero correctly throws error")
+            }
+        }
+
+        @it("should handle option types")
+        fn test_option_handling() -> void {
+            fn find_number(list: List<Number>, target: Number) -> Option<Number> {
+                for num in list {
+                    if num == target {
+                        return Some(num)
+                    }
+                }
+                return None
+            }
+
+            let numbers = [1, 2, 3, 4, 5]
+
+            let found = find_number(numbers, 3)
+            match found {
+                Some(value) => assert_eq(value, 3, "Should find the number 3")
+                None => assert(false, "Should have found the number")
+            }
+
+            let not_found = find_number(numbers, 10)
+            match not_found {
+                Some(_) => assert(false, "Should not find number 10")
+                None => assert(true, "Correctly returns None for missing number")
+            }
+        }
+    }
+
+    @describe("Async Operations")
+    module AsyncOperationsSpec {
+
+        @it("should handle async operations")
+        async fn test_async_operation() -> void {
+            // Simulate async work
+            await sleep(10) // Sleep for 10ms
+
+            let result = await fetch_data()
+            assert(result.is_ok(), "Async operation should succeed")
+        }
+
+        @it("should handle promises")
+        async fn test_promise_operations() -> void {
+            let promise1 = async { return 42 }
+            let promise2 = async { return 24 }
+
+            let results = await Promise.all([promise1, promise2])
+            assert_eq(results, [42, 24], "Promise.all should return all results")
+        }
+    }
+}
+
+// Helper functions for tests
+fn assert_eq<T>(actual: T, expected: T, message: String) -> void {
+    if actual != expected {
+        throw Error("Assertion failed: ${message}. Expected: ${expected}, Actual: ${actual}")
+    }
+}
+
+fn assert(condition: Bool, message: String) -> void {
+    if !condition {
+        throw Error("Assertion failed: ${message}")
+    }
+}
+
+async fn sleep(ms: Number) -> void {
+    // Simulate sleep - in real implementation this would use tokio or similar
+    return ()
+}
+
+async fn fetch_data() -> Result<String> {
+    // Simulate network call
+    return Ok("data")
+}

@@ -27,6 +27,7 @@ impl Parser {
 
         // Parsear declaraciones hasta el final
         while !self.is_at_end() {
+            println!("🔧 Main parse loop, current token: {:?}", self.current_token());
             // Skip semicolons between declarations
             if self.check(TokenKind::Semicolon) {
                 self.advance();
@@ -46,17 +47,11 @@ impl Parser {
         self.consume(TokenKind::Import)?;
         let kind = self.parse_import_kind()?;
         let path = self.consume_string()?;
-        let alias = if self.check(TokenKind::At) {
-            self.advance();
-            Some(self.consume_identifier()?)
-        } else {
-            None
-        };
 
         let end_pos = self.previous_token().range.end.clone();
         let range = Range::new(start_pos, end_pos);
 
-        Ok(ImportDeclaration::new(range, kind, path, alias, None, None))
+        Ok(ImportDeclaration::new(range, kind, path, None, None, None))
     }
 
     /// Parsea el tipo de import.
@@ -179,7 +174,7 @@ impl Parser {
 
         // Module declaration
         } else if self.check(TokenKind::Module) {
-            self.parse_module_declaration(is_public)
+            self.parse_module_declaration(is_public, decorators)
 
         } else {
             println!("🔧 No valid declaration token found, current token: {:?}", self.current_token());
@@ -938,7 +933,7 @@ impl Parser {
         // TODO: Implementar parsing completo de clases abstractas
         let end_pos = self.previous_token().range.end.clone();
         let range = Range::new(start_pos, end_pos);
-        let class_decl = ClassDeclaration::new(range, is_public, name, None, Vec::new(), Vec::new(), None, Vec::new(), Vec::new());
+        let class_decl = ClassDeclaration::new(range, is_public, name, Vec::new(), None, Vec::new(), Vec::new(), None, Vec::new(), Vec::new());
         Ok(Declaration::Class(class_decl))
     }
 
@@ -963,7 +958,7 @@ impl Parser {
         let end_pos = self.previous_token().range.end.clone();
         let range = Range::new(start_pos, end_pos);
         // Usar una declaración existente como placeholder
-        let struct_decl = StructDeclaration::new(range, is_public, name, Vec::new(), Vec::new());
+        let struct_decl = StructDeclaration::new(range, is_public, name, Vec::new(), Vec::new(), Vec::new());
         Ok(Declaration::Struct(struct_decl))
     }
 
@@ -1170,16 +1165,31 @@ impl Parser {
         let mut decorators = Vec::new();
 
         while self.check(TokenKind::At) {
+            println!("🔧 parse_decorators: found @, parsing decorator");
             let start_pos = self.current_token().range.start.clone();
             self.consume(TokenKind::At)?;
+            println!("🔧 parse_decorators: consumed @, current token: {:?}", self.current_token());
 
             let name = self.consume_identifier()?;
+            println!("🔧 parse_decorators: consumed decorator name '{}', current token: {:?}", name, self.current_token());
 
             // Parse arguments if present
             let arguments = if self.check(TokenKind::LeftParen) {
+                println!("🔧 parse_decorators: found (, parsing arguments");
                 self.consume(TokenKind::LeftParen)?;
-                let args = self.parse_expression_list(TokenKind::RightParen)?;
+                println!("🔧 parse_decorators: consumed (, current token: {:?}", self.current_token());
+                let mut args = Vec::new();
+                if !self.check(TokenKind::RightParen) {
+                    args.push(self.parse_expression()?);
+                    println!("🔧 parse_decorators: parsed first argument, current token: {:?}", self.current_token());
+                    while self.check(TokenKind::Comma) {
+                        self.advance(); // consume ','
+                        args.push(self.parse_expression()?);
+                        println!("🔧 parse_decorators: parsed additional argument, current token: {:?}", self.current_token());
+                    }
+                }
                 self.consume(TokenKind::RightParen)?;
+                println!("🔧 parse_decorators: consumed ), current token: {:?}", self.current_token());
                 args
             } else {
                 Vec::new()
@@ -1189,8 +1199,10 @@ impl Parser {
             let range = Range::new(start_pos, end_pos);
 
             decorators.push(Decorator::new(name, arguments, range));
+            println!("🔧 parse_decorators: added decorator, continuing loop");
         }
 
+        println!("🔧 parse_decorators: finished parsing decorators, returning {} decorators", decorators.len());
         Ok(decorators)
     }
 
@@ -1336,14 +1348,89 @@ impl Parser {
         let serializer_decl = SerializerDeclaration::new(range, is_public, name, Vec::new());
         Ok(Declaration::Serializer(serializer_decl))
     }    /// Parsea una declaración de módulo.
-    fn parse_module_declaration(&mut self, is_public: bool) -> CompileResult<Declaration> {
+    fn parse_module_declaration(&mut self, is_public: bool, decorators: Vec<Decorator>) -> CompileResult<Declaration> {
         let start_pos = self.current_token().range.start.clone();
         self.consume(TokenKind::Module)?;
         let name = self.consume_identifier()?;
+
+        // Parse module body
+        self.consume(TokenKind::LeftBrace)?;
+        let mut body = Vec::new();
+
+        while !self.check(TokenKind::RightBrace) && !self.is_at_end() {
+            // Skip semicolons between declarations
+            if self.check(TokenKind::Semicolon) {
+                self.advance();
+                continue;
+            }
+
+            // Parse declaration within module (can have decorators)
+            let is_decl_public = self.check(TokenKind::Public);
+            if is_decl_public {
+                self.advance();
+            }
+
+            // Parse decorators for declarations within module
+            let decl_decorators = self.parse_decorators()?;
+
+            // Parse the actual declaration
+            let declaration = self.parse_declaration_within_module(is_decl_public, decl_decorators)?;
+            body.push(declaration);
+        }
+
+        self.consume(TokenKind::RightBrace)?;
+
         let end_pos = self.previous_token().range.end.clone();
         let range = Range::new(start_pos, end_pos);
-        let module_decl = ModuleDeclaration::new(range, is_public, name, Vec::new(), Vec::new(), Vec::new(), Vec::new(), Vec::new(), Vec::new());
+        let module_decl = ModuleDeclaration::new(range, is_public, name, decorators, body, Vec::new(), Vec::new(), Vec::new(), Vec::new());
         Ok(Declaration::Module(module_decl))
+    }
+
+    /// Parsea una lista de expresiones separadas por comas hasta encontrar el delimitador final.
+    fn parse_expression_list(&mut self, end_token: TokenKind) -> CompileResult<Vec<Expression>> {
+        let mut expressions = Vec::new();
+
+        // Parse expressions
+        if !self.check(end_token) {
+            loop {
+                expressions.push(self.parse_expression()?);
+                if !self.check(TokenKind::Comma) {
+                    break;
+                }
+                self.advance(); // consume ','
+            }
+        }
+
+        Ok(expressions)
+    }
+
+    /// Parsea una declaración dentro de un módulo (puede tener decoradores).
+    fn parse_declaration_within_module(&mut self, is_public: bool, decorators: Vec<Decorator>) -> CompileResult<Declaration> {
+        println!("🔧 parse_declaration_within_module called, current token: {:?}", self.current_token());
+
+        // Base language declarations within modules
+        if self.check(TokenKind::Fn) {
+            println!("🔧 Found fn token within module, parsing function declaration");
+            self.parse_function_declaration(is_public, decorators)
+        } else if self.check(TokenKind::Struct) {
+            self.parse_struct_declaration(is_public, decorators)
+        } else if self.check(TokenKind::Enum) {
+            self.parse_enum_declaration(is_public)
+        } else if self.check(TokenKind::Type) {
+            self.parse_type_alias_declaration(is_public)
+        } else {
+            println!("🔧 No valid declaration token found within module, current token: {:?}", self.current_token());
+            let location = SourceLocation::new(
+                self.current_token().range.start.line,
+                self.current_token().range.start.column,
+                0 // offset not tracked in parser
+            );
+            return Err(CompileError::Parse(ParseError {
+                message: "Expected declaration".to_string(),
+                location,
+                expected: vec!["fn".to_string(), "struct".to_string(), "enum".to_string(), "type".to_string()],
+            }));
+        }
     }
 }
 

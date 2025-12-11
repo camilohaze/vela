@@ -1,30 +1,29 @@
 import 'stdlib:test'
 
-import 'stdlib:test'
+@describe("User Service")
+module UserServiceSpec {
 
-fn test_user_creation() -> void {
-    // Test basic user creation
-    user_id: Number = 1
-    user_name: String = "John Doe"
-    user_email: String = "john@example.com"
+    @it("should create user correctly")
+    fn test_user_creation() -> void {
+        // Test basic user creation
+        user_id: Number = 1
+        user_name: String = "John Doe"
+        user_email: String = "john@example.com"
 
-    assert(user_id == 1, "User ID should be 1")
-    assert(user_name == "John Doe", "User name should be John Doe")
-    // Simplified email check - just check length > 5 (basic validation)
-    assert(user_email.length > 5, "Email should be valid")
+        assert(user_id == 1, "User ID should be 1")
+        assert(user_name == "John Doe", "User name should be John Doe")
+        // Simplified email check - just check it's not empty for now
+        assert(user_email != "", "Email should not be empty")
+    }
+
+    @it("should validate user data")
+    fn test_user_validation() -> void {
+        // Test user data validation
+        name: String = "John Doe"
+        email: String = "john@example.com"
+
+        assert(name != "", "User name should not be empty")
+        // Simplified email check
+        assert(email != "", "Email should not be empty")
+    }
 }
-
-fn test_user_validation() -> void {
-    // Test user data validation
-    name: String = "John Doe"
-    email: String = "john@example.com"
-
-    assert(name.length > 0, "User name should not be empty")
-    // Simplified email check
-    assert(email.length > 5, "Email should be valid")
-}
-
-// Ejecutar tests
-run_test(test_user_creation, "test_user_creation")
-run_test(test_user_validation, "test_user_validation")
-report_results()

@@ -1,0 +1,405 @@
+//! Reactive UI Specs - Testing reactive programming and UI components in Vela
+//! This demonstrates advanced BDD testing patterns
+
+@describe("Reactive Programming")
+module ReactiveSpec {
+
+    @describe("Signals and Computed Values")
+    module SignalsSpec {
+
+        @it("should create and update signals")
+        fn test_signal_creation() -> void {
+            let count = signal(0)
+
+            assert_eq(count(), 0, "Initial signal value should be 0")
+
+            count.set(5)
+            assert_eq(count(), 5, "Signal value should update to 5")
+        }
+
+        @it("should compute derived values")
+        fn test_computed_values() -> void {
+            let base = signal(10)
+            let doubled = computed(() => base() * 2)
+            let description = computed(() => "Value: ${base()}")
+
+            assert_eq(doubled(), 20, "Computed value should be doubled")
+            assert_eq(description(), "Value: 10", "Computed string should interpolate")
+
+            base.set(15)
+            assert_eq(doubled(), 30, "Computed value should update reactively")
+            assert_eq(description(), "Value: 15", "Computed string should update reactively")
+        }
+
+        @it("should handle effect dependencies")
+        fn test_effects() -> void {
+            let count = signal(0)
+            let messages: List<String> = []
+
+            effect(() => {
+                let current = count()
+                messages.push("Count changed to: ${current}")
+            })
+
+            count.set(1)
+            count.set(2)
+            count.set(3)
+
+            assert_eq(messages.length(), 4, "Should have 4 messages (initial + 3 updates)")
+            assert_eq(messages[0], "Count changed to: 0", "Initial effect should run")
+            assert_eq(messages[3], "Count changed to: 3", "Last effect should run")
+        }
+    }
+
+    @describe("State Management")
+    module StateManagementSpec {
+
+        @it("should manage complex state")
+        fn test_complex_state() -> void {
+            type User = {
+                id: Number,
+                name: String,
+                email: String,
+                active: Bool
+            }
+
+            let user = signal<User>({
+                id: 1,
+                name: "Alice",
+                email: "alice@example.com",
+                active: true
+            })
+
+            // Test initial state
+            assert_eq(user().name, "Alice", "User name should be Alice")
+            assert_eq(user().active, true, "User should be active")
+
+            // Update state
+            user.update(current => {
+                return {
+                    ...current,
+                    name: "Alice Smith",
+                    active: false
+                }
+            })
+
+            assert_eq(user().name, "Alice Smith", "Name should be updated")
+            assert_eq(user().active, false, "User should be inactive")
+        }
+
+        @it("should handle state validation")
+        fn test_state_validation() -> void {
+            let email = signal("invalid-email")
+
+            let isValidEmail = computed(() => {
+                let email_val = email()
+                return email_val.contains("@") && email_val.contains(".")
+            })
+
+            assert_eq(isValidEmail(), false, "Invalid email should not be valid")
+
+            email.set("valid@example.com")
+            assert_eq(isValidEmail(), true, "Valid email should be valid")
+        }
+    }
+}
+
+@describe("UI Components")
+module UiComponentsSpec {
+
+    @describe("Button Component")
+    module ButtonSpec {
+
+        @it("should render button with text")
+        fn test_button_rendering() -> void {
+            let buttonText = signal("Click me")
+            let clickCount = signal(0)
+
+            let button = Button(
+                text: buttonText,
+                onClick: () => clickCount.set(clickCount() + 1)
+            )
+
+            // Test initial rendering
+            assert_eq(button.text, "Click me", "Button should display initial text")
+            assert_eq(clickCount(), 0, "Click count should start at 0")
+
+            // Simulate click
+            button.click()
+            assert_eq(clickCount(), 1, "Click count should increment")
+
+            // Test reactive text update
+            buttonText.set("Clicked!")
+            assert_eq(button.text, "Clicked!", "Button text should update reactively")
+        }
+
+        @it("should handle disabled state")
+        fn test_button_disabled() -> void {
+            let isDisabled = signal(false)
+            let clickCount = signal(0)
+
+            let button = Button(
+                text: "Test Button",
+                disabled: isDisabled,
+                onClick: () => clickCount.set(clickCount() + 1)
+            )
+
+            // Button should work when enabled
+            button.click()
+            assert_eq(clickCount(), 1, "Click should work when enabled")
+
+            // Disable button
+            isDisabled.set(true)
+
+            // Click should be ignored when disabled
+            button.click()
+            assert_eq(clickCount(), 1, "Click should be ignored when disabled")
+        }
+    }
+
+    @describe("List Component")
+    module ListSpec {
+
+        @it("should render list of items")
+        fn test_list_rendering() -> void {
+            let items = signal<List<String>>(["Apple", "Banana", "Cherry"])
+
+            let list = List(
+                items: items,
+                renderItem: (item) => Text("Item: ${item}")
+            )
+
+            assert_eq(list.children.length(), 3, "List should have 3 children")
+
+            // Add item reactively
+            items.update(current => [...current, "Date"])
+            assert_eq(list.children.length(), 4, "List should update when items change")
+        }
+
+        @it("should handle empty list")
+        fn test_empty_list() -> void {
+            let items = signal<List<String>>([])
+
+            let list = List(
+                items: items,
+                emptyMessage: "No items found"
+            )
+
+            assert_eq(list.children.length(), 0, "Empty list should have no children")
+            assert_eq(list.emptyText, "No items found", "Should show empty message")
+        }
+    }
+
+    @describe("Form Components")
+    module FormSpec {
+
+        @it("should handle form input")
+        fn test_form_input() -> void {
+            let name = signal("")
+            let email = signal("")
+            let isSubmitted = signal(false)
+
+            let form = Form(
+                children: [
+                    TextInput(
+                        value: name,
+                        placeholder: "Enter name"
+                    ),
+                    EmailInput(
+                        value: email,
+                        placeholder: "Enter email"
+                    ),
+                    Button(
+                        text: "Submit",
+                        onClick: () => isSubmitted.set(true)
+                    )
+                ]
+            )
+
+            // Simulate user input
+            name.set("John Doe")
+            email.set("john@example.com")
+
+            assert_eq(name(), "John Doe", "Name should be updated")
+            assert_eq(email(), "john@example.com", "Email should be updated")
+            assert_eq(isSubmitted(), false, "Form should not be submitted yet")
+
+            // Submit form
+            form.submit()
+            assert_eq(isSubmitted(), true, "Form should be submitted")
+        }
+
+        @it("should validate form fields")
+        fn test_form_validation() -> void {
+            let email = signal("invalid-email")
+            let isValid = signal(false)
+
+            let form = Form(
+                children: [
+                    EmailInput(
+                        value: email,
+                        onValidate: (value) => value.contains("@") && value.contains(".")
+                    )
+                ],
+                onValidationChange: (valid) => isValid.set(valid)
+            )
+
+            assert_eq(isValid(), false, "Form should be invalid initially")
+
+            email.set("valid@example.com")
+            assert_eq(isValid(), true, "Form should be valid with correct email")
+        }
+    }
+}
+
+@describe("Integration Tests")
+module IntegrationSpec {
+
+    @it("should handle complex reactive workflows")
+    fn test_complex_workflow() -> void {
+        // User management system simulation
+        type User = {
+            id: Number,
+            name: String,
+            email: String,
+            role: String
+        }
+
+        let users = signal<List<User>>([
+            { id: 1, name: "Alice", email: "alice@company.com", role: "admin" },
+            { id: 2, name: "Bob", email: "bob@company.com", role: "user" },
+            { id: 3, name: "Charlie", email: "charlie@company.com", role: "user" }
+        ])
+
+        let searchTerm = signal("")
+        let selectedRole = signal("all")
+
+        // Computed: filtered users based on search and role
+        let filteredUsers = computed(() => {
+            let term = searchTerm().toLowerCase()
+            let role = selectedRole()
+
+            return users().filter(user => {
+                let matchesSearch = term == "" ||
+                    user.name.toLowerCase().contains(term) ||
+                    user.email.toLowerCase().contains(term)
+
+                let matchesRole = role == "all" || user.role == role
+
+                return matchesSearch && matchesRole
+            })
+        })
+
+        // Test initial state
+        assert_eq(filteredUsers().length(), 3, "Should show all users initially")
+
+        // Test search filtering
+        searchTerm.set("alice")
+        assert_eq(filteredUsers().length(), 1, "Should filter to Alice only")
+        assert_eq(filteredUsers()[0].name, "Alice", "Should find Alice")
+
+        // Test role filtering
+        searchTerm.set("")
+        selectedRole.set("admin")
+        assert_eq(filteredUsers().length(), 1, "Should show only admins")
+        assert_eq(filteredUsers()[0].role, "admin", "Should find admin user")
+
+        // Test combined filtering
+        searchTerm.set("b")
+        selectedRole.set("user")
+        assert_eq(filteredUsers().length(), 1, "Should find Bob as user")
+        assert_eq(filteredUsers()[0].name, "Bob", "Should find Bob")
+    }
+}
+
+// Helper functions and mocks
+fn signal<T>(initial: T) -> Signal<T> {
+    // Mock implementation - in real Vela this would be built-in
+    return Signal { value: initial }
+}
+
+fn computed<T>(fn: () -> T) -> Computed<T> {
+    // Mock implementation
+    return Computed { value: fn() }
+}
+
+fn effect(fn: () -> void) -> void {
+    // Mock implementation - would track dependencies in real Vela
+    fn()
+}
+
+// UI Component mocks
+struct Button {
+    text: String,
+    disabled: Bool,
+    onClick: () -> void
+
+    fn click() -> void {
+        if !this.disabled {
+            this.onClick()
+        }
+    }
+}
+
+fn Button(props: any) -> Button {
+    return Button {
+        text: props.text,
+        disabled: props.disabled || false,
+        onClick: props.onClick
+    }
+}
+
+struct List<T> {
+    children: List<any>,
+    emptyText: String
+}
+
+fn List<T>(props: any) -> List<T> {
+    if props.items.length() == 0 {
+        return List {
+            children: [],
+            emptyText: props.emptyMessage || "No items"
+        }
+    }
+
+    let children = props.items.map(props.renderItem)
+    return List {
+        children: children,
+        emptyText: ""
+    }
+}
+
+struct Form {
+    children: List<any>,
+    isValid: Bool
+
+    fn submit() -> void {
+        // Mock submit logic
+    }
+}
+
+fn Form(props: any) -> Form {
+    return Form {
+        children: props.children,
+        isValid: true
+    }
+}
+
+fn TextInput(props: any) -> any { return props }
+fn EmailInput(props: any) -> any { return props }
+fn Text(content: String) -> any { return content }
+
+// Signal/Computed types
+struct Signal<T> {
+    value: T
+
+    fn get() -> T { return this.value }
+    fn set(value: T) -> void { this.value = value }
+    fn update(fn: (T) -> T) -> void { this.value = fn(this.value) }
+}
+
+struct Computed<T> {
+    value: T
+
+    fn get() -> T { return this.value }
+}
