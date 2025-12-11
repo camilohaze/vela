@@ -3,7 +3,7 @@
 //! This module handles parsing and code generation for resilience decorators
 //! like @circuitBreaker, @retry, @timeout, @bulkhead, and @fallback.
 
-use crate::ast::{Decorator, Expression, Statement, TypeAnnotation};
+use crate::ast::{Decorator, Expression, Literal, Statement, TypeAnnotation};
 use crate::error::CompileError;
 use std::collections::HashMap;
 
@@ -437,8 +437,8 @@ mod tests {
         let decorator = Decorator {
             name: "circuitBreaker".to_string(),
             arguments: vec![
-                Expression::Literal(crate::ast::Literal::new(range, serde_json::json!(3), "number".to_string())),
-                Expression::Literal(crate::ast::Literal::new(range, serde_json::json!(15000), "number".to_string())),
+                Expression::Literal(crate::ast::Literal::new(range.clone(), serde_json::json!(3), "number".to_string())),
+                Expression::Literal(crate::ast::Literal::new(range.clone(), serde_json::json!(15000), "number".to_string())),
             ],
             range,
         };
@@ -456,9 +456,9 @@ mod tests {
         let decorator = Decorator {
             name: "retry".to_string(),
             arguments: vec![
-                Expression::Literal(crate::ast::Literal::new(range, serde_json::json!(5), "number".to_string())),
-                Expression::Literal(crate::ast::Literal::new(range, serde_json::json!(500), "number".to_string())),
-                Expression::Literal(crate::ast::Literal::new(range, serde_json::json!(1.5), "number".to_string())),
+                Expression::Literal(crate::ast::Literal::new(range.clone(), serde_json::json!(5), "number".to_string())),
+                Expression::Literal(crate::ast::Literal::new(range.clone(), serde_json::json!(500), "number".to_string())),
+                Expression::Literal(crate::ast::Literal::new(range.clone(), serde_json::json!(1.5), "number".to_string())),
             ],
             range,
         };
@@ -485,5 +485,120 @@ mod tests {
         assert!(code.contains("success_threshold: 1"));
         assert!(code.contains("call_timeout: std::time::Duration::from_millis(5000)"));
         assert!(code.contains("vela_runtime::resilience::with_circuit_breaker"));
+    }
+
+    #[test]
+    fn test_parse_timeout_decorator() {
+        // Test with duration argument
+        let range1 = crate::ast::create_range(1, 1, 1, 10);
+        let decorator = Decorator {
+            name: "timeout".to_string(),
+            arguments: vec![Expression::Literal(crate::ast::Literal::new(
+                range1.clone(),
+                serde_json::json!(5000),
+                "number".to_string(),
+            ))],
+            range: range1,
+        };
+
+        let config = parse_timeout_decorator(&decorator).unwrap();
+        assert_eq!(config.duration, 5000);
+
+        // Test with no arguments (default)
+        let range2 = crate::ast::create_range(1, 1, 1, 10);
+        let decorator_no_args = Decorator {
+            name: "timeout".to_string(),
+            arguments: vec![],
+            range: range2,
+        };
+
+        let config_default = parse_timeout_decorator(&decorator_no_args).unwrap();
+        assert_eq!(config_default.duration, 30000); // default 30 seconds
+    }
+
+    #[test]
+    fn test_generate_timeout_code() {
+        let config = TimeoutDecorator {
+            duration: 10000, // 10 seconds
+        };
+
+        let code = generate_timeout_code(&config, "test_function", "original_body();");
+
+        assert!(code.contains("duration: std::time::Duration::from_millis(10000)"));
+        assert!(code.contains("vela_runtime::resilience::with_timeout"));
+        assert!(code.contains("test_function"));
+        assert!(code.contains("original_body();"));
+    }
+
+    #[test]
+    fn test_parse_bulkhead_decorator() {
+        // Test with both arguments
+        let range1 = crate::ast::create_range(1, 1, 1, 20);
+        let decorator = Decorator {
+            name: "bulkhead".to_string(),
+            arguments: vec![
+                Expression::Literal(crate::ast::Literal::new(
+                    range1.clone(),
+                    serde_json::json!(5),
+                    "number".to_string(),
+                )),
+                Expression::Literal(crate::ast::Literal::new(
+                    range1.clone(),
+                    serde_json::json!(20),
+                    "number".to_string(),
+                )),
+            ],
+            range: range1,
+        };
+
+        let config = parse_bulkhead_decorator(&decorator).unwrap();
+        assert_eq!(config.max_concurrent, 5);
+        assert_eq!(config.queue_size, 20);
+
+        // Test with one argument
+        let range2 = crate::ast::create_range(1, 1, 1, 15);
+        let decorator_one_arg = Decorator {
+            name: "bulkhead".to_string(),
+            arguments: vec![
+                Expression::Literal(crate::ast::Literal::new(
+                    range2.clone(),
+                    serde_json::json!(3),
+                    "number".to_string(),
+                )),
+            ],
+            range: range2,
+        };
+
+        let config_one = parse_bulkhead_decorator(&decorator_one_arg).unwrap();
+        assert_eq!(config_one.max_concurrent, 3);
+        assert_eq!(config_one.queue_size, 50); // default
+
+        // Test with no arguments (defaults)
+        let range3 = crate::ast::create_range(1, 1, 1, 10);
+        let decorator_no_args = Decorator {
+            name: "bulkhead".to_string(),
+            arguments: vec![],
+            range: range3,
+        };
+
+        let config_default = parse_bulkhead_decorator(&decorator_no_args).unwrap();
+        assert_eq!(config_default.max_concurrent, 10); // default
+        assert_eq!(config_default.queue_size, 50); // default
+    }
+
+    #[test]
+    fn test_generate_bulkhead_code() {
+        let config = BulkheadDecorator {
+            max_concurrent: 5,
+            queue_size: 20,
+        };
+
+        let code = generate_bulkhead_code(&config, "test_function", "original_body();");
+
+        assert!(code.contains("max_concurrent: 5"));
+        assert!(code.contains("queue_size: 20"));
+        assert!(code.contains("vela_runtime::resilience::with_bulkhead"));
+        assert!(code.contains("test_function"));
+        assert!(code.contains("original_body();"));
     }
 }

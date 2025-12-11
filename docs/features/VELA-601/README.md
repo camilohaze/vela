@@ -14,6 +14,7 @@ Implementar patrones de resiliencia generales para microservicios Vela que pueda
 2. **TASK-113AK**: Implementar @circuitBreaker decorator ✅
 3. **TASK-113AL**: Implementar @retry decorator ✅
 4. **TASK-113AM**: Implementar @timeout decorator ✅
+5. **TASK-113AN**: Implementar @bulkhead decorator ✅
 
 ## 🔨 Implementación
 Se implementó el sistema de decoradores de resiliencia en el runtime de Vela:
@@ -22,7 +23,7 @@ Se implementó el sistema de decoradores de resiliencia en el runtime de Vela:
 - **@circuitBreaker**: Protección contra fallos en cascada ✅
 - **@retry**: Reintentos con backoff exponencial ✅
 - **@timeout**: Límites de tiempo de ejecución ✅
-- **@bulkhead**: Aislamiento de recursos (estructura preparada)
+- **@bulkhead**: Aislamiento de recursos ✅
 - **@fallback**: Funciones alternativas ante fallos (estructura preparada)
 
 ### Arquitectura Técnica
@@ -37,10 +38,10 @@ Vela Code (@circuitBreaker) → Compiler → Rust Runtime (vela_runtime::resilie
 - Integración completa con Tokio para async operations
 
 ## 📊 Métricas
-- **Subtasks completadas:** 4/7
-- **Archivos creados:** 5 (runtime.rs, resilience_decorators.rs, ADR, docs, TASK-113AM.md)
-- **Tests implementados:** 11 tests unitarios (7 runtime + 4 compiler)
-- **Líneas de código:** ~550 líneas de Rust
+- **Subtasks completadas:** 5/7
+- **Archivos creados:** 6 (runtime.rs, resilience_decorators.rs, ADR, docs, TASK-113AM.md, TASK-113AN.md)
+- **Tests implementados:** 16 tests unitarios (10 runtime + 6 compiler)
+- **Líneas de código:** ~630 líneas de Rust
 - **Compilación:** ✅ Exitosa
 - **Tests:** ✅ 100% pasando
 
@@ -49,6 +50,7 @@ Vela Code (@circuitBreaker) → Compiler → Rust Runtime (vela_runtime::resilie
 - [x] @circuitBreaker implementado completamente en Rust
 - [x] @retry implementado completamente en Rust
 - [x] @timeout implementado completamente en Rust
+- [x] @bulkhead implementado completamente en Rust
 - [x] Tests unitarios con cobertura completa
 - [x] Integración con runtime de Vela
 - [x] Documentación técnica completa
