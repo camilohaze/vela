@@ -19,6 +19,9 @@ pub use state_management as state_management;
 // Resilience patterns
 pub mod resilience;
 
+// Observability
+pub mod observability;
+
 // Modules
 // pub mod store;  // Movido a packages/state-management
 // pub mod action; // Movido a packages/state-management
