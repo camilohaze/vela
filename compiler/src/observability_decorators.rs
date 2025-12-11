@@ -3,8 +3,8 @@
 //! This module handles parsing and code generation for observability decorators
 //! like @traced, @metered, and @logged.
 
-use crate::ast::{Decorator, Expression, Literal, Statement, TypeAnnotation};
-use crate::error::CompileError;
+use crate::ast::{Decorator, Expression, Literal, Statement, TypeAnnotation, BinaryExpression};
+use crate::error::{CompileError, ParseError, SourceLocation};
 use std::collections::HashMap;
 
 /// Enum representing all observability decorators
@@ -28,6 +28,14 @@ pub struct MeteredDecorator {
     pub name: String,
     pub help: Option<String>,
     pub labels: HashMap<String, String>,
+}
+
+/// Logged decorator configuration
+#[derive(Debug, Clone)]
+pub struct LoggedDecorator {
+    pub level: String,
+    pub message: Option<String>,
+    pub fields: HashMap<String, String>,
 }
 
 /// Parse observability decorators from a list of decorators
@@ -85,29 +93,46 @@ pub fn parse_traced_decorator(
     let mut name = String::new();
     let mut tags = HashMap::new();
 
-    if let Some(args) = &decorator.arguments {
-        for (i, arg) in args.iter().enumerate() {
-            match i {
-                0 => {
-                    // First argument is the name
-                    match arg {
-                        Expression::Literal(Literal::String(s)) => {
-                            name = s.clone();
-                        }
-                        _ => {
-                            return Err(CompileError::ParseError(format!(
-                                "Expected string literal for traced decorator name, got {:?}",
-                                arg
-                            )));
-                        }
+    for (i, arg) in decorator.arguments.iter().enumerate() {
+        match i {
+            0 => {
+                // First argument is the name
+                match arg {
+                    Expression::Literal(lit) if lit.kind == "string" => {
+                        name = lit.value.as_str()
+                            .ok_or_else(|| CompileError::Parse(ParseError {
+                                message: "Invalid string literal for traced decorator name".to_string(),
+                                location: SourceLocation::new(lit.node.range.start.line, lit.node.range.start.column, 0),
+                                expected: vec!["string".to_string()],
+                            }))?
+                            .to_string();
+                    }
+                    _ => {
+                        return Err(CompileError::Parse(ParseError {
+                            message: format!("Expected string literal for traced decorator name, got {:?}", arg),
+                            location: SourceLocation::new(decorator.range.start.line, decorator.range.start.column, 0),
+                            expected: vec!["string".to_string()],
+                        }));
                     }
                 }
-                _ => {
-                    // Additional arguments are key-value pairs for tags
-                    if let Expression::Assignment { left, right } = arg {
+            }
+            _ => {
+                // Additional arguments are key-value pairs for tags
+                if let Expression::Binary(BinaryExpression { left, operator, right, .. }) = arg {
+                    if operator == "=" {
                         if let Expression::Identifier(key) = left.as_ref() {
-                            if let Expression::Literal(Literal::String(value)) = right.as_ref() {
-                                tags.insert(key.clone(), value.clone());
+                            if let Expression::Literal(value) = right.as_ref() {
+                                if value.kind == "string" {
+                                    let key_str = key.name.clone();
+                                    let value_str = value.value.as_str()
+                                        .ok_or_else(|| CompileError::Parse(ParseError {
+                                            message: format!("Invalid string value for tag '{}'", key_str),
+                                            location: SourceLocation::new(value.node.range.start.line, value.node.range.start.column, 0),
+                                            expected: vec!["string".to_string()],
+                                        }))?
+                                        .to_string();
+                                    tags.insert(key_str, value_str);
+                                }
                             }
                         }
                     }
@@ -117,9 +142,11 @@ pub fn parse_traced_decorator(
     }
 
     if name.is_empty() {
-        return Err(CompileError::ParseError(
-            "Traced decorator requires a name argument".to_string(),
-        ));
+        return Err(CompileError::Parse(ParseError {
+            message: "Traced decorator requires a name argument".to_string(),
+            location: SourceLocation::new(decorator.range.start.line, decorator.range.start.column, 0),
+            expected: vec!["name string".to_string()],
+        }));
     }
 
     Ok(TracedDecorator { name, tags })
@@ -133,43 +160,67 @@ pub fn parse_metered_decorator(
     let mut help = None;
     let mut labels = HashMap::new();
 
-    if let Some(args) = &decorator.arguments {
-        for (i, arg) in args.iter().enumerate() {
-            match i {
-                0 => {
-                    // First argument is the metric name
-                    match arg {
-                        Expression::Literal(Literal::String(s)) => {
-                            name = s.clone();
-                        }
-                        _ => {
-                            return Err(CompileError::ParseError(format!(
-                                "Expected string literal for metered decorator name, got {:?}",
-                                arg
-                            )));
-                        }
+    for (i, arg) in decorator.arguments.iter().enumerate() {
+        match i {
+            0 => {
+                // First argument is the metric name
+                match arg {
+                    Expression::Literal(lit) if lit.kind == "string" => {
+                        name = lit.value.as_str()
+                            .ok_or_else(|| CompileError::Parse(ParseError {
+                                message: "Invalid string literal for metered decorator name".to_string(),
+                                location: SourceLocation::new(lit.node.range.start.line, lit.node.range.start.column, 0),
+                                expected: vec!["string".to_string()],
+                            }))?
+                            .to_string();
+                    }
+                    _ => {
+                        return Err(CompileError::Parse(ParseError {
+                            message: format!("Expected string literal for metered decorator name, got {:?}", arg),
+                            location: SourceLocation::new(decorator.range.start.line, decorator.range.start.column, 0),
+                            expected: vec!["string".to_string()],
+                        }));
                     }
                 }
-                1 => {
-                    // Second argument is optional help text
-                    match arg {
-                        Expression::Literal(Literal::String(s)) => {
-                            help = Some(s.clone());
-                        }
-                        _ => {
-                            return Err(CompileError::ParseError(format!(
-                                "Expected string literal for metered decorator help, got {:?}",
-                                arg
-                            )));
-                        }
+            }
+            1 => {
+                // Second argument is optional help text
+                match arg {
+                    Expression::Literal(lit) if lit.kind == "string" => {
+                        help = Some(lit.value.as_str()
+                            .ok_or_else(|| CompileError::Parse(ParseError {
+                                message: "Invalid string literal for metered decorator help".to_string(),
+                                location: SourceLocation::new(lit.node.range.start.line, lit.node.range.start.column, 0),
+                                expected: vec!["string".to_string()],
+                            }))?
+                            .to_string());
+                    }
+                    _ => {
+                        return Err(CompileError::Parse(ParseError {
+                            message: format!("Expected string literal for metered decorator help, got {:?}", arg),
+                            location: SourceLocation::new(decorator.range.start.line, decorator.range.start.column, 0),
+                            expected: vec!["string".to_string()],
+                        }));
                     }
                 }
-                _ => {
-                    // Additional arguments are key-value pairs for labels
-                    if let Expression::Assignment { left, right } = arg {
+            }
+            _ => {
+                // Additional arguments are key-value pairs for labels
+                if let Expression::Binary(BinaryExpression { left, operator, right, .. }) = arg {
+                    if operator == "=" {
                         if let Expression::Identifier(key) = left.as_ref() {
-                            if let Expression::Literal(Literal::String(value)) = right.as_ref() {
-                                labels.insert(key.clone(), value.clone());
+                            if let Expression::Literal(value) = right.as_ref() {
+                                if value.kind == "string" {
+                                    let key_str = key.name.clone();
+                                    let value_str = value.value.as_str()
+                                        .ok_or_else(|| CompileError::Parse(ParseError {
+                                            message: format!("Invalid string value for label '{}'", key_str),
+                                            location: SourceLocation::new(value.node.range.start.line, value.node.range.start.column, 0),
+                                            expected: vec!["string".to_string()],
+                                        }))?
+                                        .to_string();
+                                    labels.insert(key_str, value_str);
+                                }
                             }
                         }
                     }
@@ -179,9 +230,11 @@ pub fn parse_metered_decorator(
     }
 
     if name.is_empty() {
-        return Err(CompileError::ParseError(
-            "Metered decorator requires a name argument".to_string(),
-        ));
+        return Err(CompileError::Parse(ParseError {
+            message: "Metered decorator requires a name argument".to_string(),
+            location: SourceLocation::new(decorator.range.start.line, decorator.range.start.column, 0),
+            expected: vec!["name string".to_string()],
+        }));
     }
 
     Ok(MeteredDecorator { name, help, labels })
@@ -195,46 +248,70 @@ pub fn parse_logged_decorator(
     let mut message = None;
     let mut fields = HashMap::new();
 
-    if let Some(args) = &decorator.arguments {
-        for (i, arg) in args.iter().enumerate() {
-            match i {
-                0 => {
-                    // First argument is the log level
-                    match arg {
-                        Expression::Literal(Literal::String(s)) => {
-                            level = s.clone();
-                        }
-                        Expression::Identifier(s) => {
-                            level = s.clone();
-                        }
-                        _ => {
-                            return Err(CompileError::ParseError(format!(
-                                "Expected string literal or identifier for logged decorator level, got {:?}",
-                                arg
-                            )));
-                        }
+    for (i, arg) in decorator.arguments.iter().enumerate() {
+        match i {
+            0 => {
+                // First argument is the log level
+                match arg {
+                    Expression::Literal(lit) if lit.kind == "string" => {
+                        level = lit.value.as_str()
+                            .ok_or_else(|| CompileError::Parse(ParseError {
+                                message: "Invalid string literal for logged decorator level".to_string(),
+                                location: SourceLocation::new(lit.node.range.start.line, lit.node.range.start.column, 0),
+                                expected: vec!["string".to_string()],
+                            }))?
+                            .to_string();
+                    }
+                    Expression::Identifier(id) => {
+                        level = id.name.clone();
+                    }
+                    _ => {
+                        return Err(CompileError::Parse(ParseError {
+                            message: format!("Expected string literal or identifier for logged decorator level, got {:?}", arg),
+                            location: SourceLocation::new(decorator.range.start.line, decorator.range.start.column, 0),
+                            expected: vec!["string or identifier".to_string()],
+                        }));
                     }
                 }
-                1 => {
-                    // Second argument is optional message
-                    match arg {
-                        Expression::Literal(Literal::String(s)) => {
-                            message = Some(s.clone());
-                        }
-                        _ => {
-                            return Err(CompileError::ParseError(format!(
-                                "Expected string literal for logged decorator message, got {:?}",
-                                arg
-                            )));
-                        }
+            }
+            1 => {
+                // Second argument is optional message
+                match arg {
+                    Expression::Literal(lit) if lit.kind == "string" => {
+                        message = Some(lit.value.as_str()
+                            .ok_or_else(|| CompileError::Parse(ParseError {
+                                message: "Invalid string literal for logged decorator message".to_string(),
+                                location: SourceLocation::new(lit.node.range.start.line, lit.node.range.start.column, 0),
+                                expected: vec!["string".to_string()],
+                            }))?
+                            .to_string());
+                    }
+                    _ => {
+                        return Err(CompileError::Parse(ParseError {
+                            message: format!("Expected string literal for logged decorator message, got {:?}", arg),
+                            location: SourceLocation::new(decorator.range.start.line, decorator.range.start.column, 0),
+                            expected: vec!["string".to_string()],
+                        }));
                     }
                 }
-                _ => {
-                    // Additional arguments are key-value pairs for fields
-                    if let Expression::Assignment { left, right } = arg {
+            }
+            _ => {
+                // Additional arguments are key-value pairs for fields
+                if let Expression::Binary(BinaryExpression { left, operator, right, .. }) = arg {
+                    if operator == "=" {
                         if let Expression::Identifier(key) = left.as_ref() {
-                            if let Expression::Literal(Literal::String(value)) = right.as_ref() {
-                                fields.insert(key.clone(), value.clone());
+                            if let Expression::Literal(value) = right.as_ref() {
+                                if value.kind == "string" {
+                                    let key_str = key.name.clone();
+                                    let value_str = value.value.as_str()
+                                        .ok_or_else(|| CompileError::Parse(ParseError {
+                                            message: format!("Invalid string value for field '{}'", key_str),
+                                            location: SourceLocation::new(value.node.range.start.line, value.node.range.start.column, 0),
+                                            expected: vec!["string".to_string()],
+                                        }))?
+                                        .to_string();
+                                    fields.insert(key_str, value_str);
+                                }
                             }
                         }
                     }
@@ -316,7 +393,9 @@ pub fn generate_metered_decorator_code(
 
     // Register histogram for duration
     let histogram_name = format!("{}_duration_seconds", decorator.name);
-    let help_text = decorator.help.as_ref().unwrap_or(&format!("Duration of {} function", function_name));
+    let help_text = decorator.help.as_ref()
+        .map(|s| s.clone())
+        .unwrap_or_else(|| format!("Duration of {} function", function_name));
     code.push_str(&format!(
         "let __duration_histogram_result = __metrics_registry.register_histogram(\n\
          \"{}\",\n\
@@ -349,28 +428,6 @@ pub fn generate_metered_decorator_code(
 
     Ok(code)
 }
-        "let __calls_counter = __metrics_registry.register_counter(\n\
-         \"{}\",\n\
-         \"Total number of {} calls\"\n\
-         ).await.map_err(|e| format!(\"Failed to register counter: {{}}\", e))?;\n",
-        counter_name, function_name
-    ));
-
-    // Start timing
-    code.push_str("let __start_time = std::time::Instant::now();\n");
-
-    // Record call
-    code.push_str("if let Some(counter) = __metrics_registry.get_counter(\"");
-    code.push_str(&counter_name);
-    code.push_str("\").await {\n");
-    code.push_str("    counter.increment().await;\n");
-    code.push_str("}\n");
-
-    // Function call wrapper
-    code.push_str("let __result = (|| async move {\n");
-
-    Ok(code)
-}
 
 /// Generate code for logged decorator
 pub fn generate_logged_decorator_code(
@@ -383,14 +440,19 @@ pub fn generate_logged_decorator_code(
     code.push_str("use vela_runtime::observability::{get_logger, LogRecord, Level};\n");
 
     // Get logger
+    let level_str = decorator.level.clone();
+    let message_str = decorator.message.as_ref()
+        .map(|s| s.clone())
+        .unwrap_or_else(|| format!("Calling {}", function_name));
+
     code.push_str("let __logger = match get_logger().await {\n\
                    Some(logger) => logger,\n\
                    None => {\n\
                        // Fallback to println if logging not initialized\n\
                        println!(\"[{}] {}: Function {} called\", \"");
-    code.push_str(&decorator.level);
+    code.push_str(&level_str);
     code.push_str("\", \"");
-    code.push_str(&decorator.message.as_ref().unwrap_or(&format!("Calling {}", function_name)));
+    code.push_str(&message_str);
     code.push_str("\", \"");
     code.push_str(function_name);
     code.push_str("\");\n\
@@ -425,7 +487,8 @@ pub fn generate_logged_decorator_code(
         _ => "Level::INFO",
     };
 
-    let message = decorator.message.as_ref().unwrap_or(&format!("Calling {}", function_name));
+    let default_message = format!("Calling {}", function_name);
+    let message = decorator.message.as_ref().unwrap_or(&default_message);
 
     code.push_str(&format!(
         "__logger.log_with_fields({}, \"{}\", __log_fields).await?;\n",
