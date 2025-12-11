@@ -21,7 +21,7 @@ Como desarrollador, quiero un ORM type-safe para acceso a base de datos que me p
 3. **TASK-113AY**: Implementar query builder type-safe ⏳
 4. **TASK-113AZ**: Implementar relations (@oneToMany, @manyToOne) ⏳
 5. **TASK-113BA**: Implementar migrations system ⏳
-6. **TASK-113BB**: Implementar connection pooling ⏳
+6. **TASK-113BB**: Implementar connection pooling ✅
 7. **TASK-113BC**: Tests de ORM ⏳
 
 ## 🔨 Implementación
