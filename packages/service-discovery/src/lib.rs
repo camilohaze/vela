@@ -181,9 +181,11 @@ mod tests {
 
 // Re-export modules
 pub mod consul;
+pub mod eureka;
 pub mod in_memory;
 
 pub use consul::{ConsulRegistry, ConsulConfig};
+pub use eureka::{EurekaRegistry, EurekaConfig};
 pub use in_memory::InMemoryRegistry;
 
 /// Service discovery client that manages service registration and discovery

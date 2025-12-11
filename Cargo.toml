@@ -21,6 +21,7 @@ members = [
     "packages/pipe-decorators",
     "packages/test-decorators",
     "packages/state-management",
+    "packages/service-discovery",
     "bin",
 ]
 exclude = [
