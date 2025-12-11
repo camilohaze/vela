@@ -21,3 +21,15 @@ tower-http = { version = "0.5", features = ["cors", "trace"] }
 
 [dev-dependencies]
 tokio-test = "0.4"
+
+[[test]]
+name = "integration_tests"
+path = "tests/integration_tests.rs"
+
+[[test]]
+name = "load_tests"
+path = "tests/load_tests.rs"
+
+[[test]]
+name = "edge_case_tests"
+path = "tests/edge_case_tests.rs"
