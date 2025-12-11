@@ -62,6 +62,18 @@ service UserService {
         @logged(level="debug", message="Listing users with limit: ${limit}")
         return repository.findAll().take(limit)
     }
+
+    @traced(name="validate_user_data", tags={"service": "user-service", "operation": "validation"})
+    fn validateUserData(name: String, email: String) -> Result<(), ValidationError> {
+        // Validación de datos de usuario
+        if name.len() < 2 {
+            return Err(ValidationError("Name too short"))
+        }
+        if !email.contains("@") {
+            return Err(ValidationError("Invalid email format"))
+        }
+        Ok(())
+    }
 }
 
 // Controlador HTTP con observability
@@ -97,6 +109,15 @@ controller UserController {
             None => Err(HttpError(404, "User not found"))
         }
     }
+
+    @post("/users/:id/validate")
+    @traced(name="validate_user_endpoint", tags={"controller": "UserController", "method": "POST"})
+    async fn validateUser(@path id: String, @body data: UserData) -> Result<ValidationResult, HttpError> {
+        match service.validateUserData(data.name, data.email) {
+            Ok(()) => Ok(ValidationResult { valid: true, errors: [] })
+            Err(validationError) => Ok(ValidationResult { valid: false, errors: [validationError.message] })
+        }
+    }
 }
 
 // Función utilitaria con métricas
@@ -108,6 +129,7 @@ fn generateId() -> String {
 // Función con timeout y métricas
 @metered(name="external_api_calls_total", help="Total number of external API calls")
 @timeout(5000) // 5 segundos timeout
+@traced(name="call_external_api", tags={"service": "external", "api": "user-validation"})
 async fn callExternalAPI(url: String) -> Result<String, Error> {
     @logged(level="debug", message="Calling external API: ${url}")
     return await httpClient.get(url)
@@ -116,10 +138,70 @@ async fn callExternalAPI(url: String) -> Result<String, Error> {
 // Función con circuit breaker
 @circuitBreaker(failureThreshold=5, recoveryTimeout=30000)
 @metered(name="circuit_breaker_calls_total", help="Total number of circuit breaker protected calls")
+@traced(name="circuit_breaker_operation", tags={"pattern": "circuit-breaker", "service": "unreliable"})
 async fn unreliableServiceCall() -> Result<String, Error> {
     // Simular servicio poco confiable
     if random() < 0.3 { // 30% de probabilidad de fallo
         throw Error("Service temporarily unavailable")
     }
     return "Success"
+}
+
+// Servicio de notificaciones con tracing distribuido
+service NotificationService {
+    @traced(name="send_email", tags={"service": "notification", "channel": "email"})
+    async fn sendEmail(to: String, subject: String, body: String) -> Result<(), Error> {
+        @logged(level="info", message="Sending email to: ${to}")
+        // Simular envío de email
+        await sleep(100) // Simular latencia
+        Ok(())
+    }
+
+    @traced(name="send_push_notification", tags={"service": "notification", "channel": "push"})
+    async fn sendPushNotification(userId: String, message: String) -> Result<(), Error> {
+        @logged(level="info", message="Sending push notification to user: ${userId}")
+        // Simular envío de push notification
+        await sleep(50)
+        Ok(())
+    }
+}
+
+// Orquestador que combina múltiples servicios con tracing
+@traced(name="user_registration_flow", tags={"flow": "registration", "services": "user+notification"})
+async fn registerUser(name: String, email: String) -> Result<User, Error> {
+    @logged(level="info", message="Starting user registration flow")
+
+    // Paso 1: Crear usuario (span hijo)
+    @traced(name="create_user_step", tags={"step": "1", "operation": "create"})
+    let user = match service.createUser(name, email) {
+        Ok(user) => user,
+        Err(error) => {
+            @logged(level="error", message="Failed to create user: ${error.message}")
+            return Err(error)
+        }
+    }
+
+    // Paso 2: Enviar email de bienvenida (span hijo)
+    @traced(name="send_welcome_email", tags={"step": "2", "operation": "notification"})
+    match notificationService.sendEmail(email, "Welcome!", "Welcome to our platform!") {
+        Ok(()) => @logged(level="info", message="Welcome email sent to: ${email}"),
+        Err(error) => @logged(level="warn", message="Failed to send welcome email: ${error.message}")
+    }
+
+    // Paso 3: Enviar push notification (span hijo)
+    @traced(name="send_welcome_push", tags={"step": "3", "operation": "notification"})
+    match notificationService.sendPushNotification(user.id, "Welcome to our app!") {
+        Ok(()) => @logged(level="info", message="Welcome push sent to user: ${user.id}"),
+        Err(error) => @logged(level="warn", message="Failed to send welcome push: ${error.message}")
+    }
+
+    @logged(level="info", message="User registration completed: ${user.id}")
+    Ok(user)
+}
+
+// Función utilitaria con métricas
+@metered(name="utility_generate_id_total", help="Total number of ID generations")
+@traced(name="generate_unique_id", tags={"utility": "id-generation", "algorithm": "uuid"})
+fn generateId() -> String {
+    return randomUUID()
 }

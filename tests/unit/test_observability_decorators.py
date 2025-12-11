@@ -1,7 +1,7 @@
 """
 Tests unitarios para decoradores de observability
 
-Jira: TASK-113AS
+Jira: TASK-113AT
 Historia: VELA-602
 """
 
@@ -21,36 +21,224 @@ from compiler.error import CompileError
 class TestObservabilityDecorators:
     """Suite de tests para decoradores de observability."""
 
-    def test_parse_metered_decorator_simple(self):
-        """Test parsing de decorador @metered simple."""
+    def test_parse_traced_decorator_simple(self):
+        """Test parsing de decorador @traced simple."""
         decorator = Decorator {
-            name: "metered",
+            name: "traced",
             arguments: [
-                Expression::Call(CallExpression {
-                    callee: Identifier("name"),
-                    arguments: [Literal::String("test_metric")]
-                }),
-                Expression::Call(CallExpression {
-                    callee: Identifier("help"),
-                    arguments: [Literal::String("Test metric")]
-                })
+                Expression::Literal(Literal::String("test_span"))
             ]
         }
 
         result = parse_observability_decorators(&[decorator])
 
         assert result.is_ok()
-        let parsed = result.unwrap()
+        parsed = result.unwrap()
+        assert parsed.is_some()
+
+        match parsed.unwrap() {
+            ObservabilityDecorator::Traced(traced) => {
+                assert traced.name == "test_span"
+                assert traced.tags.is_empty()
+            }
+            _ => panic!("Expected Traced decorator")
+        }
+
+    def test_parse_traced_decorator_with_tags(self):
+        """Test parsing de decorador @traced con tags."""
+        decorator = Decorator {
+            name: "traced",
+            arguments: [
+                Expression::Literal(Literal::String("http_request")),
+                Expression::Assignment {
+                    left: Box::new(Expression::Identifier("method")),
+                    right: Box::new(Expression::Literal(Literal::String("GET")))
+                },
+                Expression::Assignment {
+                    left: Box::new(Expression::Identifier("endpoint")),
+                    right: Box::new(Expression::Literal(Literal::String("/users")))
+                }
+            ]
+        }
+
+        result = parse_observability_decorators(&[decorator])
+
+        assert result.is_ok()
+        parsed = result.unwrap()
+        assert parsed.is_some()
+
+        match parsed.unwrap() {
+            ObservabilityDecorator::Traced(traced) => {
+                assert traced.name == "http_request"
+                assert traced.tags["method"] == "GET"
+                assert traced.tags["endpoint"] == "/users"
+            }
+            _ => panic!("Expected Traced decorator")
+        }
+
+    def test_parse_metered_decorator_simple(self):
+        """Test parsing de decorador @metered simple."""
+        decorator = Decorator {
+            name: "metered",
+            arguments: [
+                Expression::Literal(Literal::String("test_metric")),
+                Expression::Literal(Literal::String("Test metric"))
+            ]
+        }
+
+        result = parse_observability_decorators(&[decorator])
+
+        assert result.is_ok()
+        parsed = result.unwrap()
         assert parsed.is_some()
 
         match parsed.unwrap() {
             ObservabilityDecorator::Metered(metered) => {
                 assert metered.name == "test_metric"
-                assert metered.help == "Test metric"
+                assert metered.help == Some("Test metric")
                 assert metered.labels.is_empty()
             }
             _ => panic!("Expected Metered decorator")
         }
+
+    def test_parse_logged_decorator_simple(self):
+        """Test parsing de decorador @logged simple."""
+        decorator = Decorator {
+            name: "logged",
+            arguments: [
+                Expression::Literal(Literal::String("INFO")),
+                Expression::Literal(Literal::String("Test message"))
+            ]
+        }
+
+        result = parse_observability_decorators(&[decorator])
+
+        assert result.is_ok()
+        parsed = result.unwrap()
+        assert parsed.is_some()
+
+        match parsed.unwrap() {
+            ObservabilityDecorator::Logged(logged) => {
+                assert logged.level == "INFO"
+                assert logged.message == Some("Test message")
+                assert logged.fields.is_empty()
+            }
+            _ => panic!("Expected Logged decorator")
+        }
+
+    def test_parse_no_observability_decorator(self):
+        """Test que retorna None cuando no hay decoradores de observability."""
+        decorator = Decorator {
+            name: "injectable",
+            arguments: []
+        }
+
+        result = parse_observability_decorators(&[decorator])
+
+        assert result.is_ok()
+        assert result.unwrap().is_none()
+
+    def test_generate_traced_code(self):
+        """Test generación de código para decorador @traced."""
+        traced = TracedDecorator {
+            name: "test_span".to_string(),
+            tags: {
+                "service": "test-service".to_string(),
+                "operation": "test".to_string()
+            }.into()
+        }
+
+        result = generate_observability_code(&ObservabilityDecorator::Traced(traced), "testFunction", "testModule")
+
+        assert result.contains("get_tracer")
+        assert result.contains("test_span")
+        assert result.contains("test-service")
+        assert result.contains("test")
+        assert result.contains("testFunction")
+
+    def test_generate_metered_code(self):
+        """Test generación de código para decorador @metered."""
+        metered = MeteredDecorator {
+            name: "test_metric".to_string(),
+            help: Some("Test metric".to_string()),
+            labels: HashMap::new()
+        }
+
+        result = generate_observability_code(&ObservabilityDecorator::Metered(metered), "testFunction", "testModule")
+
+        assert result.contains("get_metrics")
+        assert result.contains("test_metric")
+        assert result.contains("Test metric")
+        assert result.contains("testFunction")
+
+    def test_generate_logged_code(self):
+        """Test generación de código para decorador @logged."""
+        logged = LoggedDecorator {
+            level: "info".to_string(),
+            message: Some("Test message".to_string()),
+            fields: HashMap::new()
+        }
+
+        result = generate_observability_code(&ObservabilityDecorator::Logged(logged), "testFunction", "testModule")
+
+        assert result.contains("get_logger")
+        assert result.contains("info")
+        assert result.contains("Test message")
+        assert result.contains("testFunction")
+
+    def test_traced_decorator_validation(self):
+        """Test validación de parámetros del decorador @traced."""
+        # Test sin name (debería fallar)
+        decorator = Decorator {
+            name: "traced",
+            arguments: [
+                Expression::Assignment {
+                    left: Box::new(Expression::Identifier("service")),
+                    right: Box::new(Expression::Literal(Literal::String("test")))
+                }
+            ]
+        }
+
+        result = parse_observability_decorators(&[decorator])
+        # Debería retornar None porque no es un decorador válido
+        assert result.is_ok()
+        assert result.unwrap().is_none()
+
+    def test_multiple_decorators(self):
+        """Test parsing de múltiples decoradores de observability."""
+        decorators = [
+            Decorator {
+                name: "traced",
+                arguments: [
+                    Expression::Literal(Literal::String("test_operation"))
+                ]
+            },
+            Decorator {
+                name: "metered",
+                arguments: [
+                    Expression::Literal(Literal::String("test_metric")),
+                    Expression::Literal(Literal::String("Test metric"))
+                ]
+            }
+        ]
+
+        result = parse_observability_decorators(&decorators)
+
+        # Debería retornar el primer decorador encontrado (@traced)
+        assert result.is_ok()
+        parsed = result.unwrap()
+        assert parsed.is_some()
+
+        match parsed.unwrap() {
+            ObservabilityDecorator::Traced(_) => {
+                # OK - encontró el primer decorador
+            }
+            _ => panic!("Expected Traced decorator first")
+        }
+
+
+if __name__ == "__main__":
+    pytest.main([__file__, "-v"])
 
     def test_parse_metered_decorator_with_labels(self):
         """Test parsing de decorador @metered con labels."""

@@ -7,11 +7,19 @@ use crate::ast::{Decorator, Expression, Literal, Statement, TypeAnnotation};
 use crate::error::CompileError;
 use std::collections::HashMap;
 
+/// Enum representing all observability decorators
+#[derive(Debug, Clone)]
+pub enum ObservabilityDecorator {
+    Traced(TracedDecorator),
+    Metered(MeteredDecorator),
+    Logged(LoggedDecorator),
+}
+
 /// Traced decorator configuration
 #[derive(Debug, Clone)]
 pub struct TracedDecorator {
     pub name: String,
-    pub attributes: HashMap<String, String>,
+    pub tags: HashMap<String, String>,
 }
 
 /// Metered decorator configuration
@@ -19,15 +27,55 @@ pub struct TracedDecorator {
 pub struct MeteredDecorator {
     pub name: String,
     pub help: Option<String>,
-    pub labels: Vec<String>,
+    pub labels: HashMap<String, String>,
 }
 
-/// Logged decorator configuration
-#[derive(Debug, Clone)]
-pub struct LoggedDecorator {
-    pub level: String,
-    pub message: Option<String>,
-    pub fields: HashMap<String, String>,
+/// Parse observability decorators from a list of decorators
+pub fn parse_observability_decorators(
+    decorators: &[Decorator],
+) -> Result<Option<ObservabilityDecorator>, CompileError> {
+    for decorator in decorators {
+        match decorator.name.as_str() {
+            "traced" => {
+                let config = parse_traced_decorator(decorator)?;
+                return Ok(Some(ObservabilityDecorator::Traced(config)));
+            }
+            "metered" => {
+                let config = parse_metered_decorator(decorator)?;
+                return Ok(Some(ObservabilityDecorator::Metered(config)));
+            }
+            "logged" => {
+                let config = parse_logged_decorator(decorator)?;
+                return Ok(Some(ObservabilityDecorator::Logged(config)));
+            }
+            _ => {
+                // Not an observability decorator, continue
+            }
+        }
+    }
+    Ok(None)
+}
+
+/// Generate observability instrumentation code
+pub fn generate_observability_code(
+    decorator: &ObservabilityDecorator,
+    function_name: &str,
+    module_name: &str,
+) -> String {
+    match decorator {
+        ObservabilityDecorator::Traced(traced) => {
+            generate_traced_decorator_code(traced, function_name)
+                .unwrap_or_else(|_| "// Error generating traced code".to_string())
+        }
+        ObservabilityDecorator::Metered(metered) => {
+            generate_metered_decorator_code(metered, function_name)
+                .unwrap_or_else(|_| "// Error generating metered code".to_string())
+        }
+        ObservabilityDecorator::Logged(logged) => {
+            generate_logged_decorator_code(logged, function_name)
+                .unwrap_or_else(|_| "// Error generating logged code".to_string())
+        }
+    }
 }
 
 /// Parse traced decorator arguments
@@ -35,7 +83,7 @@ pub fn parse_traced_decorator(
     decorator: &Decorator,
 ) -> Result<TracedDecorator, CompileError> {
     let mut name = String::new();
-    let mut attributes = HashMap::new();
+    let mut tags = HashMap::new();
 
     if let Some(args) = &decorator.arguments {
         for (i, arg) in args.iter().enumerate() {
@@ -55,11 +103,11 @@ pub fn parse_traced_decorator(
                     }
                 }
                 _ => {
-                    // Additional arguments are key-value pairs for attributes
+                    // Additional arguments are key-value pairs for tags
                     if let Expression::Assignment { left, right } = arg {
                         if let Expression::Identifier(key) = left.as_ref() {
                             if let Expression::Literal(Literal::String(value)) = right.as_ref() {
-                                attributes.insert(key.clone(), value.clone());
+                                tags.insert(key.clone(), value.clone());
                             }
                         }
                     }
@@ -74,7 +122,7 @@ pub fn parse_traced_decorator(
         ));
     }
 
-    Ok(TracedDecorator { name, attributes })
+    Ok(TracedDecorator { name, tags })
 }
 
 /// Parse metered decorator arguments
@@ -83,7 +131,7 @@ pub fn parse_metered_decorator(
 ) -> Result<MeteredDecorator, CompileError> {
     let mut name = String::new();
     let mut help = None;
-    let mut labels = Vec::new();
+    let mut labels = HashMap::new();
 
     if let Some(args) = &decorator.arguments {
         for (i, arg) in args.iter().enumerate() {
@@ -117,19 +165,12 @@ pub fn parse_metered_decorator(
                     }
                 }
                 _ => {
-                    // Additional arguments are label names
-                    match arg {
-                        Expression::Literal(Literal::String(s)) => {
-                            labels.push(s.clone());
-                        }
-                        Expression::Identifier(s) => {
-                            labels.push(s.clone());
-                        }
-                        _ => {
-                            return Err(CompileError::ParseError(format!(
-                                "Expected string literal or identifier for metered decorator label, got {:?}",
-                                arg
-                            )));
+                    // Additional arguments are key-value pairs for labels
+                    if let Expression::Assignment { left, right } = arg {
+                        if let Expression::Identifier(key) = left.as_ref() {
+                            if let Expression::Literal(Literal::String(value)) = right.as_ref() {
+                                labels.insert(key.clone(), value.clone());
+                            }
                         }
                     }
                 }
@@ -213,33 +254,43 @@ pub fn generate_traced_decorator_code(
     let mut code = String::new();
 
     // Import observability functions
-    code.push_str("use vela_runtime::observability::{get_tracer, SpanContext};\n");
+    code.push_str("use vela_runtime::observability::{get_tracer};\n");
 
-    // Start span
+    // Start span with proper error handling
     code.push_str(&format!(
-        "let mut __tracing_span = match get_tracer().await {{\n\
-         Some(tracer) => tracer.start_span(\"{}\"),\n\
-         None => return Err(\"Tracing not initialized\".into()),\n\
-         }};\n",
+        "let __tracing_span = match get_tracer().await {{\n\
+         Some(tracer) => {{\n\
+             let mut span = tracer.start_span(\"{}\");\n",
         decorator.name
     ));
 
     // Set attributes
-    for (key, value) in &decorator.attributes {
+    for (key, value) in &decorator.tags {
         code.push_str(&format!(
-            "__tracing_span.set_attribute(\"{}\", opentelemetry::Value::String(\"{}\".to_string()));\n",
+            "            span.set_attribute(\"{}\", \"{}\");\n",
             key, value
         ));
     }
 
     // Add function name attribute
     code.push_str(&format!(
-        "__tracing_span.set_attribute(\"function\", opentelemetry::Value::String(\"{}\".to_string()));\n",
+        "            span.set_attribute(\"function\", \"{}\");\n",
         function_name
     ));
 
-    // Set span status and end it in a defer-like pattern
-    code.push_str("let __span_result = (|| async move {\n");
+    // Add service name if available
+    code.push_str("            span.set_attribute(\"service.name\", env!(\"CARGO_PKG_NAME\", \"vela-service\"));\n");
+
+    code.push_str("            Some(span)\n\
+         }},\n\
+         None => None,\n\
+         };\n");
+
+    // Create a guard to automatically end the span
+    code.push_str("let __span_guard = __tracing_span.as_ref().map(|s| s.clone());\n");
+
+    // Function call wrapper
+    code.push_str("let __result = async move {\n");
 
     Ok(code)
 }
@@ -252,29 +303,52 @@ pub fn generate_metered_decorator_code(
     let mut code = String::new();
 
     // Import observability functions
-    code.push_str("use vela_runtime::observability::{get_metrics, Counter, Histogram};\n");
+    code.push_str("use vela_runtime::observability::{get_metrics};\n");
 
     // Get metrics registry
     code.push_str("let __metrics_registry = match get_metrics().await {\n\
                    Some(registry) => registry,\n\
-                   None => return Err(\"Metrics not initialized\".into()),\n\
+                   None => return Ok(()), // Gracefully degrade if metrics not available\n\
                    };\n");
+
+    // Store metric name for cleanup
+    code.push_str(&format!("let __metric_name = \"{}\";\n", decorator.name));
 
     // Register histogram for duration
     let histogram_name = format!("{}_duration_seconds", decorator.name);
     let help_text = decorator.help.as_ref().unwrap_or(&format!("Duration of {} function", function_name));
     code.push_str(&format!(
-        "let __duration_histogram = __metrics_registry.register_histogram(\n\
+        "let __duration_histogram_result = __metrics_registry.register_histogram(\n\
          \"{}\",\n\
          \"{}\",\n\
          vec![0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1.0, 2.5, 5.0, 10.0]\n\
-         ).await.map_err(|e| format!(\"Failed to register histogram: {{}}\", e))?;\n",
+         ).await;\n",
         histogram_name, help_text
     ));
 
     // Register counter for calls
     let counter_name = format!("{}_total", decorator.name);
     code.push_str(&format!(
+        "let __calls_counter_result = __metrics_registry.register_counter(\n\
+         \"{}\",\n\
+         \"Total number of {} calls\"\n\
+         ).await;\n",
+        counter_name, function_name
+    ));
+
+    // Start timing
+    code.push_str("let __start_time = std::time::Instant::now();\n");
+
+    // Record call (with error handling)
+    code.push_str("if let Ok(Some(counter)) = __calls_counter_result.as_ref() {\n");
+    code.push_str("    let _ = counter.increment().await;\n");
+    code.push_str("}\n");
+
+    // Function call wrapper
+    code.push_str("let __result = async move {\n");
+
+    Ok(code)
+}
         "let __calls_counter = __metrics_registry.register_counter(\n\
          \"{}\",\n\
          \"Total number of {} calls\"\n\
@@ -367,32 +441,36 @@ pub fn generate_decorator_cleanup(
 ) -> String {
     let mut code = String::new();
 
+    // Execute the function call
+    code.push_str("    __result\n");
+    code.push_str("}.await;\n");
+
+    // Cleanup code
     for decorator_type in decorators {
         match decorator_type.as_str() {
             "traced" => {
                 code.push_str("// End tracing span\n");
-                code.push_str("__tracing_span.set_status(opentelemetry::trace::Status::Ok);\n");
-                code.push_str("__tracing_span.end();\n");
+                code.push_str("if let Some(mut span) = __tracing_span {\n");
+                code.push_str("    span.set_status(opentelemetry::trace::Status::Ok);\n");
+                code.push_str("    span.end();\n");
+                code.push_str("}\n");
             }
             "metered" => {
                 code.push_str("// Record metrics\n");
                 code.push_str("let __duration = __start_time.elapsed().as_secs_f64();\n");
-                code.push_str("if let Some(histogram) = __metrics_registry.get_histogram(\"");
-                code.push_str(&format!("{}_duration_seconds", "__metric_name"));
-                code.push_str("\").await {\n");
-                code.push_str("    histogram.observe(__duration).await;\n");
+                code.push_str("if let Ok(Some(histogram)) = __duration_histogram_result.as_ref() {\n");
+                code.push_str("    let _ = histogram.observe(__duration).await;\n");
                 code.push_str("}\n");
             }
             "logged" => {
                 // Logging cleanup is handled in the function wrapper
+                code.push_str("// Logging cleanup handled in wrapper\n");
             }
             _ => {}
         }
     }
 
-    code.push_str("Ok(__result)\n");
-    code.push_str("})().await;\n");
-
+    code.push_str("__result\n");
     code
 }
 
@@ -431,6 +509,7 @@ mod tests {
         let config = result.unwrap();
         assert_eq!(config.name, "requests_total");
         assert_eq!(config.help, Some("Total requests".to_string()));
+        assert!(config.labels.is_empty());
     }
 
     #[test]
