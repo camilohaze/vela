@@ -518,7 +518,7 @@ mod tests {
             Type::Primitive(primitives::PrimitiveType::Number),
             Type::Primitive(primitives::PrimitiveType::String),
         ];
-        let union_type = Type::Constructor(generics::TypeConstructor::new("Union".to_string(), types));
+        let union_type = Type::Union(special::UnionType::new(types));
         assert!(!union_type.is_primitive());
         assert!(!union_type.is_generic());
         assert_eq!(union_type.free_vars().len(), 0);

@@ -540,15 +540,21 @@ pub fn generate_decorator_cleanup(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ast::{Decorator, Expression, Literal};
+    use crate::ast::{Decorator, Expression, Literal, Range, Position};
 
     #[test]
     fn test_parse_traced_decorator() {
+        let range = Range::new(Position::new(1, 1), Position::new(1, 20));
         let decorator = Decorator {
             name: "traced".to_string(),
-            arguments: Some(vec![
-                Expression::Literal(Literal::String("http_request".to_string())),
-            ]),
+            arguments: vec![
+                Expression::Literal(Literal::new(
+                    range.clone(),
+                    serde_json::Value::String("http_request".to_string()),
+                    "string".to_string()
+                )),
+            ],
+            range: range.clone(),
         };
 
         let result = parse_traced_decorator(&decorator);
@@ -559,12 +565,22 @@ mod tests {
 
     #[test]
     fn test_parse_metered_decorator() {
+        let range = Range::new(Position::new(1, 1), Position::new(1, 20));
         let decorator = Decorator {
             name: "metered".to_string(),
-            arguments: Some(vec![
-                Expression::Literal(Literal::String("requests_total".to_string())),
-                Expression::Literal(Literal::String("Total requests".to_string())),
-            ]),
+            arguments: vec![
+                Expression::Literal(Literal::new(
+                    range.clone(),
+                    serde_json::Value::String("requests_total".to_string()),
+                    "string".to_string()
+                )),
+                Expression::Literal(Literal::new(
+                    range.clone(),
+                    serde_json::Value::String("Total requests".to_string()),
+                    "string".to_string()
+                )),
+            ],
+            range: range.clone(),
         };
 
         let result = parse_metered_decorator(&decorator);
@@ -577,12 +593,22 @@ mod tests {
 
     #[test]
     fn test_parse_logged_decorator() {
+        let range = Range::new(Position::new(1, 1), Position::new(1, 20));
         let decorator = Decorator {
             name: "logged".to_string(),
-            arguments: Some(vec![
-                Expression::Literal(Literal::String("INFO".to_string())),
-                Expression::Literal(Literal::String("Processing request".to_string())),
-            ]),
+            arguments: vec![
+                Expression::Literal(Literal::new(
+                    range.clone(),
+                    serde_json::Value::String("INFO".to_string()),
+                    "string".to_string()
+                )),
+                Expression::Literal(Literal::new(
+                    range.clone(),
+                    serde_json::Value::String("Processing request".to_string()),
+                    "string".to_string()
+                )),
+            ],
+            range: range.clone(),
         };
 
         let result = parse_logged_decorator(&decorator);

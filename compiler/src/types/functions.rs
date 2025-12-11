@@ -269,15 +269,26 @@ impl MethodType {
 
 impl fmt::Display for MethodType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let static_prefix = if self.is_static { "static " } else { "" };
-        let async_prefix = if self.is_async { "async " } else { "" };
+        let mut prefix = String::new();
+        if self.is_static {
+            prefix.push_str("static ");
+        }
+        if self.is_async {
+            prefix.push_str("async ");
+        }
+
         let params_str = self.params.iter()
             .map(|p| p.to_string())
             .collect::<Vec<_>>()
             .join(", ");
 
-        write!(f, "{}{} {}::{}({}) -> {}",
-               static_prefix, async_prefix, self.self_type, self.name, params_str, self.return_type)
+        if prefix.is_empty() {
+            write!(f, "{}::{}({}) -> {}",
+                   self.self_type, self.name, params_str, self.return_type)
+        } else {
+            write!(f, "{} {}::{}({}) -> {}",
+                   prefix.trim_end(), self.self_type, self.name, params_str, self.return_type)
+        }
     }
 }
 
