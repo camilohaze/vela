@@ -24,52 +24,66 @@ The ORM is structured in layers:
 ## Example
 
 ```rust,no_run
-use vela_orm::{Database, Entity, Column, Id, OneToMany, ManyToOne};
-use serde::{Serialize, Deserialize};
+use vela_orm::{Database, Entity};
+use vela_orm::config::DatabaseConfig;
+use serde::{Deserialize, Serialize};
 
-#[derive(Entity, Serialize, Deserialize)]
-#[entity(table = "users")]
+// Define an entity
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct User {
-    #[id]
-    #[column(primary_key = true, generated = true)]
     pub id: i64,
-
-    #[column(nullable = false)]
     pub name: String,
-
-    #[column(nullable = false, unique = true)]
     pub email: String,
-
-    #[one_to_many(entity = "Post", mapped_by = "author")]
-    pub posts: Vec<Post>,
+    pub active: bool,
 }
 
-#[derive(Entity, Serialize, Deserialize)]
-#[entity(table = "posts")]
-pub struct Post {
-    #[id]
-    #[column(primary_key = true, generated = true)]
-    pub id: i64,
+impl Entity for User {
+    fn table_name() -> &'static str {
+        "users"
+    }
 
-    #[column(nullable = false)]
-    pub title: String,
+    fn primary_key_field() -> &'static str {
+        "id"
+    }
 
-    #[column(nullable = false)]
-    pub content: String,
+    fn metadata() -> vela_orm::entity::EntityMetadata {
+        // Implementation of metadata
+        vela_orm::entity::EntityMetadata::new("users")
+    }
 
-    #[many_to_one(entity = "User", join_column = "author_id")]
-    pub author: User,
+    async fn find_by_id(db: &Database, id: i64) -> vela_orm::Result<Option<Self>> {
+        Self::query(db).where_eq("id", id).find_one().await
+    }
+
+    async fn find_all(db: &Database) -> vela_orm::Result<Vec<Self>> {
+        Self::query(db).find_many().await
+    }
+
+    async fn save(&self, db: &Database) -> vela_orm::Result<()> {
+        Ok(())
+    }
+
+    async fn delete(&self, db: &Database) -> vela_orm::Result<()> {
+        Ok(())
+    }
+
+    fn query(db: &Database) -> vela_orm::QueryBuilder<Self> {
+        vela_orm::QueryBuilder::new(db.clone())
+    }
 }
 
-// Connect to database
-let db = Database::connect("postgres://user:pass@localhost/myapp").await?;
+// Usage example (in an async function)
+async fn example() -> vela_orm::Result<()> {
+    // Connect to database
+    let config = DatabaseConfig::sqlite(":memory:");
+    let db = Database::connect_with_config(config).await?;
 
-// Query entities
-let user = User::find_by_id(&db, 1).await?;
-let posts = Post::query(&db)
-    .where_eq("author_id", user.id)
-    .find_many()
-    .await?;
+    // Query entities
+    let user = User::find_by_id(&db, 1).await?;
+    let users = User::find_all(&db).await?;
+
+    Ok(())
+}
 ```
 */
 

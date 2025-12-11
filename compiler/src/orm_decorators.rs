@@ -756,13 +756,13 @@ fn generate_entity_implementation(
         // Handle relation decorators
         if let Some(relation_decorator) = field_decorators.iter().find_map(|d| {
             match d {
-                OrmDecorator::OneToMany(rel) => Some(("one_to_many", rel.entity.as_str(), rel.mapped_by.as_str(), rel.fetch.as_str())),
-                OrmDecorator::ManyToOne(rel) => Some(("many_to_one", rel.entity.as_str(), rel.join_column.as_str(), rel.fetch.as_str())),
-                OrmDecorator::ManyToMany(rel) => Some(("many_to_many", rel.entity.as_str(), rel.join_table.as_str(), rel.fetch.as_str())),
+                OrmDecorator::OneToMany(rel) => Some(("one_to_many", rel.entity.as_str(), rel.mapped_by.as_str(), None, rel.fetch.as_str())),
+                OrmDecorator::ManyToOne(rel) => Some(("many_to_one", rel.entity.as_str(), "", Some(rel.join_column.as_str()), rel.fetch.as_str())),
+                OrmDecorator::ManyToMany(rel) => Some(("many_to_many", rel.entity.as_str(), "", Some(rel.join_table.as_str()), rel.fetch.as_str())),
                 _ => None,
             }
         }) {
-            let (relation_type, target_entity, join_info, fetch_type) = relation_decorator;
+            let (relation_type, target_entity, mapped_by, join_column, fetch_type) = relation_decorator;
             let fetch_type_enum = match fetch_type {
                 "eager" => "FetchType::Eager",
                 _ => "FetchType::Lazy",
@@ -770,18 +770,20 @@ fn generate_entity_implementation(
 
             code.push_str(&format!("        relations.insert(\n"));
             code.push_str(&format!("            \"{}\".to_string(),\n", field_name));
-            code.push_str(&format!("            RelationMetadata {{\n"));
-            code.push_str(&format!("                relation_type: RelationType::{},\n", match relation_type {
-                "one_to_many" => "OneToMany",
-                "many_to_one" => "ManyToOne",
-                "many_to_many" => "ManyToMany",
-                _ => "OneToMany",
+            code.push_str(&format!("            RelationMetadata::{}(\n", match relation_type {
+                "one_to_many" => "one_to_many",
+                "many_to_one" => "many_to_one",
+                "many_to_many" => "many_to_many",
+                _ => "one_to_many",
             }));
-            code.push_str(&format!("                target_entity: \"{}\".to_string(),\n", target_entity));
-            code.push_str(&format!("                join_column: Some(\"{}\".to_string()),\n", join_info));
-            code.push_str(&format!("                fetch_type: {},\n", fetch_type_enum));
-            code.push_str(&format!("                cascade: vec![], // TODO: Add cascade support\n"));
-            code.push_str(&format!("            }},\n"));
+            code.push_str(&format!("                \"{}\",\n", target_entity));
+            match relation_type {
+                "one_to_many" => code.push_str(&format!("                \"{}\"\n", mapped_by)),
+                "many_to_one" => code.push_str(&format!("                \"{}\"\n", join_column.unwrap_or(""))),
+                "many_to_many" => code.push_str(&format!("                \"{}\"\n", join_column.unwrap_or(""))),
+                _ => code.push_str(&format!("                \"{}\"\n", mapped_by)),
+            }
+            code.push_str(&format!("            ).with_fetch({}),\n", fetch_type_enum));
             code.push_str(&format!("        );\n\n"));
         }
     }

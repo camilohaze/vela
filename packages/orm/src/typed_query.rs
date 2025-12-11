@@ -281,6 +281,46 @@ impl<E: Entity> TypedQueryBuilder<E> {
         self
     }
 
+    /// Add INNER JOIN clause
+    pub fn inner_join<U: Entity>(mut self, on_condition: &str) -> Self {
+        self.join_clauses.push(TypedJoin {
+            join_type: JoinType::Inner,
+            table: U::table_name().to_string(),
+            on: on_condition.to_string(),
+        });
+        self
+    }
+
+    /// Add LEFT JOIN clause
+    pub fn left_join<U: Entity>(mut self, on_condition: &str) -> Self {
+        self.join_clauses.push(TypedJoin {
+            join_type: JoinType::Left,
+            table: U::table_name().to_string(),
+            on: on_condition.to_string(),
+        });
+        self
+    }
+
+    /// Add RIGHT JOIN clause
+    pub fn right_join<U: Entity>(mut self, on_condition: &str) -> Self {
+        self.join_clauses.push(TypedJoin {
+            join_type: JoinType::Right,
+            table: U::table_name().to_string(),
+            on: on_condition.to_string(),
+        });
+        self
+    }
+
+    /// Add FULL OUTER JOIN clause
+    pub fn full_join<U: Entity>(mut self, on_condition: &str) -> Self {
+        self.join_clauses.push(TypedJoin {
+            join_type: JoinType::Full,
+            table: U::table_name().to_string(),
+            on: on_condition.to_string(),
+        });
+        self
+    }
+
     /// Execute the query and return multiple results
     pub async fn find_many(self) -> Result<Vec<E>> {
         let sql = self.build_select_sql();
@@ -330,6 +370,11 @@ impl<E: Entity> TypedQueryBuilder<E> {
     pub fn build_select_sql(&self) -> String {
         let table_name = E::table_name();
         let mut sql = format!("SELECT {} FROM {}", self.selected_fields.join(", "), table_name);
+
+        // JOIN clauses
+        for join in &self.join_clauses {
+            sql.push_str(&format!(" {} JOIN {} ON {}", join.join_type.as_sql(), join.table, join.on));
+        }
 
         // WHERE conditions
         if !self.conditions.is_empty() {
