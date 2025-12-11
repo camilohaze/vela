@@ -11,31 +11,208 @@ use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
+// Pool imports
+#[cfg(feature = "postgres")]
+use bb8::Pool;
+#[cfg(feature = "postgres")]
+use bb8_postgres::PostgresConnectionManager;
+#[cfg(feature = "postgres")]
+use tokio_postgres::NoTls;
+
+#[cfg(feature = "mysql")]
+use deadpool::managed::{Manager, Pool as DeadPool};
+#[cfg(feature = "mysql")]
+use mysql_async::{Conn, Opts};
+#[cfg(feature = "mysql")]
+use mysql_async::prelude::Queryable;
+
+#[cfg(feature = "mysql")]
+#[derive(Clone)]
+struct MysqlManager {
+    opts: Opts,
+}
+
+#[cfg(feature = "mysql")]
+#[async_trait::async_trait]
+impl deadpool::managed::Manager for MysqlManager {
+    type Type = Conn;
+    type Error = mysql_async::Error;
+
+    async fn create(&self) -> std::result::Result<Self::Type, Self::Error> {
+        Conn::new(self.opts.clone()).await
+    }
+
+    async fn recycle(&self, _conn: &mut Self::Type) -> deadpool::managed::RecycleResult<Self::Error> {
+        Ok(())
+    }
+}
+
+#[cfg(feature = "sqlite")]
+use deadpool::managed::Pool as SqliteDeadPool;
+#[cfg(feature = "sqlite")]
+use deadpool_sqlite::{Manager as SqliteManager, Pool as DeadpoolSqlitePool};
+
 /// Database connection abstraction
 #[derive(Clone)]
 pub struct Database {
     inner: Arc<DatabaseInner>,
 }
 
+/// Internal database connection manager
 struct DatabaseInner {
     config: DatabaseConfig,
-    // Placeholder for connection pool
-    // In a real implementation, this would be a concrete pool type
-    pool_placeholder: (),
+    pool: ConnectionPool,
+}
+
+/// Connection pool enum for different database drivers
+enum ConnectionPool {
+    #[cfg(feature = "postgres")]
+    Postgres(Pool<PostgresConnectionManager<NoTls>>),
+    #[cfg(feature = "mysql")]
+    Mysql(DeadPool<MysqlManager>),
+    #[cfg(feature = "sqlite")]
+    Sqlite(DeadpoolSqlitePool),
+    // Placeholder for when no features are enabled
+    Placeholder,
 }
 
 impl DatabaseInner {
-    async fn query(&self, _sql: &str, _params: Vec<Box<dyn ToSql>>) -> Result<QueryResult> {
-        // Placeholder implementation
-        Ok(QueryResult {
-            rows: vec![],
-            columns: vec![],
-        })
+    async fn query(&self, sql: &str, params: Vec<Box<dyn ToSql>>) -> Result<QueryResult> {
+        match &self.pool {
+            #[cfg(feature = "postgres")]
+            ConnectionPool::Postgres(pool) => {
+                let conn = pool.get().await
+                    .map_err(|e| Error::connection(format!("Failed to get connection: {}", e)))?;
+                
+                let stmt = conn.prepare(sql).await
+                    .map_err(|e| Error::query(format!("Failed to prepare statement: {}", e)))?;
+                
+                let rows = conn.query(&stmt, &[]).await
+                    .map_err(|e| Error::query(format!("Failed to execute query: {}", e)))?;
+                
+                // Convert postgres rows to our QueryResult format
+                let mut result_rows = Vec::new();
+                for row in rows {
+                    let mut values = Vec::new();
+                    for i in 0..row.len() {
+                        // This is a simplified conversion - would need proper type mapping
+                        values.push(Value::Null); // Placeholder
+                    }
+                    result_rows.push(Row { data: values });
+                }
+                
+                Ok(QueryResult {
+                    rows: result_rows,
+                    columns: vec![], // Would need to extract from statement
+                })
+            }
+            #[cfg(feature = "mysql")]
+            ConnectionPool::Mysql(pool) => {
+                let mut conn = pool.get().await
+                    .map_err(|e| Error::connection(format!("Failed to get mysql connection: {}", e)))?;
+                
+                let result = conn.query::<mysql_async::Row, _>(sql).await
+                    .map_err(|e| Error::query(format!("Failed to execute mysql query: {}", e)))?;
+                
+                // Convert mysql result to our QueryResult format
+                let mut result_rows = Vec::new();
+                for row in result {
+                    let mut values = Vec::new();
+                    // This is a simplified conversion - would need proper type mapping
+                    values.push(Value::Null); // Placeholder
+                    result_rows.push(Row { data: values });
+                }
+                
+                Ok(QueryResult {
+                    rows: result_rows,
+                    columns: vec![], // Would need to extract from result
+                })
+            }
+            #[cfg(feature = "sqlite")]
+            ConnectionPool::Sqlite(pool) => {
+                let conn = pool.get().await
+                    .map_err(|e| Error::connection(format!("Failed to get sqlite connection: {}", e)))?;
+                
+                let sql = sql.to_string();
+                let result = conn
+                    .interact(move |conn| {
+                        let mut stmt = conn.prepare(&sql)?;
+                        let column_count = stmt.column_count();
+                        let mut rows = stmt.query([])?;
+                        
+                        let mut result_rows = Vec::new();
+                        while let Some(row) = rows.next()? {
+                            let mut values = Vec::new();
+                            for _i in 0..column_count {
+                                // This is a simplified conversion - would need proper type mapping
+                                values.push(Value::Null); // Placeholder
+                            }
+                            result_rows.push(Row { data: values });
+                        }
+                        
+                        Ok::<_, rusqlite::Error>(result_rows)
+                    })
+                    .await
+                    .map_err(|e| Error::query(format!("Failed to execute sqlite query: {}", e)))?
+                    .map_err(|e| Error::query(format!("Failed to execute sqlite query: {}", e)))?;
+                
+                Ok(QueryResult {
+                    rows: result,
+                    columns: vec![], // Would need to extract from statement
+                })
+            }
+            ConnectionPool::Placeholder => {
+                // Placeholder implementation for when no features are enabled
+                Ok(QueryResult {
+                    rows: vec![],
+                    columns: vec![],
+                })
+            }
+        }
     }
 
-    async fn execute(&self, _sql: &str, _params: Vec<Box<dyn ToSql>>) -> Result<u64> {
-        // Placeholder implementation
-        Ok(0)
+    async fn execute(&self, sql: &str, params: Vec<Box<dyn ToSql>>) -> Result<u64> {
+        match &self.pool {
+            #[cfg(feature = "postgres")]
+            ConnectionPool::Postgres(pool) => {
+                let conn = pool.get().await
+                    .map_err(|e| Error::connection(format!("Failed to get connection: {}", e)))?;
+                
+                let result = conn.execute(sql, &[]).await
+                    .map_err(|e| Error::query(format!("Failed to execute statement: {}", e)))?;
+                
+                Ok(result as u64)
+            }
+            #[cfg(feature = "mysql")]
+            ConnectionPool::Mysql(pool) => {
+                let mut conn = pool.get().await
+                    .map_err(|e| Error::connection(format!("Failed to get mysql connection: {}", e)))?;
+                
+                conn.query_drop(sql).await
+                    .map_err(|e| Error::query(format!("Failed to execute mysql statement: {}", e)))?;
+                
+                Ok(0) // MySQL doesn't return affected rows count easily
+            }
+            #[cfg(feature = "sqlite")]
+            ConnectionPool::Sqlite(pool) => {
+                let conn = pool.get().await
+                    .map_err(|e| Error::connection(format!("Failed to get sqlite connection: {}", e)))?;
+                
+                let sql = sql.to_string();
+                let result = conn
+                    .interact(move |conn| {
+                        conn.execute(&sql, [])
+                    })
+                    .await
+                    .map_err(|e| Error::query(format!("Failed to execute sqlite statement: {}", e)))?
+                    .map_err(|e| Error::query(format!("Failed to execute sqlite statement: {}", e)))?;
+                
+                Ok(result as u64)
+            }
+            ConnectionPool::Placeholder => {
+                Ok(0)
+            }
+        }
     }
 }
 
@@ -49,12 +226,66 @@ impl Database {
 
     /// Connect to a database using configuration
     pub async fn connect_with_config(config: DatabaseConfig) -> Result<Self> {
-        // Placeholder implementation
-        // In a real implementation, this would create actual database connections
+        let pool = match config.driver {
+            #[cfg(feature = "postgres")]
+            DatabaseDriver::Postgres => {
+                let manager = PostgresConnectionManager::new_from_stringlike(
+                    &config.to_url(),
+                    NoTls,
+                ).map_err(|e| Error::connection(format!("Failed to create postgres manager: {}", e)))?;
+                
+                let pool = Pool::builder()
+                    .max_size(config.pool.max_connections)
+                    .connection_timeout(config.pool.connection_timeout)
+                    .build(manager)
+                    .await
+                    .map_err(|e| Error::connection(format!("Failed to create postgres pool: {}", e)))?;
+                
+                ConnectionPool::Postgres(pool)
+            }
+            #[cfg(feature = "mysql")]
+            DatabaseDriver::Mysql => {
+                let opts = Opts::from_url(&config.to_url())
+                    .map_err(|e| Error::connection(format!("Failed to parse mysql URL: {}", e)))?;
+                
+                let manager = MysqlManager { opts };
+                let pool = DeadPool::builder(manager)
+                    .max_size(config.pool.max_connections.try_into().unwrap())
+                    .build()
+                    .map_err(|e| Error::connection(format!("Failed to create mysql pool: {}", e)))?;
+                
+                ConnectionPool::Mysql(pool)
+            }
+            #[cfg(feature = "sqlite")]
+            DatabaseDriver::Sqlite => {
+                let config = deadpool_sqlite::Config::new(&config.to_url());
+                let manager = SqliteManager::from_config(
+                    &config,
+                    deadpool::Runtime::Tokio1
+                );
+                
+                let pool = DeadpoolSqlitePool::builder(manager)
+                    .max_size(10) // Default max connections for SQLite
+                    .build()
+                    .map_err(|e| Error::connection(format!("Failed to create sqlite pool: {}", e)))?;
+                
+                ConnectionPool::Sqlite(pool)
+            }
+            #[cfg(not(any(feature = "postgres", feature = "mysql", feature = "sqlite")))]
+            _ => {
+                // No database features enabled, use placeholder
+                ConnectionPool::Placeholder
+            }
+            #[cfg(any(feature = "postgres", feature = "mysql", feature = "sqlite"))]
+            _ => {
+                return Err(Error::connection(format!("Unsupported database driver: {:?}", config.driver)));
+            }
+        };
+
         Ok(Self {
             inner: Arc::new(DatabaseInner {
                 config,
-                pool_placeholder: (),
+                pool,
             }),
         })
     }
