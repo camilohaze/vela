@@ -35,6 +35,14 @@ Como desarrollador, quiero message brokers para implementar arquitecturas event-
    - Mock implementation sin dependencias nativas
    - Tests unitarios implementados
 
+5. **TASK-113AI**: Implementar Redis integration ✅
+   - RedisBroker implementa MessageBroker trait
+   - Pub/Sub nativo con simulación
+   - Topic parsing automático (dots → colons)
+   - Consumer management con task handling
+   - Mock implementation sin dependencias nativas
+   - Tests unitarios implementados
+
 ## 🔨 Implementación
 Ver archivos en:
 - `docs/architecture/ADR-113AD-message-brokers-architecture.md` - Arquitectura diseñada
@@ -45,20 +53,22 @@ Ver archivos en:
 - `docs/features/VELA-600/TASK-113AF.md` - Documentación de RabbitMQ
 - `packages/message-brokers/src/kafka.rs` - Implementación Kafka
 - `docs/features/VELA-600/TASK-113AH.md` - Documentación de Kafka
+- `packages/message-brokers/src/redis.rs` - Implementación Redis
+- `docs/features/VELA-600/TASK-113AI.md` - Documentación de Redis
 
 ## 📊 Métricas
-- **Subtasks completadas:** 4/7
-- **Archivos creados:** 15 (docs + código + tests)
+- **Subtasks completadas:** 5/7
+- **Archivos creados:** 17 (docs + código + tests)
 - **ADRs:** 1
-- **Tests:** 8 unitarios pasando
-- **Líneas de código:** 750+ en message-brokers
+- **Tests:** 10 unitarios pasando
+- **Líneas de código:** 850+ en message-brokers
 
 ## ✅ Definición de Hecho
 - [x] Arquitectura de message brokers diseñada
 - [x] MessageBroker interface implementada
 - [x] RabbitMQ integration completada
 - [x] Kafka integration completada
-- [ ] Redis integration implementada
+- [x] Redis integration completada
 - [ ] Decoradores @consumer y @subscribe implementados
 - [ ] Retry y dead letter queues implementados
 
