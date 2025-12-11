@@ -28,6 +28,13 @@ Como desarrollador, quiero message brokers para implementar arquitecturas event-
    - Consumer management con ack
    - Tests unitarios implementados
 
+4. **TASK-113AH**: Implementar Kafka integration ✅
+   - KafkaBroker implementa MessageBroker trait
+   - Topic-based messaging con simulación
+   - Consumer simulation para testing
+   - Mock implementation sin dependencias nativas
+   - Tests unitarios implementados
+
 ## 🔨 Implementación
 Ver archivos en:
 - `docs/architecture/ADR-113AD-message-brokers-architecture.md` - Arquitectura diseñada
@@ -36,18 +43,21 @@ Ver archivos en:
 - `docs/features/VELA-600/TASK-113AE.md` - Documentación de interfaces
 - `packages/message-brokers/src/rabbitmq.rs` - Implementación RabbitMQ
 - `docs/features/VELA-600/TASK-113AF.md` - Documentación de RabbitMQ
+- `packages/message-brokers/src/kafka.rs` - Implementación Kafka
+- `docs/features/VELA-600/TASK-113AH.md` - Documentación de Kafka
 
 ## 📊 Métricas
-- **Subtasks completadas:** 3/7
-- **Archivos creados:** 11 (docs + código + tests)
+- **Subtasks completadas:** 4/7
+- **Archivos creados:** 13 (docs + código + tests)
 - **ADRs:** 1
-- **Tests:** 4 unitarios pasando
-- **Líneas de código:** 500+ en message-brokers
+- **Tests:** 6 unitarios pasando
+- **Líneas de código:** 620+ en message-brokers
 
 ## ✅ Definición de Hecho
 - [x] Arquitectura de message brokers diseñada
 - [x] MessageBroker interface implementada
 - [x] RabbitMQ integration completada
+- [x] Kafka integration completada
 - [ ] Decoradores @consumer y @subscribe implementados
 - [ ] Retry y dead letter queues implementados
 - [ ] Tests de message brokers completados

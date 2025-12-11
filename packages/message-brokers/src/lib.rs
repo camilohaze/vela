@@ -293,3 +293,4 @@ mod tests {
 
 // Módulos de implementaciones concretas
 pub mod rabbitmq;
+pub mod kafka;
