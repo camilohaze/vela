@@ -5,7 +5,6 @@
 //! circuit breaker, and retry capabilities.
 
 use super::*;
-use async_trait::async_trait;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;

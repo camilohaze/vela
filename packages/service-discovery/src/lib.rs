@@ -59,6 +59,24 @@ pub struct ServiceInstance {
     pub last_health_check: Option<chrono::DateTime<chrono::Utc>>,
 }
 
+/// Type of health check to perform
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub enum HealthCheckType {
+    Http,
+    Tcp,
+    Ttl,
+}
+
+/// Health check configuration for services
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HealthCheckConfig {
+    pub check_type: HealthCheckType,
+    pub endpoint: Option<String>, // For HTTP checks
+    pub interval_seconds: u64,
+    pub timeout_seconds: u64,
+    pub deregister_after_seconds: u64,
+}
+
 /// Service registration information
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ServiceInfo {
@@ -69,24 +87,6 @@ pub struct ServiceInfo {
     pub tags: Vec<String>,
     pub metadata: HashMap<String, String>,
     pub health_check: Option<HealthCheckConfig>,
-}
-
-/// Type of health check to perform
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub enum HealthCheckType {
-    Http,
-    Tcp,
-    Ttl,
-}
-
-/// Health check configuration
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct HealthCheckConfig {
-    pub check_type: HealthCheckType,
-    pub endpoint: Option<String>, // For HTTP checks
-    pub interval_seconds: u64,
-    pub timeout_seconds: u64,
-    pub deregister_after_seconds: u64,
 }
 
 /// Service watcher for receiving updates about service changes
@@ -184,12 +184,14 @@ pub mod advanced_consul;
 pub mod client;
 pub mod consul;
 pub mod eureka;
+pub mod health;
 pub mod in_memory;
 
 pub use advanced_consul::{AdvancedConsulRegistry, AdvancedConsulConfig, ConsulACLToken, ServiceIntention};
 pub use client::{ServiceDiscoveryHttpClient, ServiceDiscoveryClientConfig, HttpRequest, HttpResponse, HttpMethod, ServiceDiscoveryError, LoadBalancerStrategy, CircuitBreakerState};
 pub use consul::{ConsulRegistry, ConsulConfig};
 pub use eureka::{EurekaRegistry, EurekaConfig};
+pub use health::{HealthCheckServer, HealthServerConfig, HealthCheckResponse, HealthCheckResult, HealthEndpointStatus, HealthCheckError};
 pub use in_memory::InMemoryRegistry;
 
 /// Service discovery client that manages service registration and discovery
