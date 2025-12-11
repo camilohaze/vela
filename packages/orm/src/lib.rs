@@ -81,6 +81,7 @@ pub mod migration;
 pub mod query;
 pub mod relations;
 pub mod transaction;
+pub mod typed_query;
 
 // Re-exports for convenience
 pub use config::DatabaseConfig;
@@ -88,6 +89,7 @@ pub use connection::Database;
 pub use entity::{Entity, EntityManager};
 pub use error::{Result, Error};
 pub use query::QueryBuilder;
+pub use typed_query::{TypedQueryBuilder, Field};
 
 /// Version of the Vela ORM
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
