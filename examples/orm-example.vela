@@ -1,0 +1,458 @@
+"""
+ORM Example - Type-safe Database Access in Vela
+
+This example demonstrates how to use Vela's ORM for type-safe database operations.
+"""
+
+import 'package:orm' as orm
+
+# Define entities with decorators
+@entity(table="users", schema="public")
+class User {
+  @id
+  @column(primary_key=true, generated=true)
+  id: Number
+
+  @column(nullable=false, unique=true)
+  email: String
+
+  @column(nullable=false)
+  name: String
+
+  @column(nullable=false, default="now()")
+  created_at: DateTime
+
+  # Relations
+  @one_to_many(entity="Post", mapped_by="author_id")
+  posts: List<Post>
+
+  # Constructor
+  constructor(email: String, name: String) {
+    this.email = email
+    this.name = name
+    this.created_at = DateTime.now()
+  }
+}
+
+@entity(table="posts")
+class Post {
+  @id
+  @column(primary_key=true, generated=true)
+  id: Number
+
+  @column(nullable=false)
+  title: String
+
+  @column(nullable=false)
+  content: String
+
+  @column(nullable=false)
+  published: Bool = false
+
+  @many_to_one(entity="User", join_column="author_id")
+  author: User
+
+  # Constructor
+  constructor(title: String, content: String, author: User) {
+    this.title = title
+    this.content = content
+    this.author = author
+  }
+}
+
+@entity(table="categories")
+class Category {
+  @id
+  @column(primary_key=true, generated=true)
+  id: Number
+
+  @column(nullable=false, unique=true)
+  name: String
+
+  @column
+  description: Option<String>
+
+  # Many-to-many relation
+  @many_to_many(entity="Post", join_table="post_categories")
+  posts: List<Post>
+
+  constructor(name: String, description: Option<String> = None) {
+    this.name = name
+    this.description = description
+  }
+}
+
+# Service class for business logic
+@injectable
+class UserService {
+  repository: UserRepository = inject(UserRepository)
+
+  async fn create_user(email: String, name: String) -> Result<User> {
+    # Validate input
+    if email.is_empty() {
+      return Err(ValidationError("Email cannot be empty"))
+    }
+
+    if name.is_empty() {
+      return Err(ValidationError("Name cannot be empty"))
+    }
+
+    # Check if user exists
+    match await self.repository.find_by_email(email) {
+      Some(_) => return Err(ValidationError("User already exists"))
+      None => {}
+    }
+
+    # Create new user
+    user = User(email, name)
+    return await self.repository.save(user)
+  }
+
+  async fn get_user_with_posts(user_id: Number) -> Result<Option<User>> {
+    # Use query builder with eager loading
+    return await User.query()
+      .with("posts")  # Eager load posts
+      .find_by_id(user_id)
+  }
+
+  async fn search_users(query: String, limit: Number = 10) -> Result<List<User>> {
+    return await User.query()
+      .where_like("name", "%${query}%")
+      .or_where_like("email", "%${query}%")
+      .order_by("name")
+      .limit(limit)
+      .find_many()
+  }
+}
+
+@injectable
+class PostService {
+  repository: PostRepository = inject(PostRepository)
+
+  async fn create_post(title: String, content: String, author_id: Number) -> Result<Post> {
+    # Validate input
+    if title.is_empty() {
+      return Err(ValidationError("Title cannot be empty"))
+    }
+
+    if content.is_empty() {
+      return Err(ValidationError("Content cannot be empty"))
+    }
+
+    # Get author
+    author = match await User.find_by_id(author_id) {
+      Some(user) => user
+      None => return Err(NotFoundError("Author not found"))
+    }
+
+    # Create post
+    post = Post(title, content, author)
+    return await self.repository.save(post)
+  }
+
+  async fn publish_post(post_id: Number) -> Result<Post> {
+    # Use transaction for consistency
+    return await Transaction.execute(async (tx) => {
+      post = match await Post.find_by_id_with_tx(post_id, tx) {
+        Some(p) => p
+        None => return Err(NotFoundError("Post not found"))
+      }
+
+      if post.published {
+        return Err(ValidationError("Post already published"))
+      }
+
+      post.published = true
+      return await post.save_with_tx(tx)
+    })
+  }
+
+  async fn get_published_posts(page: Number = 1, per_page: Number = 20) -> Result<List<Post>> {
+    offset = (page - 1) * per_page
+
+    return await Post.query()
+      .with("author")  # Eager load author
+      .where_eq("published", true)
+      .order_by_desc("created_at")
+      .limit(per_page)
+      .offset(offset)
+      .find_many()
+  }
+}
+
+# Main application
+@injectable
+class BlogApp {
+  user_service: UserService = inject(UserService)
+  post_service: PostService = inject(PostService)
+
+  async fn run() -> void {
+    print("🚀 Starting Blog Application")
+
+    # Create a user
+    match await self.user_service.create_user("john@example.com", "John Doe") {
+      Ok(user) => print("✅ Created user: ${user.name} (${user.email})")
+      Err(e) => print("❌ Failed to create user: ${e}")
+    }
+
+    # Create a post
+    match await self.post_service.create_post("My First Post", "Hello, world!", 1) {
+      Ok(post) => print("✅ Created post: ${post.title}")
+      Err(e) => print("❌ Failed to create post: ${e}")
+    }
+
+    # Publish the post
+    match await self.post_service.publish_post(1) {
+      Ok(post) => print("✅ Published post: ${post.title}")
+      Err(e) => print("❌ Failed to publish post: ${e}")
+    }
+
+    # Search users
+    match await self.user_service.search_users("John") {
+      Ok(users) => {
+        print("🔍 Found ${users.length} users:")
+        users.forEach(user => print("  - ${user.name} (${user.email})"))
+      }
+      Err(e) => print("❌ Search failed: ${e}")
+    }
+
+    # Get published posts
+    match await self.post_service.get_published_posts() {
+      Ok(posts) => {
+        print("📝 Published posts:")
+        posts.forEach(post => {
+          print("  - ${post.title} by ${post.author.name}")
+        })
+      }
+      Err(e) => print("❌ Failed to get posts: ${e}")
+    }
+
+    print("✅ Blog application completed successfully")
+  }
+}
+
+# Application entry point
+async fn main() -> void {
+  # Initialize database connection
+  config = DatabaseConfig.postgres(
+    host="localhost",
+    port=5432,
+    database="blog_db",
+    username="blog_user",
+    password="blog_pass"
+  )
+
+  # Connect to database
+  db = match await Database.connect(config) {
+    Ok(database) => database
+    Err(e) => {
+      print("❌ Failed to connect to database: ${e}")
+      return
+    }
+  }
+
+  # Run database migrations
+  match await MigrationRunner.run_pending_migrations(db) {
+    Ok(_) => print("✅ Database migrations completed")
+    Err(e) => {
+      print("❌ Migration failed: ${e}")
+      return
+    }
+  }
+
+  # Start the application
+  app = BlogApp()
+  await app.run()
+
+  # Close database connection
+  await db.close()
+  print("👋 Application finished")
+}
+
+# Example of advanced queries
+async fn advanced_queries_example() -> void {
+  print("🔍 Advanced Queries Example")
+
+  # Complex query with joins and aggregations
+  posts_with_stats = await Post.query()
+    .select([
+      "posts.*",
+      "COUNT(comments.id) as comment_count",
+      "AVG(comments.rating) as avg_rating"
+    ])
+    .join("comments", "posts.id = comments.post_id")
+    .join("users", "posts.author_id = users.id")
+    .where("posts.published", "=", true)
+    .where("users.active", "=", true)
+    .group_by(["posts.id", "posts.title", "posts.content"])
+    .having("COUNT(comments.id)", ">", 5)
+    .order_by_desc("avg_rating")
+    .limit(10)
+    .find_many()
+
+  match posts_with_stats {
+    Ok(posts) => {
+      print("📊 Top rated posts with comments:")
+      posts.forEach(post => {
+        print("  📝 ${post.title}")
+        print("     Comments: ${post.comment_count}, Avg Rating: ${post.avg_rating}")
+      })
+    }
+    Err(e) => print("❌ Query failed: ${e}")
+  }
+
+  # Batch operations
+  user_ids = [1, 2, 3, 4, 5]
+
+  # Find multiple users at once
+  users = await User.find_by_ids(user_ids)
+
+  # Bulk update
+  await User.query()
+    .where_in("id", user_ids)
+    .update([
+      ("last_login", DateTime.now()),
+      ("login_count", Raw("login_count + 1"))
+    ])
+
+  print("✅ Advanced queries completed")
+}
+
+# Example of transaction management
+async fn transaction_example() -> void {
+  print("🔄 Transaction Management Example")
+
+  # Simple transaction
+  result = await Transaction.execute(async (tx) => {
+    # Create user
+    user = User("transaction@example.com", "Transaction User")
+    saved_user = await user.save_with_tx(tx)
+
+    # Create post for the user
+    post = Post("Transactional Post", "Created in transaction", saved_user)
+    saved_post = await post.save_with_tx(tx)
+
+    # Return both
+    return (saved_user, saved_post)
+  })
+
+  match result {
+    Ok((user, post)) => {
+      print("✅ Transaction successful:")
+      print("  User: ${user.name}")
+      print("  Post: ${post.title}")
+    }
+    Err(e) => print("❌ Transaction failed: ${e}")
+  }
+
+  # Nested transactions with savepoints
+  result = await Transaction.execute(async (tx) => {
+    user = await User.create_with_tx(User("nested@example.com", "Nested User"), tx)
+
+    # Create savepoint
+    savepoint = await tx.create_savepoint("before_posts")
+
+    # Try to create multiple posts
+    try {
+      posts = []
+      (1..5).forEach(i => {
+        post = Post("Post ${i}", "Content ${i}", user)
+        posts.push(await post.save_with_tx(tx))
+      })
+
+      # Simulate error on third post
+      if posts.length >= 3 {
+        throw Error("Simulated error after 3 posts")
+      }
+
+      return posts
+    } catch (e) {
+      # Rollback to savepoint (only posts are rolled back, user remains)
+      await savepoint.rollback()
+      print("🔙 Rolled back to savepoint, user still exists")
+
+      # Create only 2 posts
+      posts = []
+      (1..2).forEach(i => {
+        post = Post("Safe Post ${i}", "Safe Content ${i}", user)
+        posts.push(await post.save_with_tx(tx))
+      })
+
+      return posts
+    }
+  })
+
+  match result {
+    Ok(posts) => print("✅ Nested transaction completed with ${posts.length} posts")
+    Err(e) => print("❌ Nested transaction failed: ${e}")
+  }
+
+  print("✅ Transaction examples completed")
+}
+
+# Example of relation handling
+async fn relations_example() -> void {
+  print("🔗 Relations Example")
+
+  # Create user with posts (cascade save)
+  user = User("relations@example.com", "Relations User")
+
+  posts = [
+    Post("First Post", "Content 1", user),
+    Post("Second Post", "Content 2", user),
+    Post("Third Post", "Content 3", user)
+  ]
+
+  user.posts = posts
+
+  # Save user with posts (cascade)
+  saved_user = await user.save()
+
+  print("✅ Saved user with ${saved_user.posts.length} posts")
+
+  # Lazy loading example
+  user_from_db = await User.find_by_id(saved_user.id)
+  match user_from_db {
+    Some(user) => {
+      # Posts are lazy loaded when accessed
+      print("📖 Lazy loading posts...")
+      posts = user.posts  # This triggers the load
+      print("✅ Loaded ${posts.length} posts lazily")
+    }
+    None => print("❌ User not found")
+  }
+
+  # Eager loading example
+  user_with_posts = await User.query()
+    .with("posts")  # Eager load posts
+    .find_by_id(saved_user.id)
+
+  match user_with_posts {
+    Some(user) => {
+      print("📖 Eager loaded user with ${user.posts.length} posts")
+      # Posts are already loaded, no additional query
+    }
+    None => print("❌ User not found")
+  }
+
+  # Many-to-many relations
+  category = Category("Technology", Some("Tech related posts"))
+  saved_category = await category.save()
+
+  # Associate posts with category
+  await category.add_posts(posts)
+
+  # Load category with posts
+  category_with_posts = await Category.query()
+    .with("posts")
+    .find_by_id(saved_category.id)
+
+  match category_with_posts {
+    Some(cat) => {
+      print("✅ Category '${cat.name}' has ${cat.posts.length} posts")
+    }
+    None => print("❌ Category not found")
+  }
+
+  print("✅ Relations examples completed")
+}

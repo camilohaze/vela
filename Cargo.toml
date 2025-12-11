@@ -23,6 +23,7 @@ members = [
     "packages/state-management",
     "packages/service-discovery",
     "packages/message-brokers",
+    "packages/orm",
     "bin",
 ]
 exclude = [

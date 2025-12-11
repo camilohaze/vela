@@ -19,6 +19,7 @@ use crate::ir::{IRModule, IRFunction, IRInstruction, IRType, Value as IRValue, B
 use crate::error::{CompileError, CompileResult, CodegenError};
 use crate::message_broker_decorators::{parse_message_broker_decorators, validate_consumer_function, generate_consumer_registration, MessageBrokerDecorator};
 use crate::observability_decorators::{parse_observability_decorators, generate_observability_code, ObservabilityDecorator};
+use crate::orm_decorators::{parse_orm_decorators, generate_orm_code, OrmDecorator};
 
 /// Convertidor de AST a IR
 pub struct ASTToIRConverter {
@@ -100,6 +101,21 @@ impl ASTToIRConverter {
             // Add instrumentation as metadata to the function
             // This will be used by the runtime to inject observability
             println!("Generated observability instrumentation: {}", instrumentation_code);
+        }
+
+        // Process ORM decorators
+        let orm_decorators = parse_orm_decorators(&func.decorators)?;
+        if !orm_decorators.is_empty() {
+            // Generate ORM code for entity operations
+            let orm_code = generate_orm_code(
+                &orm_decorators,
+                &func.name,
+                &[] // TODO: Get actual fields from struct
+            )?;
+
+            // Add ORM code as metadata to the function
+            // This will be used by the runtime to generate entity implementations
+            println!("Generated ORM code: {}", orm_code);
         }
 
         let return_type = if let Some(return_type_annotation) = &func.return_type {

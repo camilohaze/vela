@@ -26,7 +26,7 @@ database:
     # SSL Configuration
     ssl:
       enabled: true
-      mode: "require"  # disable, allow, prefer, require, verify-ca, verify-full
+      mode: "require" # disable, allow, prefer, require, verify-ca, verify-full
       ca_cert: "/path/to/ca.pem"
       client_cert: "/path/to/client.pem"
       client_key: "/path/to/client.key"
@@ -64,7 +64,7 @@ database:
     database: "./vela_app.db"
 
     pool:
-      max_connections: 1  # SQLite doesn't support concurrent writes
+      max_connections: 1 # SQLite doesn't support concurrent writes
       min_connections: 1
 
     options:
@@ -133,7 +133,7 @@ query:
   # Query logging
   logging:
     enabled: true
-    level: "info"  # debug, info, warn, error
+    level: "info" # debug, info, warn, error
     slow_query_threshold: "1s"
     include_parameters: false
 
@@ -145,7 +145,7 @@ query:
 # Transaction Configuration
 transaction:
   # Default isolation level
-  default_isolation: "read_committed"  # read_uncommitted, read_committed, repeatable_read, serializable
+  default_isolation: "read_committed" # read_uncommitted, read_committed, repeatable_read, serializable
 
   # Transaction timeout
   timeout: "5m"
@@ -179,7 +179,7 @@ cache:
     User:
       backend: "shared"
       ttl: "15m"
-      strategy: "write_through"  # write_through, write_behind, write_around
+      strategy: "write_through" # write_through, write_behind, write_around
 
     Post:
       backend: "default"
@@ -228,7 +228,7 @@ development:
   log_bindings: false
 
   # Migration safety
-  migration_safety: "strict"  # none, warn, strict
+  migration_safety: "strict" # none, warn, strict
 
   # Connection validation
   validate_connections: true
@@ -253,7 +253,7 @@ production:
   # Backup
   backup:
     enabled: true
-    schedule: "0 2 * * *"  # Daily at 2 AM
+    schedule: "0 2 * * *" # Daily at 2 AM
     retention: "30d"
 
 # Testing Configuration
