@@ -436,13 +436,13 @@ mod tests {
 
         let dict = helpers::dict_type(string_type.clone(), int_type.clone());
         assert_eq!(dict.name, "Dict");
-        assert_eq!(dict.params, vec![string_type, int_type.clone()]);
+        assert_eq!(dict.params, vec![string_type.clone(), int_type.clone()]);
 
         let option = helpers::option_type(int_type.clone());
         assert_eq!(option.name, "Option");
-        assert_eq!(option.params, vec![int_type]);
+        assert_eq!(option.params, vec![int_type.clone()]);
 
-        let result = helpers::result_type(int_type.clone(), string_type);
+        let result = helpers::result_type(int_type.clone(), string_type.clone());
         assert_eq!(result.name, "Result");
         assert_eq!(result.params.len(), 2);
     }

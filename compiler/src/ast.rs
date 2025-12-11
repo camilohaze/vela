@@ -2921,6 +2921,7 @@ mod tests {
             true,
             "main".to_string(),
             vec![],
+            vec![],
             Some(TypeAnnotation::Primitive(PrimitiveType::new(
                 create_range(3, 15, 3, 19),
                 "void".to_string(),
@@ -3004,6 +3005,7 @@ mod tests {
             range,
             true,
             "add".to_string(),
+            vec![],
             vec![param],
             Some(TypeAnnotation::Primitive(PrimitiveType::new(
                 create_range(1, 20, 1, 26),
@@ -3031,6 +3033,7 @@ mod tests {
             range,
             false,
             "fetchData".to_string(),
+            vec![],
             vec![],
             Some(TypeAnnotation::Generic(GenericType::new(
                 create_range(1, 20, 1, 35),
@@ -3069,6 +3072,7 @@ mod tests {
             range,
             true,
             "User".to_string(),
+            vec![],
             vec![field],
             vec![],
         );
@@ -3787,6 +3791,7 @@ mod tests {
             range,
             true,
             "add".to_string(),
+            vec![],
             vec![],
             Some(TypeAnnotation::Primitive(PrimitiveType::new(
                 create_range(1, 20, 1, 26),

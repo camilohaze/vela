@@ -12,7 +12,8 @@
 //! - Special types (Option, Result, List, etc.)
 
 use std::collections::{HashMap, HashSet};
-use super::{Type, TypeError, generics::TypeVar};
+use super::{Type, TypeError};
+use crate::types::{generics::TypeVar, generics::TypeConstructor, generics::TypeVarSupply, functions::FunctionType, functions::Parameter, special::TupleType, compounds::StructType, compounds::EnumType, compounds::EnumVariant, special::UnionType, special::IntersectionType, special::OptionVariant, special::ResultVariant};
 
 /// A substitution mapping type variables to types
 pub type Substitution = HashMap<TypeVar, Type>;
@@ -27,7 +28,7 @@ pub struct UnificationContext {
     pub substitution: Substitution,
 
     /// Type variable supply for fresh variables
-    pub supply: super::generics::TypeVarSupply,
+    pub supply: TypeVarSupply,
 }
 
 impl UnificationContext {
@@ -35,7 +36,7 @@ impl UnificationContext {
     pub fn new() -> Self {
         Self {
             substitution: HashMap::new(),
-            supply: super::generics::TypeVarSupply::new(),
+            supply: TypeVarSupply::new(),
         }
     }
 
@@ -224,8 +225,8 @@ fn unify_variable(context: &mut UnificationContext, var: &TypeVar, ty: &Type) ->
 /// Unify function types
 fn unify_functions(
     context: &mut UnificationContext,
-    expected: &super::functions::FunctionType,
-    actual: &super::functions::FunctionType
+    expected: &FunctionType,
+    actual: &FunctionType
 ) -> Result<(), TypeError> {
     // Must have same arity
     if expected.params.len() != actual.params.len() {
@@ -257,8 +258,8 @@ fn unify_functions(
 /// Unify generic type constructors
 fn unify_constructors(
     context: &mut UnificationContext,
-    expected: &super::generics::TypeConstructor,
-    actual: &super::generics::TypeConstructor
+    expected: &TypeConstructor,
+    actual: &TypeConstructor
 ) -> Result<(), TypeError> {
     // Must have same name
     if expected.name != actual.name {
@@ -289,8 +290,8 @@ fn unify_constructors(
 /// Unify struct types
 fn unify_structs(
     context: &mut UnificationContext,
-    expected: &super::compounds::StructType,
-    actual: &super::compounds::StructType
+    expected: &StructType,
+    actual: &StructType
 ) -> Result<(), TypeError> {
     // Must have same name
     if expected.name != actual.name {
@@ -331,8 +332,8 @@ fn unify_structs(
 /// Unify enum types
 fn unify_enums(
     context: &mut UnificationContext,
-    expected: &super::compounds::EnumType,
-    actual: &super::compounds::EnumType
+    expected: &EnumType,
+    actual: &EnumType
 ) -> Result<(), TypeError> {
     // Must have same name
     if expected.name != actual.name {
@@ -362,18 +363,18 @@ fn unify_enums(
 /// Unify enum variants
 fn unify_enum_variants(
     context: &mut UnificationContext,
-    expected: &super::compounds::EnumVariant,
-    actual: &super::compounds::EnumVariant
+    expected: &EnumVariant,
+    actual: &EnumVariant
 ) -> Result<(), TypeError> {
     match (expected, actual) {
-        (super::compounds::EnumVariant::Unit(l_name), super::compounds::EnumVariant::Unit(r_name)) => {
+        (EnumVariant::Unit(l_name), EnumVariant::Unit(r_name)) => {
             if l_name != r_name {
                 return Err(TypeError::UnificationError {
-                    expected: Type::Enum(super::compounds::EnumType {
+                    expected: Type::Enum(EnumType {
                         name: "enum".to_string(),
                         variants: vec![expected.clone()],
                     }),
-                    actual: Type::Enum(super::compounds::EnumType {
+                    actual: Type::Enum(EnumType {
                         name: "enum".to_string(),
                         variants: vec![actual.clone()],
                     }),
@@ -383,14 +384,14 @@ fn unify_enum_variants(
             Ok(())
         }
 
-        (super::compounds::EnumVariant::Tuple(l_name, l_types), super::compounds::EnumVariant::Tuple(r_name, r_types)) => {
+        (EnumVariant::Tuple(l_name, l_types), EnumVariant::Tuple(r_name, r_types)) => {
             if l_name != r_name || l_types.len() != r_types.len() {
                 return Err(TypeError::UnificationError {
-                    expected: Type::Enum(super::compounds::EnumType {
+                    expected: Type::Enum(EnumType {
                         name: "enum".to_string(),
                         variants: vec![expected.clone()],
                     }),
-                    actual: Type::Enum(super::compounds::EnumType {
+                    actual: Type::Enum(EnumType {
                         name: "enum".to_string(),
                         variants: vec![actual.clone()],
                     }),
@@ -404,14 +405,14 @@ fn unify_enum_variants(
             Ok(())
         }
 
-        (super::compounds::EnumVariant::Struct(l_name, l_fields), super::compounds::EnumVariant::Struct(r_name, r_fields)) => {
+        (EnumVariant::Struct(l_name, l_fields), EnumVariant::Struct(r_name, r_fields)) => {
             if l_name != r_name || l_fields.len() != r_fields.len() {
                 return Err(TypeError::UnificationError {
-                    expected: Type::Enum(super::compounds::EnumType {
+                    expected: Type::Enum(EnumType {
                         name: "enum".to_string(),
                         variants: vec![expected.clone()],
                     }),
-                    actual: Type::Enum(super::compounds::EnumType {
+                    actual: Type::Enum(EnumType {
                         name: "enum".to_string(),
                         variants: vec![actual.clone()],
                     }),
@@ -422,11 +423,11 @@ fn unify_enum_variants(
             for (l_field, r_field) in l_fields.iter().zip(r_fields.iter()) {
                 if l_field.0 != r_field.0 {
                     return Err(TypeError::UnificationError {
-                        expected: Type::Enum(super::compounds::EnumType {
+                        expected: Type::Enum(EnumType {
                             name: "enum".to_string(),
                             variants: vec![expected.clone()],
                         }),
-                        actual: Type::Enum(super::compounds::EnumType {
+                        actual: Type::Enum(EnumType {
                             name: "enum".to_string(),
                             variants: vec![actual.clone()],
                         }),
@@ -439,11 +440,11 @@ fn unify_enum_variants(
         }
 
         _ => Err(TypeError::UnificationError {
-            expected: Type::Enum(super::compounds::EnumType {
+            expected: Type::Enum(EnumType {
                 name: "enum".to_string(),
                 variants: vec![expected.clone()],
             }),
-            actual: Type::Enum(super::compounds::EnumType {
+            actual: Type::Enum(EnumType {
                 name: "enum".to_string(),
                 variants: vec![actual.clone()],
             }),
@@ -455,8 +456,8 @@ fn unify_enum_variants(
 /// Unify union types
 fn unify_unions(
     context: &mut UnificationContext,
-    expected: &super::special::UnionType,
-    actual: &super::special::UnionType
+    expected: &UnionType,
+    actual: &UnionType
 ) -> Result<(), TypeError> {
     // For now, require exact match of union variants
     // More sophisticated union unification could be added later
@@ -478,8 +479,8 @@ fn unify_unions(
 /// Unify intersection types
 fn unify_intersections(
     context: &mut UnificationContext,
-    expected: &super::special::IntersectionType,
-    actual: &super::special::IntersectionType
+    expected: &IntersectionType,
+    actual: &IntersectionType
 ) -> Result<(), TypeError> {
     // For now, require exact match of intersection types
     if expected.types.len() != actual.types.len() {
@@ -500,8 +501,8 @@ fn unify_intersections(
 /// Unify tuple types
 fn unify_tuples(
     context: &mut UnificationContext,
-    expected: &super::special::TupleType,
-    actual: &super::special::TupleType
+    expected: &TupleType,
+    actual: &TupleType
 ) -> Result<(), TypeError> {
     if expected.elements.len() != actual.elements.len() {
         return Err(TypeError::UnificationError {
@@ -521,14 +522,14 @@ fn unify_tuples(
 /// Unify Option variants
 fn unify_option_variants(
     context: &mut UnificationContext,
-    expected: &super::special::OptionVariant,
-    actual: &super::special::OptionVariant
+    expected: &OptionVariant,
+    actual: &OptionVariant
 ) -> Result<(), TypeError> {
     match (expected, actual) {
-        (super::special::OptionVariant::Some(l_ty), super::special::OptionVariant::Some(r_ty)) => {
+        (OptionVariant::Some(l_ty), OptionVariant::Some(r_ty)) => {
             unify_types(context, &l_ty, &r_ty)
         }
-        (super::special::OptionVariant::None, super::special::OptionVariant::None) => Ok(()),
+        (OptionVariant::None, OptionVariant::None) => Ok(()),
         _ => Err(TypeError::UnificationError {
             expected: Type::Option(expected.clone()),
             actual: Type::Option(actual.clone()),
@@ -540,14 +541,14 @@ fn unify_option_variants(
 /// Unify Result variants
 fn unify_result_variants(
     context: &mut UnificationContext,
-    expected: &super::special::ResultVariant,
-    actual: &super::special::ResultVariant
+    expected: &ResultVariant,
+    actual: &ResultVariant
 ) -> Result<(), TypeError> {
     match (expected, actual) {
-        (super::special::ResultVariant::Ok(l_ty), super::special::ResultVariant::Ok(r_ty)) => {
+        (ResultVariant::Ok(l_ty), ResultVariant::Ok(r_ty)) => {
             unify_types(context, &l_ty, &r_ty)
         }
-        (super::special::ResultVariant::Err(l_ty), super::special::ResultVariant::Err(r_ty)) => {
+        (ResultVariant::Err(l_ty), ResultVariant::Err(r_ty)) => {
             unify_types(context, &l_ty, &r_ty)
         }
         _ => Err(TypeError::UnificationError {
@@ -594,7 +595,7 @@ mod tests {
 
     #[test]
     fn test_unify_variables() {
-        let mut supply = super::generics::TypeVarSupply::new();
+        let mut supply = TypeVarSupply::new();
         let var1 = supply.fresh();
         let var2 = supply.fresh();
         let int_type = Type::Primitive(PrimitiveType::Number);
@@ -617,16 +618,16 @@ mod tests {
         let int_type = Type::Primitive(PrimitiveType::Number);
         let string_type = Type::Primitive(PrimitiveType::String);
 
-        let fn1 = Type::Function(super::functions::FunctionType::new(
+        let fn1 = Type::Function(FunctionType::new(
             vec![
-                super::functions::Parameter::new("x".to_string(), int_type.clone()),
+                Parameter::new("x".to_string(), int_type.clone()),
             ],
             string_type.clone()
         ));
 
-        let fn2 = Type::Function(super::functions::FunctionType::new(
+        let fn2 = Type::Function(FunctionType::new(
             vec![
-                super::functions::Parameter::new("y".to_string(), int_type.clone()),
+                Parameter::new("y".to_string(), int_type.clone()),
             ],
             string_type.clone()
         ));
@@ -635,18 +636,18 @@ mod tests {
         assert!(unify(&fn1, &fn2).is_ok());
 
         // Different parameter types don't unify
-        let fn3 = Type::Function(super::functions::FunctionType::new(
+        let fn3 = Type::Function(FunctionType::new(
             vec![
-                super::functions::Parameter::new("z".to_string(), string_type.clone()),
+                Parameter::new("z".to_string(), string_type.clone()),
             ],
             string_type.clone()
         ));
         assert!(unify(&fn1, &fn3).is_err());
 
         // Different return types don't unify
-        let fn4 = Type::Function(super::functions::FunctionType::new(
+        let fn4 = Type::Function(FunctionType::new(
             vec![
-                super::functions::Parameter::new("w".to_string(), int_type.clone()),
+                Parameter::new("w".to_string(), int_type.clone()),
             ],
             int_type.clone()
         ));
@@ -658,17 +659,17 @@ mod tests {
         let int_type = Type::Primitive(PrimitiveType::Number);
         let string_type = Type::Primitive(PrimitiveType::String);
 
-        let list1 = Type::Constructor(super::generics::TypeConstructor::unary(
+        let list1 = Type::Constructor(TypeConstructor::unary(
             "List".to_string(),
             int_type.clone()
         ));
 
-        let list2 = Type::Constructor(super::generics::TypeConstructor::unary(
+        let list2 = Type::Constructor(TypeConstructor::unary(
             "List".to_string(),
             int_type.clone()
         ));
 
-        let list3 = Type::Constructor(super::generics::TypeConstructor::unary(
+        let list3 = Type::Constructor(TypeConstructor::unary(
             "List".to_string(),
             string_type.clone()
         ));
@@ -680,7 +681,7 @@ mod tests {
         assert!(unify(&list1, &list3).is_err());
 
         // Different constructor names don't unify
-        let set = Type::Constructor(super::generics::TypeConstructor::unary(
+        let set = Type::Constructor(TypeConstructor::unary(
             "Set".to_string(),
             int_type.clone()
         ));
@@ -689,11 +690,11 @@ mod tests {
 
     #[test]
     fn test_occurs_check() {
-        let mut supply = super::generics::TypeVarSupply::new();
+        let mut supply = TypeVarSupply::new();
         let var = supply.fresh();
 
         // Create a recursive type: T = List<T>
-        let recursive_type = Type::Constructor(super::generics::TypeConstructor::unary(
+        let recursive_type = Type::Constructor(TypeConstructor::unary(
             "List".to_string(),
             Type::Variable(var.clone())
         ));
@@ -707,17 +708,17 @@ mod tests {
         let int_type = Type::Primitive(PrimitiveType::Number);
         let string_type = Type::Primitive(PrimitiveType::String);
 
-        let tuple1 = Type::Tuple(super::special::TupleType::new(vec![
+        let tuple1 = Type::Tuple(TupleType::new(vec![
             int_type.clone(),
             string_type.clone(),
         ]));
 
-        let tuple2 = Type::Tuple(super::special::TupleType::new(vec![
+        let tuple2 = Type::Tuple(TupleType::new(vec![
             int_type.clone(),
             string_type.clone(),
         ]));
 
-        let tuple3 = Type::Tuple(super::special::TupleType::new(vec![
+        let tuple3 = Type::Tuple(TupleType::new(vec![
             int_type.clone(),
         ]));
 

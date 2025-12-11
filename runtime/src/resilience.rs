@@ -346,9 +346,17 @@ pub struct FallbackConfig {
     pub exceptions: Vec<String>, // Exception types to trigger fallback
 }
 
+impl Default for FallbackConfig {
+    fn default() -> Self {
+        Self {
+            exceptions: vec![], // Empty means fallback on any error
+        }
+    }
+}
+
 /// Execute function with fallback
 pub async fn with_fallback<F, Fb, Fut, FbFut, T, E>(
-    _config: FallbackConfig,
+    config: FallbackConfig,
     f: F,
     fallback: Fb,
 ) -> Result<T, E>
@@ -357,12 +365,21 @@ where
     Fb: FnOnce() -> FbFut,
     Fut: Future<Output = Result<T, E>>,
     FbFut: Future<Output = Result<T, E>>,
+    E: std::fmt::Debug,
 {
-    // For now, simple implementation
-    // TODO: Implement exception-based fallback
     match f().await {
         Ok(value) => Ok(value),
-        Err(_) => fallback().await,
+        Err(error) => {
+            // If no specific exceptions are configured, always fallback
+            if config.exceptions.is_empty() {
+                return fallback().await;
+            }
+
+            // TODO: In a more advanced implementation, we could check the error type
+            // For now, we fallback on any error when exceptions are specified
+            // This could be improved to match specific exception types
+            fallback().await
+        }
     }
 }
 
@@ -553,5 +570,56 @@ mod tests {
         }).await;
 
         assert_eq!(result, Ok("test"));
+    }
+
+    #[tokio::test]
+    async fn test_fallback_success() {
+        let config = FallbackConfig::default();
+
+        let result = with_fallback(config,
+            || async { Ok::<&str, &str>("primary success") },
+            || async { Ok::<&str, &str>("fallback") }
+        ).await;
+
+        assert_eq!(result, Ok("primary success"));
+    }
+
+    #[tokio::test]
+    async fn test_fallback_on_error() {
+        let config = FallbackConfig::default();
+
+        let result = with_fallback(config,
+            || async { Err::<&str, &str>("primary failed") },
+            || async { Ok::<&str, &str>("fallback success") }
+        ).await;
+
+        assert_eq!(result, Ok("fallback success"));
+    }
+
+    #[tokio::test]
+    async fn test_fallback_both_fail() {
+        let config = FallbackConfig::default();
+
+        let result = with_fallback(config,
+            || async { Err::<&str, &str>("primary failed") },
+            || async { Err::<&str, &str>("fallback failed") }
+        ).await;
+
+        assert_eq!(result, Err("fallback failed"));
+    }
+
+    #[tokio::test]
+    async fn test_fallback_with_exceptions_config() {
+        let config = FallbackConfig {
+            exceptions: vec!["NetworkError".to_string(), "TimeoutError".to_string()],
+        };
+
+        let result = with_fallback(config,
+            || async { Err::<&str, &str>("primary failed") },
+            || async { Ok::<&str, &str>("fallback success") }
+        ).await;
+
+        // Currently, any error triggers fallback when exceptions are specified
+        assert_eq!(result, Ok("fallback success"));
     }
 }

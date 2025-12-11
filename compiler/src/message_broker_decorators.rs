@@ -7,7 +7,7 @@
 //! History: VELA-600
 //! Date: 2025-12-11
 
-use crate::ast::{Decorator, Expression, FunctionDeclaration, ASTNode};
+use crate::ast::{Decorator, Expression, FunctionDeclaration, ASTNode, create_range};
 use crate::error::{CompileError, CompileResult};
 use std::collections::HashMap;
 
@@ -185,7 +185,7 @@ mod tests {
 
     fn create_string_expr(value: &str) -> Expression {
         Expression::Literal(Literal {
-            node: Default::default(),
+            node: ASTNode::new(create_range(1, 1, 1, 1)),
             value: serde_json::Value::String(value.to_string()),
             kind: "string".to_string(),
         })

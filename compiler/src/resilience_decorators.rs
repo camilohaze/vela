@@ -458,6 +458,7 @@ mod tests {
             arguments: vec![
                 Expression::Literal(crate::ast::Literal::new(range.clone(), serde_json::json!(5), "number".to_string())),
                 Expression::Literal(crate::ast::Literal::new(range.clone(), serde_json::json!(500), "number".to_string())),
+                Expression::Literal(crate::ast::Literal::new(range.clone(), serde_json::json!(10000), "number".to_string())),
                 Expression::Literal(crate::ast::Literal::new(range.clone(), serde_json::json!(1.5), "number".to_string())),
             ],
             range,
@@ -466,6 +467,7 @@ mod tests {
         let config = parse_retry_decorator(&decorator).unwrap();
         assert_eq!(config.max_attempts, 5);
         assert_eq!(config.base_delay, 500);
+        assert_eq!(config.max_delay, Some(10000));
         assert_eq!(config.backoff_multiplier, 1.5);
     }
 
@@ -600,5 +602,78 @@ mod tests {
         assert!(code.contains("vela_runtime::resilience::with_bulkhead"));
         assert!(code.contains("test_function"));
         assert!(code.contains("original_body();"));
+    }
+
+    #[test]
+    fn test_parse_fallback_decorator() {
+        // Test with both arguments: fallback function and exceptions array
+        let range1 = crate::ast::create_range(1, 1, 1, 20);
+        let exceptions_array = Expression::ArrayLiteral(crate::ast::ArrayLiteral::new(
+            range1.clone(),
+            vec![
+                Expression::Literal(crate::ast::Literal::new(
+                    range1.clone(),
+                    serde_json::json!("NetworkError"),
+                    "string".to_string(),
+                )),
+                Expression::Literal(crate::ast::Literal::new(
+                    range1.clone(),
+                    serde_json::json!("TimeoutError"),
+                    "string".to_string(),
+                )),
+            ]
+        ));
+
+        let decorator = Decorator {
+            name: "fallback".to_string(),
+            arguments: vec![
+                Expression::Literal(crate::ast::Literal::new(
+                    range1.clone(),
+                    serde_json::json!("fallbackFunction"),
+                    "string".to_string(),
+                )),
+                exceptions_array,
+            ],
+            range: range1,
+        };
+
+        let config = parse_fallback_decorator(&decorator).unwrap();
+        assert_eq!(config.fallback_fn, "fallbackFunction");
+        assert_eq!(config.exceptions, vec!["NetworkError", "TimeoutError"]);
+
+        // Test with only fallback function
+        let range2 = crate::ast::create_range(1, 1, 1, 15);
+        let decorator_one_arg = Decorator {
+            name: "fallback".to_string(),
+            arguments: vec![
+                Expression::Literal(crate::ast::Literal::new(
+                    range2.clone(),
+                    serde_json::json!("simpleFallback"),
+                    "string".to_string(),
+                )),
+            ],
+            range: range2,
+        };
+
+        let config_one = parse_fallback_decorator(&decorator_one_arg).unwrap();
+        assert_eq!(config_one.fallback_fn, "simpleFallback");
+        assert_eq!(config_one.exceptions.len(), 0);
+    }
+
+    #[test]
+    fn test_generate_fallback_code() {
+        let config = FallbackDecorator {
+            fallback_fn: "myFallbackFunction".to_string(),
+            exceptions: vec!["NetworkError".to_string(), "TimeoutError".to_string()],
+        };
+
+        let code = generate_fallback_code(&config, "test_function", "original_body();");
+
+        assert!(code.contains("fallback_config"));
+        assert!(code.contains("exceptions: vec![\"NetworkError\".to_string(), \"TimeoutError\".to_string()]"));
+        assert!(code.contains("vela_runtime::resilience::with_fallback"));
+        assert!(code.contains("test_function"));
+        assert!(code.contains("original_body();"));
+        assert!(code.contains("myFallbackFunction(/* original params */)"));
     }
 }

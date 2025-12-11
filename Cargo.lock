@@ -4842,6 +4842,7 @@ dependencies = [
  "events",
  "futures 0.3.31",
  "http 0.1.0",
+ "lazy_static",
  "num_cpus",
  "reactive",
  "serde",

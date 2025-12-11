@@ -1,0 +1,86 @@
+// Test files for resilience patterns integration tests
+
+// circuit_breaker_test.vela - Tests for @circuitBreaker decorator
+@circuitBreaker(threshold=3, timeout=1000, recovery=2000)
+async fn testCircuitBreakerSuccess() -> Result<String> {
+    return Ok("success")
+}
+
+@circuitBreaker(threshold=2, timeout=500, recovery=1000)
+async fn testCircuitBreakerFailure() -> Result<String> {
+    return Err("simulated failure")
+}
+
+// retry_test.vela - Tests for @retry decorator
+@retry(maxAttempts=3, backoff=100)
+async fn testRetrySuccess() -> Result<String> {
+    static attempt: Number = 0
+    attempt = attempt + 1
+    if attempt < 3 {
+        return Err("temporary failure")
+    }
+    return Ok("success after retry")
+}
+
+@retry(maxAttempts=2, backoff=50)
+async fn testRetryExhausted() -> Result<String> {
+    return Err("persistent failure")
+}
+
+// timeout_test.vela - Tests for @timeout decorator
+@timeout(1000)
+async fn testTimeoutSuccess() -> Result<String> {
+    await sleep(500)
+    return Ok("completed within timeout")
+}
+
+@timeout(200)
+async fn testTimeoutExpired() -> Result<String> {
+    await sleep(500)
+    return Ok("should not reach here")
+}
+
+// bulkhead_test.vela - Tests for @bulkhead decorator
+@bulkhead(limit=2)
+async fn testBulkheadSuccess() -> Result<String> {
+    await sleep(100)
+    return Ok("bulkhead success")
+}
+
+@bulkhead(limit=1)
+async fn testBulkheadLimit() -> Result<String> {
+    await sleep(200)
+    return Ok("bulkhead limit test")
+}
+
+// fallback_test.vela - Tests for @fallback decorator
+@fallback("fallbackFunction")
+async fn testFallbackSuccess() -> Result<String> {
+    return Ok("primary success")
+}
+
+@fallback("fallbackFunction")
+async fn testFallbackTrigger() -> Result<String> {
+    return Err("primary failed")
+}
+
+async fn fallbackFunction() -> Result<String> {
+    return Ok("fallback executed")
+}
+
+// combined_test.vela - Tests combining multiple resilience patterns
+@circuitBreaker(threshold=2, timeout=1000, recovery=2000)
+@retry(maxAttempts=2, backoff=100)
+@timeout(5000)
+async fn testCombinedResilience() -> Result<String> {
+    // This function combines circuit breaker, retry, and timeout
+    static callCount: Number = 0
+    callCount = callCount + 1
+
+    if callCount < 3 {
+        await sleep(200) // Within timeout
+        return Err("temporary failure")
+    }
+
+    return Ok("combined resilience success")
+}

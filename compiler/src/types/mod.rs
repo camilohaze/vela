@@ -505,7 +505,7 @@ mod tests {
     #[test]
     fn test_option_type() {
         let inner = Type::Primitive(primitives::PrimitiveType::String);
-        let option_type = Type::Special(special::SpecialType::Option(Box::new(inner)));
+        let option_type = Type::Constructor(generics::TypeConstructor::unary("Option".to_string(), inner));
         assert!(!option_type.is_primitive());
         assert!(!option_type.is_generic());
         assert_eq!(option_type.free_vars().len(), 0);
@@ -518,7 +518,7 @@ mod tests {
             Type::Primitive(primitives::PrimitiveType::Number),
             Type::Primitive(primitives::PrimitiveType::String),
         ];
-        let union_type = Type::Union(types);
+        let union_type = Type::Constructor(generics::TypeConstructor::new("Union".to_string(), types));
         assert!(!union_type.is_primitive());
         assert!(!union_type.is_generic());
         assert_eq!(union_type.free_vars().len(), 0);

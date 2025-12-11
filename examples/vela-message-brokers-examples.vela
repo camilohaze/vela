@@ -1,0 +1,385 @@
+// =========================================
+// 🎯 EJEMPLOS DE VELA CON MESSAGE BROKERS
+// =========================================
+
+// Vela ahora puede crear arquitecturas event-driven completas
+// con decoradores declarativos y resiliencia automática
+
+// =========================================
+// 1. CONSUMER DECLARATIVO CON RABBITMQ
+// =========================================
+
+@consumer(topic="orders.new", broker="rabbitmq")
+service OrderService {
+
+    @inject
+    repository: OrderRepository
+
+    async fn processOrder(orderData: OrderDTO) -> Result<Order, Error> {
+        // Procesar nueva orden
+        order = await this.repository.create(orderData)
+
+        // Publicar evento de orden creada
+        await this.publishEvent("orders.created", {
+            orderId: order.id,
+            customerId: order.customerId,
+            total: order.total
+        })
+
+        return order
+    }
+
+    async fn publishEvent(topic: String, data: any) -> void {
+        // El decorador @consumer inyecta automáticamente el broker
+        // No necesitamos código manual de conexión
+    }
+}
+
+// =========================================
+// 2. EVENT-DRIVEN MICROSERVICES
+// =========================================
+
+@consumer(topic="orders.created", broker="rabbitmq")
+service NotificationService {
+
+    @inject
+    emailService: EmailService
+
+    async fn sendOrderConfirmation(event: OrderCreatedEvent) -> void {
+        // Enviar email de confirmación
+        await this.emailService.send({
+            to: event.customerEmail,
+            subject: "Orden Confirmada - #" + event.orderId,
+            template: "order-confirmation",
+            data: event
+        })
+
+        // Publicar evento de notificación enviada
+        await this.publishEvent("notifications.sent", {
+            orderId: event.orderId,
+            type: "order-confirmation",
+            status: "sent"
+        })
+    }
+}
+
+@consumer(topic="orders.created", broker="kafka")
+service InventoryService {
+
+    @inject
+    inventoryRepo: InventoryRepository
+
+    async fn updateStock(event: OrderCreatedEvent) -> void {
+        // Actualizar inventario por cada item de la orden
+        for item in event.items {
+            await this.inventoryRepo.decrementStock(item.productId, item.quantity)
+        }
+
+        // Verificar stock bajo
+        lowStockItems = await this.inventoryRepo.checkLowStock()
+        if lowStockItems.length > 0 {
+            await this.publishEvent("inventory.low-stock", {
+                items: lowStockItems
+            })
+        }
+    }
+}
+
+// =========================================
+// 3. RESILIENCE PATTERNS AUTOMÁTICOS
+// =========================================
+
+@consumer(
+    topic="payments.process",
+    broker="rabbitmq",
+    retryPolicy={
+        maxAttempts: 3,
+        baseDelay: 1000, // ms
+        exponentialBackoff: true
+    },
+    deadLetterQueue={
+        queueName: "payments.failed",
+        maxAge: 7 * 24 * 60 * 60 * 1000, // 7 días en ms
+        maxSize: 10000
+    },
+    circuitBreaker={
+        failureThreshold: 5,
+        recoveryTimeout: 30000, // 30 segundos
+        successThreshold: 2
+    }
+)
+service PaymentService {
+
+    @inject
+    paymentGateway: PaymentGateway
+
+    async fn processPayment(payment: PaymentRequest) -> Result<PaymentResult, Error> {
+        try {
+            // Intentar procesar pago
+            result = await this.paymentGateway.charge({
+                amount: payment.amount,
+                card: payment.cardToken,
+                description: "Orden #" + payment.orderId
+            })
+
+            // Si llega aquí, el pago fue exitoso
+            await this.publishEvent("payments.succeeded", {
+                paymentId: result.id,
+                orderId: payment.orderId,
+                amount: payment.amount
+            })
+
+            return result
+
+        } catch (error: GatewayTimeoutError) {
+            // Circuit breaker detectará múltiples timeouts
+            // y abrirá el circuito automáticamente
+            throw error
+        } catch (error: InsufficientFundsError) {
+            // Este error no se reintenta (non-retryable)
+            // Va directamente a DLQ
+            throw error
+        }
+    }
+}
+
+// =========================================
+// 4. SAGAS PARA TRANSACCIONES DISTRIBUIDAS
+// =========================================
+
+@consumer(topic="orders.created", broker="kafka")
+service OrderSagaCoordinator {
+
+    @inject
+    sagaRepo: SagaRepository
+
+    async fn startOrderSaga(event: OrderCreatedEvent) -> void {
+        // Crear saga para orden distribuida
+        saga = await this.sagaRepo.create({
+            id: "saga-order-" + event.orderId,
+            type: "order-fulfillment",
+            steps: [
+                { name: "reserve-inventory", status: "pending" },
+                { name: "process-payment", status: "pending" },
+                { name: "ship-order", status: "pending" }
+            ]
+        })
+
+        // Publicar comando para reservar inventario
+        await this.publishCommand("inventory.reserve", {
+            sagaId: saga.id,
+            orderId: event.orderId,
+            items: event.items
+        })
+    }
+}
+
+@consumer(topic="inventory.reserved", broker="kafka")
+service OrderSagaCoordinator {
+
+    async fn handleInventoryReserved(event: InventoryReservedEvent) -> void {
+        // Actualizar saga
+        await this.sagaRepo.updateStep(event.sagaId, "reserve-inventory", "completed")
+
+        // Siguiente paso: procesar pago
+        await this.publishCommand("payments.process", {
+            sagaId: event.sagaId,
+            orderId: event.orderId,
+            amount: event.totalAmount
+        })
+    }
+}
+
+@consumer(topic="payments.failed", broker="rabbitmq")
+service OrderSagaCoordinator {
+
+    async fn handlePaymentFailed(event: PaymentFailedEvent) -> void {
+        // Pago falló - compensar transacción
+        await this.sagaRepo.updateStep(event.sagaId, "process-payment", "failed")
+
+        // Publicar comandos de compensación
+        await this.publishCommand("inventory.release", {
+            sagaId: event.sagaId,
+            orderId: event.orderId
+        })
+
+        await this.publishCommand("orders.cancel", {
+            sagaId: event.sagaId,
+            orderId: event.orderId
+        })
+    }
+}
+
+// =========================================
+// 5. EVENT SOURCING CON SNAPSHOTS
+// =========================================
+
+@consumer(topic="orders.*", broker="kafka")
+service OrderEventStore {
+
+    @inject
+    eventStore: EventStore
+
+    async fn storeEvent(event: OrderEvent) -> void {
+        // Almacenar evento en event store
+        await this.eventStore.append({
+            aggregateId: event.orderId,
+            eventType: event.type,
+            data: event,
+            timestamp: Date.now(),
+            version: await this.getNextVersion(event.orderId)
+        })
+
+        // Crear snapshot cada 10 eventos
+        currentVersion = await this.getCurrentVersion(event.orderId)
+        if currentVersion % 10 == 0 {
+            await this.createSnapshot(event.orderId)
+        }
+    }
+
+    async fn createSnapshot(orderId: String) -> void {
+        // Reconstruir estado actual desde eventos
+        events = await this.eventStore.getEvents(orderId)
+        currentState = this.rebuildOrderState(events)
+
+        // Guardar snapshot
+        await this.eventStore.createSnapshot({
+            aggregateId: orderId,
+            state: currentState,
+            version: events.length
+        })
+    }
+}
+
+// =========================================
+// 6. MICROSERVICES CON API GATEWAY
+// =========================================
+
+@consumer(topic="api.requests", broker="rabbitmq")
+service ApiGateway {
+
+    @inject
+    serviceRegistry: ServiceRegistry
+    authService: AuthService
+
+    async fn routeRequest(request: ApiRequest) -> Result<ApiResponse, Error> {
+        // Autenticar request
+        user = await this.authService.authenticate(request.token)
+
+        // Encontrar servicio destino
+        service = await this.serviceRegistry.findService(request.serviceName)
+
+        // Enrutar request al microservicio apropiado
+        response = await this.forwardRequest(service, request)
+
+        // Loggear para observabilidad
+        await this.publishEvent("api.responses", {
+            requestId: request.id,
+            service: request.serviceName,
+            status: response.status,
+            duration: Date.now() - request.timestamp
+        })
+
+        return response
+    }
+}
+
+// =========================================
+// 7. STREAM PROCESSING EN TIEMPO REAL
+// =========================================
+
+@consumer(topic="user.activity", broker="kafka")
+service UserActivityProcessor {
+
+    // Estado en memoria para procesamiento en tiempo real
+    state userSessions: Map<String, UserSession> = new Map()
+
+    async fn processActivity(event: UserActivityEvent) -> void {
+        sessionId = event.sessionId
+
+        // Actualizar sesión del usuario
+        if !this.userSessions.has(sessionId) {
+            this.userSessions.set(sessionId, {
+                userId: event.userId,
+                startTime: event.timestamp,
+                activities: [],
+                lastActivity: event.timestamp
+            })
+        }
+
+        session = this.userSessions.get(sessionId)
+        session.activities.push(event)
+        session.lastActivity = event.timestamp
+
+        // Detectar patrones de comportamiento
+        await this.detectPatterns(session)
+
+        // Limpiar sesiones inactivas (cada 1000 eventos)
+        if this.userSessions.size % 1000 == 0 {
+            await this.cleanupInactiveSessions()
+        }
+    }
+
+    async fn detectPatterns(session: UserSession) -> void {
+        // Detectar compra abandonada
+        hasCartActivity = session.activities.some(a => a.type == "add-to-cart")
+        hasPurchase = session.activities.some(a => a.type == "purchase")
+
+        if hasCartActivity && !hasPurchase {
+            timeSinceLastActivity = Date.now() - session.lastActivity
+            if timeSinceLastActivity > 30 * 60 * 1000 { // 30 minutos
+                await this.publishEvent("abandoned-carts", {
+                    userId: session.userId,
+                    sessionId: session.sessionId,
+                    cartValue: this.calculateCartValue(session)
+                })
+            }
+        }
+    }
+}
+
+// =========================================
+// 8. MONITORING Y OBSERVABILITY
+// =========================================
+
+@consumer(topic="*", broker="rabbitmq") // Consumir todos los eventos
+service MonitoringService {
+
+    state metrics: Map<String, Metric> = new Map()
+
+    async fn collectMetrics(event: any) -> void {
+        eventType = event.topic || "unknown"
+
+        // Contar eventos por tipo
+        if !this.metrics.has(eventType) {
+            this.metrics.set(eventType, {
+                count: 0,
+                errors: 0,
+                avgProcessingTime: 0
+            })
+        }
+
+        metric = this.metrics.get(eventType)
+        metric.count++
+
+        // Detectar errores
+        if event.error {
+            metric.errors++
+        }
+
+        // Calcular latencia si está disponible
+        if event.processingTime {
+            metric.avgProcessingTime =
+                (metric.avgProcessingTime + event.processingTime) / 2
+        }
+
+        // Alertas automáticas
+        if metric.errors / metric.count > 0.1 { // > 10% de errores
+            await this.publishAlert("high-error-rate", {
+                eventType: eventType,
+                errorRate: metric.errors / metric.count,
+                totalEvents: metric.count
+            })
+        }
+    }
+}
