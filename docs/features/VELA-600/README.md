@@ -48,19 +48,19 @@ Ver archivos en:
 
 ## 📊 Métricas
 - **Subtasks completadas:** 4/7
-- **Archivos creados:** 13 (docs + código + tests)
+- **Archivos creados:** 15 (docs + código + tests)
 - **ADRs:** 1
-- **Tests:** 6 unitarios pasando
-- **Líneas de código:** 620+ en message-brokers
+- **Tests:** 8 unitarios pasando
+- **Líneas de código:** 750+ en message-brokers
 
 ## ✅ Definición de Hecho
 - [x] Arquitectura de message brokers diseñada
 - [x] MessageBroker interface implementada
 - [x] RabbitMQ integration completada
 - [x] Kafka integration completada
+- [ ] Redis integration implementada
 - [ ] Decoradores @consumer y @subscribe implementados
 - [ ] Retry y dead letter queues implementados
-- [ ] Tests de message brokers completados
 
 ## 🔗 Referencias
 - **Jira:** [VELA-600](https://velalang.atlassian.net/browse/VELA-600)
