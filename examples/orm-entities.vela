@@ -1,0 +1,163 @@
+"""
+Ejemplo de uso de decoradores ORM en Vela
+
+Este archivo demuestra cómo usar los decoradores ORM implementados
+en TASK-113AX para definir entidades de base de datos de manera declarativa.
+"""
+
+// Entidad básica de Usuario
+@entity(table: "users", schema: "public")
+class User {
+    @id(generated: true, strategy: "auto")
+    id: Number
+
+    @column(name: "first_name", nullable: false, length: 50)
+    firstName: String
+
+    @column(name: "last_name", nullable: false, length: 50)
+    lastName: String
+
+    @column(name: "email", nullable: false, unique: true)
+    email: String
+
+    @column(name: "created_at", nullable: false)
+    createdAt: DateTime
+
+    @column(name: "updated_at")
+    updatedAt: Option<DateTime>
+
+    // Relación uno a muchos con posts
+    @oneToMany(entity: "Post", mappedBy: "author", cascade: ["ALL"])
+    posts: List<Post>
+
+    // Relación muchos a muchos con roles
+    @manyToMany(entity: "Role", joinTable: "user_roles", joinColumns: ["user_id"], inverseJoinColumns: ["role_id"])
+    roles: List<Role>
+}
+
+// Entidad de Post
+@entity(table: "posts", schema: "public")
+class Post {
+    @id(generated: true, strategy: "auto")
+    id: Number
+
+    @column(name: "title", nullable: false, length: 200)
+    title: String
+
+    @column(name: "content", nullable: false)
+    content: String
+
+    @column(name: "published", nullable: false)
+    published: Bool
+
+    @column(name: "created_at", nullable: false)
+    createdAt: DateTime
+
+    // Relación muchos a uno con usuario
+    @manyToOne(entity: "User", joinColumn: "author_id", cascade: ["PERSIST", "MERGE"])
+    author: User
+
+    // Relación uno a muchos con comentarios
+    @oneToMany(entity: "Comment", mappedBy: "post", cascade: ["ALL"], orphanRemoval: true)
+    comments: List<Comment>
+
+    // Relación muchos a muchos con tags
+    @manyToMany(entity: "Tag", joinTable: "post_tags", joinColumns: ["post_id"], inverseJoinColumns: ["tag_id"])
+    tags: List<Tag>
+}
+
+// Entidad de Comentario
+@entity(table: "comments", schema: "public")
+class Comment {
+    @id(generated: true, strategy: "auto")
+    id: Number
+
+    @column(name: "content", nullable: false, length: 1000)
+    content: String
+
+    @column(name: "created_at", nullable: false)
+    createdAt: DateTime
+
+    // Relación muchos a uno con post
+    @manyToOne(entity: "Post", joinColumn: "post_id", cascade: ["PERSIST", "MERGE"])
+    post: Post
+
+    // Relación muchos a uno con usuario (autor del comentario)
+    @manyToOne(entity: "User", joinColumn: "author_id", cascade: ["PERSIST", "MERGE"])
+    author: User
+}
+
+// Entidad de Tag
+@entity(table: "tags", schema: "public")
+class Tag {
+    @id(generated: true, strategy: "auto")
+    id: Number
+
+    @column(name: "name", nullable: false, unique: true, length: 50)
+    name: String
+
+    @column(name: "description")
+    description: Option<String>
+
+    // Relación muchos a muchos con posts (bidireccional)
+    @manyToMany(entity: "Post", mappedBy: "tags")
+    posts: List<Post>
+}
+
+// Entidad de Role
+@entity(table: "roles", schema: "public")
+class Role {
+    @id(generated: true, strategy: "auto")
+    id: Number
+
+    @column(name: "name", nullable: false, unique: true, length: 50)
+    name: String
+
+    @column(name: "description")
+    description: Option<String>
+
+    // Relación muchos a muchos con usuarios (bidireccional)
+    @manyToMany(entity: "User", mappedBy: "roles")
+    users: List<User>
+
+    // Relación uno a muchos con permisos
+    @oneToMany(entity: "Permission", mappedBy: "role", cascade: ["ALL"])
+    permissions: List<Permission>
+}
+
+// Entidad de Permission
+@entity(table: "permissions", schema: "public")
+class Permission {
+    @id(generated: true, strategy: "auto")
+    id: Number
+
+    @column(name: "name", nullable: false, unique: true, length: 100)
+    name: String
+
+    @column(name: "description")
+    description: Option<String>
+
+    // Relación muchos a uno con role
+    @manyToOne(entity: "Role", joinColumn: "role_id", cascade: ["PERSIST", "MERGE"])
+    role: Role
+}
+
+// Ejemplo de uso del ORM
+fn main() -> void {
+    // Crear un nuevo usuario
+    user = User {
+        firstName: "Juan",
+        lastName: "Pérez",
+        email: "juan.perez@example.com",
+        createdAt: DateTime.now(),
+        updatedAt: None
+    }
+
+    // El ORM automáticamente generará código para:
+    // - Implementar el trait Entity para User
+    // - Crear métodos save(), findById(), findAll(), etc.
+    // - Manejar las relaciones con cascade apropiado
+    // - Generar queries type-safe
+
+    print("Usuario creado: ${user.firstName} ${user.lastName}")
+}
