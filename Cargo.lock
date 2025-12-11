@@ -2465,6 +2465,7 @@ dependencies = [
  "async-trait",
  "chrono",
  "futures 0.3.31",
+ "futures-lite 2.6.1",
  "lapin",
  "rand 0.8.5",
  "reqwest 0.11.27",

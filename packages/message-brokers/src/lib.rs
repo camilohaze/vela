@@ -290,3 +290,6 @@ mod tests {
         assert!(corr_id.starts_with("corr-"));
     }
 }
+
+// Módulos de implementaciones concretas
+pub mod rabbitmq;

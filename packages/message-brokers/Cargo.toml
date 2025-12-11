@@ -20,6 +20,9 @@ lapin = "2.3"  # AMQP/RabbitMQ
 # rdkafka = "0.36"  # Kafka
 # redis = "0.25"  # Redis
 
+# Additional dependencies for implementations
+futures-lite = "2.0"
+
 # HTTP client for some brokers
 reqwest = { version = "0.11", features = ["json"] }
 
