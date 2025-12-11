@@ -16,6 +16,7 @@ rand = "0.8"
 
 # Message broker clients
 lapin = "2.3"  # AMQP/RabbitMQ
+# redis = { version = "0.23", features = ["tokio-comp"] }  # Redis - commented for mock implementation
 # TODO: Add Kafka and Redis clients when build issues are resolved
 # rdkafka = "0.36"  # Kafka
 # redis = "0.25"  # Redis
