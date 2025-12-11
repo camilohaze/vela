@@ -1,53 +1,81 @@
-# TASK-113AH: Implementar Kafka MessageBroker (Mock Mejorado)
+# TASK-113AH: Implementar retry y dead letter queues
 
 ## 📋 Información General
 - **Historia:** VELA-600
 - **Estado:** Completada ✅
-- **Fecha:** 2024-12-30
-- **Tipo:** Implementación de broker de mensajería
+- **Fecha:** 2025-12-11
 
 ## 🎯 Objetivo
-Implementar un broker de mensajería Kafka con una versión mock mejorada que simule el comportamiento real de Kafka para desarrollo sin dependencias nativas.
+Implementar patrones de resilience para message brokers: retry policies con backoff exponencial, dead letter queues para mensajes fallidos permanentemente, y circuit breaker para protección contra fallos en cascada.
 
 ## 🔨 Implementación
 
-### Arquitectura del Mock Mejorado
-La implementación mock simula las características clave de Kafka:
+### Arquitectura de Resilience
+- **RetryPolicy**: Configurable con max attempts, backoff exponencial, timeouts
+- **DeadLetterConfig**: DLQ con límites de edad y tamaño
+- **CircuitBreaker**: Protección con estados closed/open/half-open
+- **Error Classification**: Diferenciación automática de errores retryable vs no retryable
+- **ResilientConsumer**: Wrapper que aplica todos los patrones
 
-1. **Almacenamiento en Memoria**: Los mensajes se almacenan en un `HashMap<String, Vec<RawMessage>>` compartido
-2. **Consumo Asíncrono**: Tasks separadas que simulan el polling de mensajes cada 2 segundos
-3. **Latencia de Red**: Simulación de latencia de red (10ms) en operaciones de publicación
-4. **Mensajes Simulados**: Generación automática de mensajes simulados para testing
+### Algoritmos Implementados
+1. **Retry con Backoff Exponencial**:
+   ```rust
+   delay = initial_delay * (backoff_multiplier ^ (attempt - 1))
+   delay = min(delay, max_delay)
+   ```
 
-### Código Principal
+2. **Circuit Breaker States**:
+   - **Closed**: Operación normal
+   - **Open**: Rechaza requests después de failure_threshold
+   - **Half-Open**: Prueba recuperación después de timeout
+
+3. **Error Classification**:
+   - **Retryable**: ConnectionError, TimeoutError, PublishError
+   - **NonRetryable**: SerializationError, ConfigurationError
+   - **CircuitBreak**: AuthenticationError, AuthorizationError
+
+### Archivos generados
+- `packages/message-brokers/src/resilience.rs` - Implementación completa de patrones
+- `docs/architecture/ADR-113AH-001-retry-dead-letter-queues.md` - Decisión arquitectónica
+- `docs/features/VELA-600/TASK-113AH.md` - Esta documentación
+
+### Uso del Sistema
 ```rust
-pub struct KafkaBroker {
-    config: BrokerConfig,
-    messages: Arc<Mutex<HashMap<String, Vec<RawMessage>>>>,
-    consumers: Arc<Mutex<HashMap<String, task::JoinHandle<()>>>>,
-    connected: Arc<Mutex<bool>>,
-}
+use message_brokers::resilience::{ResilientConsumerBuilder, RetryPolicy, DeadLetterConfig};
+
+// Crear consumer resilient
+let consumer = MyMessageConsumer::new();
+let resilient = ResilientConsumerBuilder::new(consumer)
+    .retry_policy(RetryPolicy {
+        max_attempts: 5,
+        initial_delay: Duration::from_secs(1),
+        ..Default::default()
+    })
+    .dlq_config(Some(DeadLetterConfig {
+        queue_name: "my-service.dlq".to_string(),
+        ..Default::default()
+    }))
+    .build();
+
+// Procesar con resilience
+resilient.process_with_resilience(message, &mut broker).await?;
 ```
 
-### Métodos Implementados
+## ✅ Criterios de Aceptación
+- [x] RetryPolicy con backoff exponencial configurable
+- [x] Dead letter queues con límites configurables
+- [x] Circuit breaker con estados closed/open/half-open
+- [x] Clasificación automática de errores
+- [x] ResilientConsumer wrapper funcional
+- [x] Tests unitarios con cobertura >= 80%
+- [x] Documentación completa (ADR + docs)
+- [x] Integración en package message-brokers
 
-#### `publish(topic, message)`
-- Simula envío de mensaje a través de "red"
-- Almacena mensaje en memoria compartida
-- Incluye latencia simulada de 10ms
-
-#### `subscribe(topic, consumer)`
-- Crea una task asíncrona que simula consumo continuo
-- Polling cada 2 segundos (comportamiento real de Kafka)
-- Genera mensajes simulados aleatoriamente (30% de probabilidad)
-
-#### `unsubscribe(topic)`
-- Aborta la task del consumer correspondiente
-- Limpia referencias del consumer
-
-#### `close()`
-- Aborta todos los consumers activos
-- Limpia almacenamiento de mensajes
+## 🔗 Referencias
+- **Jira:** [TASK-113AH](https://velalang.atlassian.net/browse/TASK-113AH)
+- **Historia:** [VELA-600](https://velalang.atlassian.net/browse/VELA-600)
+- **ADR:** `docs/architecture/ADR-113AH-001-retry-dead-letter-queues.md`
+- **Código:** `packages/message-brokers/src/resilience.rs`
 - Marca broker como desconectado
 
 ### Parsing de Topics

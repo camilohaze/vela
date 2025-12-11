@@ -295,3 +295,7 @@ mod tests {
 pub mod rabbitmq;
 pub mod kafka;
 pub mod redis;
+pub mod resilience;
+
+#[cfg(test)]
+mod resilience_tests;

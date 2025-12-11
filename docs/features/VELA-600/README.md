@@ -3,7 +3,7 @@
 ## 📋 Información General
 - **Epic:** EPIC-09F
 - **Sprint:** Sprint 37
-- **Estado:** En Progreso 🚧
+- **Estado:** Completada ✅
 - **Fecha:** 2025-12-11
 
 ## 🎯 Descripción
@@ -50,6 +50,14 @@ Como desarrollador, quiero message brokers para implementar arquitecturas event-
    - Mock implementation sin dependencias nativas
    - Tests unitarios implementados
 
+7. **TASK-113AJ**: Implementar retry y dead letter queues ✅
+   - RetryPolicy con backoff exponencial
+   - Dead letter queues configurables
+   - Circuit breaker con estados closed/open/half-open
+   - Error classification automática
+   - ResilientConsumer wrapper
+   - Tests unitarios implementados
+
 ## 🔨 Implementación
 Ver archivos en:
 - `docs/architecture/ADR-113AD-message-brokers-architecture.md` - Arquitectura diseñada
@@ -65,13 +73,16 @@ Ver archivos en:
 - `docs/features/VELA-600/TASK-113AH.md` - Documentación de Kafka
 - `packages/message-brokers/src/redis.rs` - Implementación Redis
 - `docs/features/VELA-600/TASK-113AI.md` - Documentación de Redis
+- `packages/message-brokers/src/resilience.rs` - Retry y dead letter queues
+- `docs/architecture/ADR-113AJ-001-retry-dead-letter-queues.md` - ADR de resilience
+- `docs/features/VELA-600/TASK-113AJ.md` - Documentación de retry/DLQ
 
 ## 📊 Métricas
-- **Subtasks completadas:** 6/7
-- **Archivos creados:** 21 (docs + código + tests)
-- **ADRs:** 2
-- **Tests:** 15+ unitarios pasando
-- **Líneas de código:** 1100+ en message-brokers + compiler
+- **Subtasks completadas:** 7/7
+- **Archivos creados:** 25 (docs + código + tests)
+- **ADRs:** 3
+- **Tests:** 20+ unitarios pasando
+- **Líneas de código:** 1300+ en message-brokers + compiler
 
 ## ✅ Definición de Hecho
 - [x] Arquitectura de message brokers diseñada
@@ -80,7 +91,7 @@ Ver archivos en:
 - [x] Decoradores @consumer y @subscribe implementados
 - [x] Kafka integration completada
 - [x] Redis integration completada
-- [ ] Retry y dead letter queues implementados
+- [x] Retry y dead letter queues implementados
 
 ## 🔗 Referencias
 - **Jira:** [VELA-600](https://velalang.atlassian.net/browse/VELA-600)
