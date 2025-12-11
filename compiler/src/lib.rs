@@ -32,6 +32,7 @@ pub mod semantic;
 pub mod types;
 pub mod codegen;
 pub mod json_decorators;
+pub mod message_broker_decorators;
 
 use std::path::Path;
 use config::Config;

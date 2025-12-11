@@ -17,6 +17,7 @@ use crate::ast::{
 use crate::types::Type;
 use crate::ir::{IRModule, IRFunction, IRInstruction, IRType, Value as IRValue, BinaryOp, UnaryOp, IRExpr, Label};
 use crate::error::{CompileError, CompileResult, CodegenError};
+use crate::message_broker_decorators::{parse_message_broker_decorators, validate_consumer_function, generate_consumer_registration, MessageBrokerDecorator};
 
 /// Convertidor de AST a IR
 pub struct ASTToIRConverter {
@@ -69,6 +70,22 @@ impl ASTToIRConverter {
     fn convert_function(&mut self, func: &FunctionDeclaration) -> CompileResult<IRFunction> {
         self.current_function = Some(func.name.clone());
         self.local_symbols.clear();
+
+        // Process message broker decorators
+        if let Some(decorator) = parse_message_broker_decorators(&func.decorators)? {
+            validate_consumer_function(func)?;
+
+            // Generate consumer registration code
+            let registration_code = generate_consumer_registration(
+                &decorator,
+                &func.name,
+                "main" // TODO: Get actual module name
+            );
+
+            // Add registration as metadata to the function
+            // This will be used by the runtime to register consumers
+            println!("Generated consumer registration: {}", registration_code);
+        }
 
         let return_type = if let Some(return_type_annotation) = &func.return_type {
             self.convert_type_annotation(return_type_annotation)?
