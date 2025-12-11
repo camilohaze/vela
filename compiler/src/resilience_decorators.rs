@@ -3,7 +3,7 @@
 //! This module handles parsing and code generation for resilience decorators
 //! like @circuitBreaker, @retry, @timeout, @bulkhead, and @fallback.
 
-use crate::ast::{Decorator, Expr, Stmt, Type};
+use crate::ast::{Decorator, Expression, Statement, TypeAnnotation};
 use crate::error::CompileError;
 use std::collections::HashMap;
 
@@ -56,30 +56,51 @@ pub fn parse_circuit_breaker_decorator(
         call_timeout: 10000, // 10 seconds
     };
 
-    if let Some(args) = &decorator.arguments {
-        for (key, value) in args {
-            match key.as_str() {
-                "failureThreshold" => {
-                    if let Expr::IntLiteral(val) = value {
-                        config.failure_threshold = *val as u32;
+    // Arguments are positional: failure_threshold, recovery_timeout, success_threshold, call_timeout
+    if decorator.arguments.len() >= 1 {
+        if let Expression::Literal(lit) = &decorator.arguments[0] {
+            if lit.kind == "number" {
+                if let serde_json::Value::Number(num) = &lit.value {
+                    if let Some(val) = num.as_u64() {
+                        config.failure_threshold = val as u32;
                     }
                 }
-                "recoveryTimeout" => {
-                    if let Expr::IntLiteral(val) = value {
-                        config.recovery_timeout = *val as u64;
+            }
+        }
+    }
+
+    if decorator.arguments.len() >= 2 {
+        if let Expression::Literal(lit) = &decorator.arguments[1] {
+            if lit.kind == "number" {
+                if let serde_json::Value::Number(num) = &lit.value {
+                    if let Some(val) = num.as_u64() {
+                        config.recovery_timeout = val;
                     }
                 }
-                "successThreshold" => {
-                    if let Expr::IntLiteral(val) = value {
-                        config.success_threshold = *val as u32;
+            }
+        }
+    }
+
+    if decorator.arguments.len() >= 3 {
+        if let Expression::Literal(lit) = &decorator.arguments[2] {
+            if lit.kind == "number" {
+                if let serde_json::Value::Number(num) = &lit.value {
+                    if let Some(val) = num.as_u64() {
+                        config.success_threshold = val as u32;
                     }
                 }
-                "callTimeout" => {
-                    if let Expr::IntLiteral(val) = value {
-                        config.call_timeout = *val as u64;
+            }
+        }
+    }
+
+    if decorator.arguments.len() >= 4 {
+        if let Expression::Literal(lit) = &decorator.arguments[3] {
+            if lit.kind == "number" {
+                if let serde_json::Value::Number(num) = &lit.value {
+                    if let Some(val) = num.as_u64() {
+                        config.call_timeout = val;
                     }
                 }
-                _ => {}
             }
         }
     }
@@ -98,30 +119,51 @@ pub fn parse_retry_decorator(
         backoff_multiplier: 2.0,
     };
 
-    if let Some(args) = &decorator.arguments {
-        for (key, value) in args {
-            match key.as_str() {
-                "maxAttempts" => {
-                    if let Expr::IntLiteral(val) = value {
-                        config.max_attempts = *val as u32;
+    // Arguments are positional: max_attempts, base_delay, max_delay, backoff_multiplier
+    if decorator.arguments.len() >= 1 {
+        if let Expression::Literal(lit) = &decorator.arguments[0] {
+            if lit.kind == "number" {
+                if let serde_json::Value::Number(num) = &lit.value {
+                    if let Some(val) = num.as_u64() {
+                        config.max_attempts = val as u32;
                     }
                 }
-                "baseDelay" => {
-                    if let Expr::IntLiteral(val) = value {
-                        config.base_delay = *val as u64;
+            }
+        }
+    }
+
+    if decorator.arguments.len() >= 2 {
+        if let Expression::Literal(lit) = &decorator.arguments[1] {
+            if lit.kind == "number" {
+                if let serde_json::Value::Number(num) = &lit.value {
+                    if let Some(val) = num.as_u64() {
+                        config.base_delay = val;
                     }
                 }
-                "maxDelay" => {
-                    if let Expr::IntLiteral(val) = value {
-                        config.max_delay = Some(*val as u64);
+            }
+        }
+    }
+
+    if decorator.arguments.len() >= 3 {
+        if let Expression::Literal(lit) = &decorator.arguments[2] {
+            if lit.kind == "number" {
+                if let serde_json::Value::Number(num) = &lit.value {
+                    if let Some(val) = num.as_u64() {
+                        config.max_delay = Some(val);
                     }
                 }
-                "backoffMultiplier" => {
-                    if let Expr::FloatLiteral(val) = value {
-                        config.backoff_multiplier = *val;
+            }
+        }
+    }
+
+    if decorator.arguments.len() >= 4 {
+        if let Expression::Literal(lit) = &decorator.arguments[3] {
+            if lit.kind == "number" {
+                if let serde_json::Value::Number(num) = &lit.value {
+                    if let Some(val) = num.as_f64() {
+                        config.backoff_multiplier = val;
                     }
                 }
-                _ => {}
             }
         }
     }
@@ -137,15 +179,15 @@ pub fn parse_timeout_decorator(
         duration: 30000, // 30 seconds
     };
 
-    if let Some(args) = &decorator.arguments {
-        for (key, value) in args {
-            match key.as_str() {
-                "duration" => {
-                    if let Expr::IntLiteral(val) = value {
-                        config.duration = *val as u64;
+    // Arguments are positional: duration
+    if decorator.arguments.len() >= 1 {
+        if let Expression::Literal(lit) = &decorator.arguments[0] {
+            if lit.kind == "number" {
+                if let serde_json::Value::Number(num) = &lit.value {
+                    if let Some(val) = num.as_u64() {
+                        config.duration = val;
                     }
                 }
-                _ => {}
             }
         }
     }
@@ -162,20 +204,27 @@ pub fn parse_bulkhead_decorator(
         queue_size: 50,
     };
 
-    if let Some(args) = &decorator.arguments {
-        for (key, value) in args {
-            match key.as_str() {
-                "maxConcurrent" => {
-                    if let Expr::IntLiteral(val) = value {
-                        config.max_concurrent = *val as usize;
+    // Arguments are positional: max_concurrent, queue_size
+    if decorator.arguments.len() >= 1 {
+        if let Expression::Literal(lit) = &decorator.arguments[0] {
+            if lit.kind == "number" {
+                if let serde_json::Value::Number(num) = &lit.value {
+                    if let Some(val) = num.as_u64() {
+                        config.max_concurrent = val as usize;
                     }
                 }
-                "queueSize" => {
-                    if let Expr::IntLiteral(val) = value {
-                        config.queue_size = *val as usize;
+            }
+        }
+    }
+
+    if decorator.arguments.len() >= 2 {
+        if let Expression::Literal(lit) = &decorator.arguments[1] {
+            if lit.kind == "number" {
+                if let serde_json::Value::Number(num) = &lit.value {
+                    if let Some(val) = num.as_u64() {
+                        config.queue_size = val as usize;
                     }
                 }
-                _ => {}
             }
         }
     }
@@ -192,24 +241,27 @@ pub fn parse_fallback_decorator(
         exceptions: Vec::new(),
     };
 
-    if let Some(args) = &decorator.arguments {
-        for (key, value) in args {
-            match key.as_str() {
-                "fallbackFn" => {
-                    if let Expr::StringLiteral(val) = value {
-                        config.fallback_fn = val.clone();
-                    }
+    // Arguments are positional: fallback_fn, exceptions
+    if decorator.arguments.len() >= 1 {
+        if let Expression::Literal(lit) = &decorator.arguments[0] {
+            if lit.kind == "string" {
+                if let serde_json::Value::String(val) = &lit.value {
+                    config.fallback_fn = val.clone();
                 }
-                "exceptions" => {
-                    if let Expr::ArrayLiteral(elements) = value {
-                        for element in elements {
-                            if let Expr::StringLiteral(s) = element {
-                                config.exceptions.push(s.clone());
-                            }
+            }
+        }
+    }
+
+    if decorator.arguments.len() >= 2 {
+        if let Expression::ArrayLiteral(array_lit) = &decorator.arguments[1] {
+            for element in &array_lit.elements {
+                if let Expression::Literal(lit) = element {
+                    if lit.kind == "string" {
+                        if let serde_json::Value::String(s) = &lit.value {
+                            config.exceptions.push(s.clone());
                         }
                     }
                 }
-                _ => {}
             }
         }
     }
@@ -377,16 +429,18 @@ pub fn generate_fallback_code(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ast::{Decorator, Expr};
+    use crate::ast::{Decorator, Expression};
 
     #[test]
     fn test_parse_circuit_breaker_decorator() {
+        let range = crate::ast::create_range(1, 1, 1, 10);
         let decorator = Decorator {
             name: "circuitBreaker".to_string(),
-            arguments: Some(vec![
-                ("failureThreshold".to_string(), Expr::IntLiteral(3)),
-                ("recoveryTimeout".to_string(), Expr::IntLiteral(15000)),
-            ]),
+            arguments: vec![
+                Expression::Literal(crate::ast::Literal::new(range, serde_json::json!(3), "number".to_string())),
+                Expression::Literal(crate::ast::Literal::new(range, serde_json::json!(15000), "number".to_string())),
+            ],
+            range,
         };
 
         let config = parse_circuit_breaker_decorator(&decorator).unwrap();
@@ -398,13 +452,15 @@ mod tests {
 
     #[test]
     fn test_parse_retry_decorator() {
+        let range = crate::ast::create_range(1, 1, 1, 10);
         let decorator = Decorator {
             name: "retry".to_string(),
-            arguments: Some(vec![
-                ("maxAttempts".to_string(), Expr::IntLiteral(5)),
-                ("baseDelay".to_string(), Expr::IntLiteral(500)),
-                ("backoffMultiplier".to_string(), Expr::FloatLiteral(1.5)),
-            ]),
+            arguments: vec![
+                Expression::Literal(crate::ast::Literal::new(range, serde_json::json!(5), "number".to_string())),
+                Expression::Literal(crate::ast::Literal::new(range, serde_json::json!(500), "number".to_string())),
+                Expression::Literal(crate::ast::Literal::new(range, serde_json::json!(1.5), "number".to_string())),
+            ],
+            range,
         };
 
         let config = parse_retry_decorator(&decorator).unwrap();

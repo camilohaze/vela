@@ -12,13 +12,14 @@ Implementar patrones de resiliencia generales para microservicios Vela que pueda
 ## 📦 Subtasks Completadas
 1. **TASK-113AJ**: Arquitectura de Resilience Patterns ✅
 2. **TASK-113AK**: Implementar @circuitBreaker decorator ✅
+3. **TASK-113AL**: Implementar @retry decorator ✅
 
 ## 🔨 Implementación
 Se implementó el sistema de decoradores de resiliencia en el runtime de Vela:
 
 ### Decoradores Implementados
-- **@circuitBreaker**: Protección contra fallos en cascada
-- **@retry**: Reintentos con backoff exponencial (estructura preparada)
+- **@circuitBreaker**: Protección contra fallos en cascada ✅
+- **@retry**: Reintentos con backoff exponencial ✅
 - **@timeout**: Límites de tiempo de ejecución (estructura preparada)
 - **@bulkhead**: Aislamiento de recursos (estructura preparada)
 - **@fallback**: Funciones alternativas ante fallos (estructura preparada)
@@ -35,16 +36,17 @@ Vela Code (@circuitBreaker) → Compiler → Rust Runtime (vela_runtime::resilie
 - Integración completa con Tokio para async operations
 
 ## 📊 Métricas
-- **Subtasks completadas:** 2/2
+- **Subtasks completadas:** 3/7
 - **Archivos creados:** 4 (runtime.rs, resilience_decorators.rs, ADR, docs)
-- **Tests implementados:** 6 tests unitarios
-- **Líneas de código:** ~400 líneas de Rust
+- **Tests implementados:** 7 tests unitarios
+- **Líneas de código:** ~500 líneas de Rust
 - **Compilación:** ✅ Exitosa
 - **Tests:** ✅ 100% pasando
 
 ## ✅ Definición de Hecho
 - [x] ADR de arquitectura aprobado y documentado
 - [x] @circuitBreaker implementado completamente en Rust
+- [x] @retry implementado completamente en Rust
 - [x] Tests unitarios con cobertura completa
 - [x] Integración con runtime de Vela
 - [x] Documentación técnica completa
