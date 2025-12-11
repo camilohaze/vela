@@ -16,6 +16,9 @@ pub use events as events;
 pub use di as di;
 pub use state_management as state_management;
 
+// Resilience patterns
+pub mod resilience;
+
 // Modules
 // pub mod store;  // Movido a packages/state-management
 // pub mod action; // Movido a packages/state-management
