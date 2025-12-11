@@ -1,0 +1,62 @@
+[package]
+name = "vela-orm"
+version = "0.1.0"
+edition = "2021"
+description = "Type-safe ORM for Vela programming language"
+authors = ["Vela Team <team@velalang.org>"]
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/velalang/vela"
+homepage = "https://velalang.org"
+documentation = "https://docs.velalang.org"
+
+[dependencies]
+# Database drivers
+tokio-postgres = { version = "0.7", features = ["with-serde_json-1"], optional = true }
+mysql_async = { version = "0.34", optional = true }
+rusqlite = { version = "0.31", features = ["bundled"], optional = true }
+
+# Async runtime
+tokio = { version = "1.0", features = ["full"] }
+futures = "0.3"
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# Async traits
+async-trait = "0.1"
+
+# URL parsing
+url = "2.0"
+
+# Error handling
+anyhow = "1.0"
+thiserror = "1.0"
+
+# Logging
+tracing = "0.1"
+
+# Connection pooling
+bb8 = { version = "0.8", optional = true }
+bb8-postgres = { version = "0.8", optional = true }
+
+# UUID support
+uuid = { version = "1.0", features = ["v4", "serde"] }
+
+# Time handling
+chrono = { version = "0.4", features = ["serde"] }
+
+# Regex for query building
+regex = "1.5"
+
+[features]
+default = ["postgres", "mysql", "sqlite"]
+postgres = ["tokio-postgres", "bb8", "bb8-postgres"]
+mysql = ["mysql_async"]
+sqlite = ["rusqlite"]
+full = ["postgres", "mysql", "sqlite"]
+
+[dev-dependencies]
+tokio = { version = "1.0", features = ["full"] }
+tokio-test = "0.4"
+criterion = { version = "0.5", features = ["html_reports"] }

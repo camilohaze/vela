@@ -1,0 +1,348 @@
+# Vela ORM Configuration Example
+
+# This file demonstrates how to configure the Vela ORM for different environments
+# and use cases.
+
+# Database Configuration
+database:
+  # PostgreSQL Configuration
+  postgres:
+    host: "localhost"
+    port: 5432
+    database: "vela_app"
+    username: "vela_user"
+    password: "secure_password"
+    schema: "public"
+
+    # Connection Pool Settings
+    pool:
+      max_connections: 20
+      min_connections: 5
+      connection_timeout: "30s"
+      max_lifetime: "30m"
+      idle_timeout: "10m"
+      health_check_interval: "30s"
+
+    # SSL Configuration
+    ssl:
+      enabled: true
+      mode: "require"  # disable, allow, prefer, require, verify-ca, verify-full
+      ca_cert: "/path/to/ca.pem"
+      client_cert: "/path/to/client.pem"
+      client_key: "/path/to/client.key"
+      accept_invalid_certs: false
+
+    # Additional options
+    options:
+      application_name: "vela-orm-example"
+      timezone: "UTC"
+
+  # MySQL Configuration
+  mysql:
+    host: "localhost"
+    port: 3306
+    database: "vela_app"
+    username: "vela_user"
+    password: "secure_password"
+
+    pool:
+      max_connections: 15
+      min_connections: 3
+      connection_timeout: "30s"
+      max_lifetime: "1h"
+      idle_timeout: "15m"
+
+    ssl:
+      enabled: false
+
+    options:
+      charset: "utf8mb4"
+      collation: "utf8mb4_unicode_ci"
+
+  # SQLite Configuration (for development/testing)
+  sqlite:
+    database: "./vela_app.db"
+
+    pool:
+      max_connections: 1  # SQLite doesn't support concurrent writes
+      min_connections: 1
+
+    options:
+      foreign_keys: true
+      journal_mode: "WAL"
+      synchronous: "NORMAL"
+
+# Entity Configuration
+entities:
+  # Auto-discover entities from these paths
+  scan_paths:
+    - "src/models/**/*.rs"
+    - "src/entities/**/*.rs"
+
+  # Manual entity registration
+  manual:
+    - "User"
+    - "Post"
+    - "Category"
+    - "Comment"
+
+  # Entity-specific settings
+  settings:
+    User:
+      table: "users"
+      schema: "public"
+      cache:
+        enabled: true
+        ttl: "5m"
+        max_size: 1000
+
+    Post:
+      table: "posts"
+      cache:
+        enabled: true
+        ttl: "10m"
+
+# Migration Configuration
+migrations:
+  # Migration directory
+  directory: "migrations"
+
+  # Migration table name
+  table: "schema_migrations"
+
+  # Auto-generate migrations
+  auto_generate: true
+
+  # Migration locking
+  lock:
+    enabled: true
+    timeout: "5m"
+    retry_interval: "1s"
+
+# Query Configuration
+query:
+  # Default query timeout
+  timeout: "30s"
+
+  # Prepared statement cache
+  prepared_cache:
+    enabled: true
+    max_size: 1000
+    ttl: "1h"
+
+  # Query logging
+  logging:
+    enabled: true
+    level: "info"  # debug, info, warn, error
+    slow_query_threshold: "1s"
+    include_parameters: false
+
+  # Batch operations
+  batch:
+    enabled: true
+    size: 1000
+
+# Transaction Configuration
+transaction:
+  # Default isolation level
+  default_isolation: "read_committed"  # read_uncommitted, read_committed, repeatable_read, serializable
+
+  # Transaction timeout
+  timeout: "5m"
+
+  # Savepoint configuration
+  savepoints:
+    max_nested: 10
+    auto_release: true
+
+# Cache Configuration
+cache:
+  # Global cache settings
+  enabled: true
+  default_ttl: "5m"
+  max_memory: "100MB"
+
+  # Cache backends
+  backends:
+    - type: "memory"
+      name: "default"
+      max_size: 10000
+
+    - type: "redis"
+      name: "shared"
+      url: "redis://localhost:6379"
+      key_prefix: "vela_orm:"
+      ttl: "10m"
+
+  # Entity-specific cache
+  entities:
+    User:
+      backend: "shared"
+      ttl: "15m"
+      strategy: "write_through"  # write_through, write_behind, write_around
+
+    Post:
+      backend: "default"
+      ttl: "5m"
+      strategy: "write_behind"
+
+# Observability Configuration
+observability:
+  # Metrics
+  metrics:
+    enabled: true
+    prefix: "vela_orm"
+    labels:
+      service: "blog-api"
+      version: "1.0.0"
+
+  # Tracing
+  tracing:
+    enabled: true
+    service_name: "vela-orm"
+    service_version: "1.0.0"
+
+    # Exporters
+    exporters:
+      - type: "jaeger"
+        endpoint: "http://localhost:14268/api/traces"
+        protocol: "http"
+
+      - type: "otlp"
+        endpoint: "http://localhost:4318"
+        protocol: "grpc"
+
+  # Logging
+  logging:
+    level: "info"
+    format: "json"
+    include_location: true
+
+# Development Configuration
+development:
+  # Enable development features
+  debug_mode: true
+
+  # Query logging
+  log_queries: true
+  log_bindings: false
+
+  # Migration safety
+  migration_safety: "strict"  # none, warn, strict
+
+  # Connection validation
+  validate_connections: true
+  connection_validation_interval: "30s"
+
+# Production Configuration
+production:
+  # Performance optimizations
+  query_optimization: true
+  connection_pool_optimization: true
+
+  # Security
+  ssl_enforce: true
+  parameter_logging: false
+
+  # Monitoring
+  health_checks:
+    enabled: true
+    interval: "30s"
+    timeout: "5s"
+
+  # Backup
+  backup:
+    enabled: true
+    schedule: "0 2 * * *"  # Daily at 2 AM
+    retention: "30d"
+
+# Testing Configuration
+testing:
+  # Use in-memory database for tests
+  database: "sqlite::memory:"
+
+  # Disable caching in tests
+  cache_enabled: false
+
+  # Enable query logging for debugging
+  log_queries: true
+  log_bindings: true
+
+  # Transaction rollback after each test
+  auto_rollback: true
+
+  # Test data fixtures
+  fixtures:
+    directory: "tests/fixtures"
+    auto_load: true
+
+# Environment-specific overrides
+environments:
+  local:
+    database:
+      postgres:
+        host: "localhost"
+        password: "dev_password"
+
+    development:
+      debug_mode: true
+
+  staging:
+    database:
+      postgres:
+        host: "staging-db.example.com"
+        password: "${DB_PASSWORD}"
+
+    observability:
+      tracing:
+        exporters:
+          - type: "jaeger"
+            endpoint: "http://jaeger.staging:14268/api/traces"
+
+  production:
+    database:
+      postgres:
+        host: "prod-db.example.com"
+        password: "${DB_PASSWORD}"
+
+    observability:
+      tracing:
+        exporters:
+          - type: "jaeger"
+            endpoint: "http://jaeger.prod:14268/api/traces"
+
+    cache:
+      backends:
+        - type: "redis"
+          url: "${REDIS_URL}"
+
+# Feature Flags
+features:
+  # Enable experimental features
+  experimental_relations: false
+  advanced_query_builder: true
+  automatic_migrations: false
+  query_caching: true
+  connection_pooling: true
+
+# Custom Extensions
+extensions:
+  # Custom query functions
+  custom_functions:
+    - name: "distance"
+      sql: "ST_Distance($1, $2)"
+      return_type: "float"
+
+    - name: "json_extract"
+      sql: "json_extract($1, $2)"
+      return_type: "text"
+
+  # Custom column types
+  custom_types:
+    - name: "email"
+      sql_type: "VARCHAR(255)"
+      validator: "email_validator"
+
+    - name: "phone"
+      sql_type: "VARCHAR(20)"
+      validator: "phone_validator"

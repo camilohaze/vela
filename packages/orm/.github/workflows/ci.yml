@@ -1,0 +1,177 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, develop ]
+    paths:
+      - 'packages/orm/**'
+      - '.github/workflows/orm-ci.yml'
+  pull_request:
+    branches: [ main, develop ]
+    paths:
+      - 'packages/orm/**'
+      - '.github/workflows/orm-ci.yml'
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        rust:
+          - stable
+          - beta
+          - nightly
+        features:
+          - ""
+          - "postgres"
+          - "mysql"
+          - "sqlite"
+          - "full"
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@master
+      with:
+        toolchain: ${{ matrix.rust }}
+
+    - name: Cache dependencies
+      uses: Swatinem/rust-cache@v2
+      with:
+        workspaces: "packages/orm"
+
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y libpq-dev libmysqlclient-dev libsqlite3-dev
+
+    - name: Check formatting
+      working-directory: packages/orm
+      run: cargo fmt --check
+
+    - name: Run clippy
+      working-directory: packages/orm
+      run: cargo clippy --features ${{ matrix.features }} -- -D warnings
+
+    - name: Build
+      working-directory: packages/orm
+      run: cargo build --features ${{ matrix.features }}
+
+    - name: Run tests
+      working-directory: packages/orm
+      run: cargo test --features ${{ matrix.features }} --verbose
+
+    - name: Run doc tests
+      working-directory: packages/orm
+      run: cargo test --features ${{ matrix.features }} --doc
+
+  coverage:
+    name: Coverage
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@stable
+
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y libpq-dev libmysqlclient-dev libsqlite3-dev
+
+    - name: Install cargo-tarpaulin
+      run: cargo install cargo-tarpaulin
+
+    - name: Generate coverage
+      working-directory: packages/orm
+      run: cargo tarpaulin --features full --out Xml
+
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v3
+      with:
+        file: packages/orm/cobertura.xml
+        flags: orm
+        name: ORM Coverage
+
+  security:
+    name: Security Audit
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@stable
+
+    - name: Install cargo-audit
+      run: cargo install cargo-audit
+
+    - name: Run security audit
+      working-directory: packages/orm
+      run: cargo audit
+
+  msrv:
+    name: Minimum Supported Rust Version
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Install Rust 1.70.0
+      uses: dtolnay/rust-toolchain@master
+      with:
+        toolchain: "1.70.0"
+
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y libpq-dev libmysqlclient-dev libsqlite3-dev
+
+    - name: Check MSRV
+      working-directory: packages/orm
+      run: cargo check --features full
+
+  publish-check:
+    name: Publish Check
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@stable
+
+    - name: Check publish readiness
+      working-directory: packages/orm
+      run: cargo publish --dry-run
+
+  docs:
+    name: Documentation
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@stable
+
+    - name: Build documentation
+      working-directory: packages/orm
+      run: cargo doc --features full --no-deps
+
+    - name: Deploy docs (main branch only)
+      if: github.ref == 'refs/heads/main'
+      uses: peaceiris/actions-gh-pages@v3
+      with:
+        github_token: ${{ secrets.GITHUB_TOKEN }}
+        publish_dir: packages/orm/target/doc
+        destination_dir: orm
