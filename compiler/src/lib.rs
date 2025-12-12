@@ -38,6 +38,8 @@ pub mod observability_decorators;
 pub mod orm_decorators;
 pub mod serialization_decorators;
 pub mod serialization_tests;
+pub mod config_loader;
+pub mod config_tests;
 
 use std::path::Path;
 use config::Config;
