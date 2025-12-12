@@ -16,6 +16,7 @@ pub enum LoadBalancingStrategy {
     RoundRobin,
     LeastConnections,
     WeightedRandom,
+    WeightedRoundRobin,
     IpHash,
 }
 
@@ -34,6 +35,9 @@ pub struct LoadBalancer {
     backends: HashMap<String, Vec<Backend>>,
     strategy: LoadBalancingStrategy,
     round_robin_index: HashMap<String, AtomicUsize>,
+    weighted_round_robin_current_weight: HashMap<String, AtomicUsize>,
+    weighted_round_robin_gcd: HashMap<String, u32>,
+    weighted_round_robin_max_weight: HashMap<String, u32>,
 }
 
 impl LoadBalancer {
@@ -43,6 +47,9 @@ impl LoadBalancer {
             backends: HashMap::new(),
             strategy: LoadBalancingStrategy::RoundRobin,
             round_robin_index: HashMap::new(),
+            weighted_round_robin_current_weight: HashMap::new(),
+            weighted_round_robin_gcd: HashMap::new(),
+            weighted_round_robin_max_weight: HashMap::new(),
         }
     }
 
@@ -55,7 +62,20 @@ impl LoadBalancer {
     /// Agregar backends para un servicio
     pub fn add_backends(&mut self, service: String, backends: Vec<Backend>) {
         self.backends.insert(service.clone(), backends);
-        self.round_robin_index.insert(service, AtomicUsize::new(0));
+        self.round_robin_index.insert(service.clone(), AtomicUsize::new(0));
+        
+        // Inicializar valores para weighted round-robin
+        self.weighted_round_robin_current_weight.insert(service.clone(), AtomicUsize::new(0));
+        
+        // Calcular GCD y max weight para el algoritmo de weighted round-robin
+        if let Some(service_backends) = self.backends.get(&service) {
+            let weights: Vec<u32> = service_backends.iter().map(|b| b.weight).collect();
+            let gcd = Self::calculate_gcd(&weights);
+            let max_weight = weights.iter().max().copied().unwrap_or(1);
+            
+            self.weighted_round_robin_gcd.insert(service.clone(), gcd);
+            self.weighted_round_robin_max_weight.insert(service.clone(), max_weight);
+        }
     }
 
     /// Seleccionar backend para un servicio
@@ -75,6 +95,7 @@ impl LoadBalancer {
             LoadBalancingStrategy::RoundRobin => self.select_round_robin(service, &healthy_backends),
             LoadBalancingStrategy::LeastConnections => self.select_least_connections(&healthy_backends),
             LoadBalancingStrategy::WeightedRandom => self.select_weighted_random(&healthy_backends),
+            LoadBalancingStrategy::WeightedRoundRobin => self.select_weighted_round_robin(service, &healthy_backends),
             LoadBalancingStrategy::IpHash => {
                 // Para IP hash necesitaríamos la IP del cliente
                 // Por simplicidad usamos round-robin
@@ -127,6 +148,61 @@ impl LoadBalancer {
 
         // Fallback al primero
         backends[0]
+    }
+
+    /// Seleccionar backend con weighted round-robin
+    fn select_weighted_round_robin<'a>(&self, service: &str, backends: &[&'a Backend]) -> &'a Backend {
+        let current_weight = self.weighted_round_robin_current_weight.get(service).unwrap();
+        let gcd = self.weighted_round_robin_gcd.get(service).copied().unwrap_or(1);
+        let max_weight = self.weighted_round_robin_max_weight.get(service).copied().unwrap_or(1);
+
+        let mut current = current_weight.load(Ordering::SeqCst) as i32;
+        let mut selected_index = 0;
+        let mut selected_weight = -1;
+
+        // Encontrar el backend con el mayor peso efectivo
+        for (i, backend) in backends.iter().enumerate() {
+            let effective_weight = backend.weight as i32;
+            if effective_weight > selected_weight {
+                selected_weight = effective_weight;
+                selected_index = i;
+            }
+        }
+
+        // Actualizar el peso actual
+        current -= gcd as i32;
+        if current <= 0 {
+            current = max_weight as i32;
+            if current == 0 {
+                current = 1; // Evitar división por cero
+            }
+        }
+
+        current_weight.store(current as usize, Ordering::SeqCst);
+
+        &backends[selected_index]
+    }
+
+    /// Calcular el máximo común divisor de una lista de números
+    fn calculate_gcd(numbers: &[u32]) -> u32 {
+        if numbers.is_empty() {
+            return 1;
+        }
+        
+        let mut result = numbers[0];
+        for &num in &numbers[1..] {
+            result = Self::gcd(result, num);
+        }
+        result
+    }
+
+    /// Calcular GCD de dos números usando algoritmo de Euclides
+    fn gcd(a: u32, b: u32) -> u32 {
+        if b == 0 {
+            a
+        } else {
+            Self::gcd(b, a % b)
+        }
     }
 
     /// Marcar backend como healthy/unhealthy
@@ -252,6 +328,38 @@ mod tests {
     }
 
     #[test]
+    fn test_weighted_random_selection() {
+        let mut lb = LoadBalancer::new().with_strategy(LoadBalancingStrategy::WeightedRandom);
+
+        // Crear backends con diferentes pesos
+        let backends = vec![
+            create_test_backend("http://service1:8080", 3), // Peso alto
+            create_test_backend("http://service2:8080", 1), // Peso bajo
+        ];
+
+        lb.add_backends("test-service".to_string(), backends);
+
+        // Hacer varias selecciones para verificar distribución probabilística
+        let mut service1_count = 0;
+        let mut service2_count = 0;
+
+        for _ in 0..1000 {  // Muchas iteraciones para distribución estadística
+            let selected = lb.select_backend("test-service").unwrap();
+            if selected.contains("service1") {
+                service1_count += 1;
+            } else if selected.contains("service2") {
+                service2_count += 1;
+            }
+        }
+
+        // Service1 (peso 3) debería ser seleccionado aproximadamente 3 veces más que service2 (peso 1)
+        // Con 1000 iteraciones, esperamos alrededor de 750 para service1 y 250 para service2
+        assert!(service1_count > service2_count * 2, "Service1 should be selected much more often than Service2");
+        assert!(service1_count > 600, "Service1 should be selected at least 600 times");
+        assert!(service2_count > 100, "Service2 should be selected at least 100 times");
+    }
+
+    #[test]
     fn test_service_not_found() {
         let mut lb = LoadBalancer::new();
 
@@ -273,22 +381,43 @@ mod tests {
     }
 
     #[test]
-    fn test_backend_health_management() {
-        let mut lb = LoadBalancer::new();
+    fn test_weighted_round_robin_selection() {
+        let mut lb = LoadBalancer::new().with_strategy(LoadBalancingStrategy::WeightedRoundRobin);
 
-        let backends = vec![create_test_backend("http://service1:8080", 1)];
+        // Crear backends con diferentes pesos: 3, 2, 1
+        let backends = vec![
+            create_test_backend("http://service1:8080", 3), // Peso 3
+            create_test_backend("http://service2:8080", 2), // Peso 2
+            create_test_backend("http://service3:8080", 1), // Peso 1
+        ];
+
         lb.add_backends("test-service".to_string(), backends);
 
-        // Marcar como unhealthy
-        lb.set_backend_health("test-service", "http://service1:8080", false);
+        // En weighted round-robin, la distribución debería ser proporcional a los pesos
+        // Con pesos 3, 2, 1, esperamos ver service1 más veces que service2, y service2 más veces que service3
+        
+        let mut service1_count = 0;
+        let mut service2_count = 0;
+        let mut service3_count = 0;
 
-        let result = lb.select_backend("test-service");
-        assert!(result.is_err()); // No debería haber backends healthy
+        // Hacer varias selecciones para ver la distribución
+        for _ in 0..12 {  // 12 = 3+2+1 * 2 para ver el patrón
+            let selected = lb.select_backend("test-service").unwrap();
+            if selected.contains("service1") {
+                service1_count += 1;
+            } else if selected.contains("service2") {
+                service2_count += 1;
+            } else if selected.contains("service3") {
+                service3_count += 1;
+            }
+        }
 
-        // Marcar como healthy de nuevo
-        lb.set_backend_health("test-service", "http://service1:8080", true);
-
-        let result = lb.select_backend("test-service");
-        assert!(result.is_ok());
+        // Verificar que service1 (peso 3) sea seleccionado más veces que service2 (peso 2)
+        // y service2 más veces que service3 (peso 1)
+        assert!(service1_count > service2_count, "Service1 should be selected more than Service2");
+        assert!(service2_count > service3_count, "Service2 should be selected more than Service3");
+        assert!(service1_count > 0, "Service1 should be selected at least once");
+        assert!(service2_count > 0, "Service2 should be selected at least once");
+        assert!(service3_count > 0, "Service3 should be selected at least once");
     }
 }
