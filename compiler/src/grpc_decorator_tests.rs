@@ -438,3 +438,111 @@ fn test_runtime_code_generation() {
     assert!(code.contains("async fn test_method"));
     assert!(code.contains("unimplemented!()"));
 }
+
+#[test]
+fn test_grpc_method_decorator_client_streaming() {
+    let mut processor = GrpcDecoratorProcessor::new();
+
+    // Registrar servicio
+    let service_decorator = Decorator {
+        name: "grpc.service".to_string(),
+        arguments: vec![
+            string_expr("StreamService"),
+            string_expr("vela.stream.v1"),
+        ],
+        range: simple_range(),
+    };
+
+    let class = ClassDeclaration {
+        node: ASTNode::new(simple_range()),
+        is_public: false,
+        name: "StreamService".to_string(),
+        decorators: vec![service_decorator],
+        constructor: None,
+        fields: vec![],
+        methods: vec![],
+        extends: None,
+        implements: vec![],
+        generic_params: vec![],
+    };
+
+    processor.process_class_decorators(&class).unwrap();
+
+    // Agregar método client streaming
+    let method_decorator = Decorator {
+        name: "grpc.method".to_string(),
+        arguments: vec![
+            string_expr("UploadData"),
+            string_expr("client_streaming"),
+        ],
+        range: simple_range(),
+    };
+
+    let method = create_function_declaration(
+        "uploadData",
+        vec![method_decorator],
+        vec![create_parameter("stream", "Stream<DataChunk>")],
+        Some(named_type("UploadResponse")),
+        true,
+    );
+
+    let result = processor.process_method_decorators(&method);
+    assert!(result.is_ok());
+    let method_info = &processor.methods["uploadData"];
+    assert_eq!(method_info.method_name, "UploadData");
+    assert_eq!(method_info.streaming_type, GrpcStreamingType::ClientStreaming);
+}
+
+#[test]
+fn test_grpc_method_decorator_bidirectional_streaming() {
+    let mut processor = GrpcDecoratorProcessor::new();
+
+    // Registrar servicio
+    let service_decorator = Decorator {
+        name: "grpc.service".to_string(),
+        arguments: vec![
+            string_expr("ChatService"),
+            string_expr("vela.chat.v1"),
+        ],
+        range: simple_range(),
+    };
+
+    let class = ClassDeclaration {
+        node: ASTNode::new(simple_range()),
+        is_public: false,
+        name: "ChatService".to_string(),
+        decorators: vec![service_decorator],
+        constructor: None,
+        fields: vec![],
+        methods: vec![],
+        extends: None,
+        implements: vec![],
+        generic_params: vec![],
+    };
+
+    processor.process_class_decorators(&class).unwrap();
+
+    // Agregar método bidirectional streaming
+    let method_decorator = Decorator {
+        name: "grpc.method".to_string(),
+        arguments: vec![
+            string_expr("Chat"),
+            string_expr("bidirectional_streaming"),
+        ],
+        range: simple_range(),
+    };
+
+    let method = create_function_declaration(
+        "chat",
+        vec![method_decorator],
+        vec![create_parameter("stream", "Stream<ChatMessage>")],
+        Some(named_type("Stream<ChatMessage>")),
+        true,
+    );
+
+    let result = processor.process_method_decorators(&method);
+    assert!(result.is_ok());
+    let method_info = &processor.methods["chat"];
+    assert_eq!(method_info.method_name, "Chat");
+    assert_eq!(method_info.streaming_type, GrpcStreamingType::BidirectionalStreaming);
+}
