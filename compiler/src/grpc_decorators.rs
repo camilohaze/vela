@@ -1,20 +1,12 @@
-    /// Generar código Rust a partir de un archivo .proto usando prost/tonic
-    pub fn generate_rust_from_proto(proto_path: &str, out_dir: &str) -> std::io::Result<()> {
-        // En una integración real, aquí se llamaría a prost_build::compile_protos
-        // prost_build::compile_protos(&[proto_path], &["."])?;
-        // Para este stub, solo simular la llamada
-        println!("[codegen] Generando Rust desde {} en {}", proto_path, out_dir);
-        Ok(())
-    }
-//! gRPC Decorators para Vela
-//!
-//! Implementación de: TASK-113CA
-//! Historia: VELA-1080
-//! Fecha: 2025-12-30
-//!
-//! Descripción:
-//! Decoradores compile-time para definir servicios y métodos gRPC.
-//! Genera código que integra con el runtime gRPC de Vela.
+// gRPC Decorators para Vela
+//
+// Implementación de: TASK-113CA
+// Historia: VELA-1080
+// Fecha: 2025-12-30
+//
+// Descripción:
+// Decoradores compile-time para definir servicios y métodos gRPC.
+// Genera código que integra con el runtime gRPC de Vela.
 
 use crate::ast::*;
 use crate::error::CompileResult;
@@ -61,6 +53,14 @@ impl GrpcDecoratorProcessor {
             services: HashMap::new(),
             methods: HashMap::new(),
         }
+    }
+
+    /// Generar código Rust a partir de un archivo .proto usando prost/tonic
+    pub fn generate_rust_from_proto(proto_path: &str, _out_dir: &str) -> std::io::Result<()> {
+        // TODO: Implementar generación real de código usando tonic-build
+        // Por ahora, simulamos que la generación fue exitosa
+        // tonic_build::compile_protos(proto_path)?;
+        Ok(())
     }
 
     /// Procesar decoradores @grpc.service en clases

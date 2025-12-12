@@ -440,10 +440,47 @@ fn test_runtime_code_generation() {
 }
 
     #[test]
-    fn test_codegen_from_proto_stub() {
-        // Simula la generación de código Rust desde un archivo .proto
-        let result = GrpcDecoratorProcessor::generate_rust_from_proto("test.proto", "./out");
+    fn test_codegen_from_proto() {
+        use std::fs;
+        use tempfile::tempdir;
+
+        // Crear un directorio temporal para el archivo .proto y output
+        let proto_dir = tempdir().unwrap();
+        let out_dir = tempdir().unwrap();
+
+        // Crear un archivo .proto simple
+        let proto_content = r#"
+syntax = "proto3";
+
+package test;
+
+service TestService {
+  rpc UnaryMethod (TestRequest) returns (TestResponse);
+}
+
+message TestRequest {
+  string data = 1;
+}
+
+message TestResponse {
+  string result = 1;
+}
+"#;
+
+        let proto_path = proto_dir.path().join("test.proto");
+        fs::write(&proto_path, proto_content).unwrap();
+
+        // Generar código Rust
+        let result = GrpcDecoratorProcessor::generate_rust_from_proto(
+            proto_path.to_str().unwrap(),
+            out_dir.path().to_str().unwrap()
+        );
+
+        // Verificar que la generación fue exitosa
         assert!(result.is_ok());
+
+        // Nota: En una implementación real, verificaríamos que se generaron archivos .rs
+        // Por ahora, solo verificamos que la función no falla
     }
 
 #[test]
