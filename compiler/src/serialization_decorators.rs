@@ -1,233 +1,167 @@
 /*!
-# Serialization Decorators
+# Serialization Decorators for Vela Compiler
 
-Implementation of serialization decorators for Vela.
-Provides @serializable, @serialize, @ignore, and @custom decorators.
+This module implements @serializable, @serialize, @ignore, and @custom decorators
+for automatic JSON serialization code generation.
+
+Implementation of: TASK-113BJ, TASK-113BK, TASK-113BL, TASK-113BM, TASK-113BN
+History: VELA-607
+Date: 2025-01-30
 */
 
-use crate::ast::{Decorator, Expr, Type};
-use crate::error::{Result, VelaError};
-use crate::semantic::SemanticAnalyzer;
+use crate::ast::{Decorator, Expression, create_range};
+use crate::error::{CompileError, CompileResult};
 use std::collections::HashMap;
 
-/// Serializable class information
-#[derive(Debug, Clone)]
-pub struct SerializableClass {
-    /// Class name
-    pub name: String,
-    /// Fields with their serialization config
-    pub fields: HashMap<String, FieldConfig>,
-    /// Custom serializer if specified
-    pub custom_serializer: Option<String>,
-}
-
-/// Field serialization configuration
+/// Configuration for field serialization
 #[derive(Debug, Clone)]
 pub enum FieldConfig {
-    /// Field included with custom name
+    /// Include field with optional custom name
     Include { serialized_name: String },
-    /// Field excluded from serialization
+    /// Ignore field during serialization
     Ignore,
-    /// Field uses custom serializer
+    /// Use custom serializer
     Custom { serializer: String },
 }
 
-/// Serialization decorator processor
-pub struct SerializationDecoratorProcessor;
-
-impl SerializationDecoratorProcessor {
-    /// Process @serializable decorator
-    pub fn process_serializable(
-        &self,
-        decorator: &Decorator,
-        class_name: &str,
-        fields: &HashMap<String, Type>,
-        analyzer: &mut SemanticAnalyzer,
-    ) -> Result<SerializableClass> {
-        // Validate decorator has no arguments
-        if !decorator.args.is_empty() {
-            return Err(VelaError::semantic(
-                decorator.span,
-                "@serializable decorator takes no arguments",
-            ));
-        }
-
-        let mut serializable_fields = HashMap::new();
-
-        // Process field decorators
-        for (field_name, field_type) in fields {
-            let field_config = self.process_field_decorators(
-                field_name,
-                analyzer.get_field_decorators(class_name, field_name),
-            )?;
-            serializable_fields.insert(field_name.clone(), field_config);
-        }
-
-        // Check for @custom class decorator
-        let custom_serializer = self.extract_custom_serializer(decorator, analyzer)?;
-
-        Ok(SerializableClass {
-            name: class_name.to_string(),
-            fields: serializable_fields,
-            custom_serializer,
-        })
-    }
-
-    /// Process field-level decorators
-    fn process_field_decorators(
-        &self,
-        field_name: &str,
-        decorators: Vec<&Decorator>,
-    ) -> Result<FieldConfig> {
-        let mut config = FieldConfig::Include {
-            serialized_name: field_name.to_string(),
-        };
-
-        for decorator in decorators {
-            match decorator.name.as_str() {
-                "serialize" => {
-                    // @serialize("custom_name")
-                    if decorator.args.len() != 1 {
-                        return Err(VelaError::semantic(
-                            decorator.span,
-                            "@serialize decorator takes exactly one string argument",
-                        ));
-                    }
-
-                    if let Expr::StringLiteral(name) = &decorator.args[0] {
-                        config = FieldConfig::Include {
-                            serialized_name: name.clone(),
-                        };
-                    } else {
-                        return Err(VelaError::semantic(
-                            decorator.span,
-                            "@serialize argument must be a string literal",
-                        ));
-                    }
-                }
-                "ignore" => {
-                    // @ignore
-                    if !decorator.args.is_empty() {
-                        return Err(VelaError::semantic(
-                            decorator.span,
-                            "@ignore decorator takes no arguments",
-                        ));
-                    }
-                    config = FieldConfig::Ignore;
-                }
-                "custom" => {
-                    // @custom(MySerializer)
-                    if decorator.args.len() != 1 {
-                        return Err(VelaError::semantic(
-                            decorator.span,
-                            "@custom decorator takes exactly one argument",
-                        ));
-                    }
-
-                    if let Expr::Identifier(serializer) = &decorator.args[0] {
-                        config = FieldConfig::Custom {
-                            serializer: serializer.clone(),
-                        };
-                    } else {
-                        return Err(VelaError::semantic(
-                            decorator.span,
-                            "@custom argument must be an identifier",
-                        ));
-                    }
-                }
-                _ => {
-                    // Other decorators are allowed, just ignore for serialization
-                }
-            }
-        }
-
-        Ok(config)
-    }
-
-    /// Extract custom serializer from class decorators
-    fn extract_custom_serializer(
-        &self,
-        class_decorator: &Decorator,
-        analyzer: &SemanticAnalyzer,
-    ) -> Result<Option<String>> {
-        // Look for @custom decorator on the class
-        // This would need to be implemented in the semantic analyzer
-        // For now, return None
-        Ok(None)
-    }
+/// Serializable class configuration
+#[derive(Debug, Clone)]
+pub struct SerializableClass {
+    pub name: String,
+    pub fields: HashMap<String, FieldConfig>,
+    pub custom_serializer: Option<String>,
 }
 
-/// Code generator for serialization
+/// Code generator for serialization methods
 pub struct SerializationCodeGenerator;
 
 impl SerializationCodeGenerator {
-    /// Generate toJson method for a serializable class
+    /// Generate toJson method
     pub fn generate_to_json(&self, class: &SerializableClass) -> String {
-        let mut code = format!(
-            "    fn toJson(self) -> String {{\n"
-        );
+        let mut fields_json = Vec::new();
 
-        // Start JSON object
-        code.push_str("        var json = \"{\";\n");
-        code.push_str("        var first = true;\n");
-
-        // Generate field serialization
         for (field_name, config) in &class.fields {
             match config {
                 FieldConfig::Include { serialized_name } => {
-                    code.push_str(&format!(
-                        "        if !first {{ json += \",\"; }}\n"
-                    ));
-                    code.push_str(&format!(
-                        "        json += \"\\\"{}\\\": \";\n",
-                        serialized_name
-                    ));
-                    code.push_str(&self.generate_field_value(field_name));
-                    code.push_str("        first = false;\n");
+                    fields_json.push(format!("\"{}\": self.{}.toJson()", serialized_name, field_name));
                 }
                 FieldConfig::Ignore => {
                     // Skip ignored fields
                 }
                 FieldConfig::Custom { serializer } => {
-                    code.push_str(&format!(
-                        "        if !first {{ json += \",\"; }}\n"
-                    ));
-                    code.push_str(&format!(
-                        "        json += {}::serialize(self.{});\n",
-                        serializer, field_name
-                    ));
-                    code.push_str("        first = false;\n");
+                    fields_json.push(format!("\"{}\": {}::serialize(self.{})", field_name, serializer, field_name));
                 }
             }
         }
 
-        code.push_str("        json += \"}\";\n");
-        code.push_str("        return json;\n");
-        code.push_str("    }\n");
+        let body = if fields_json.is_empty() {
+            "return \"{}\";".to_string()
+        } else {
+            format!("return format!(\"{{{}}}\", {});",
+                   fields_json.join(", "),
+                   fields_json.iter().map(|_| "{}").collect::<Vec<_>>().join(", "))
+        };
 
-        code
+        format!("fn toJson(self) -> String {{\n    {}\n}}", body)
     }
 
-    /// Generate fromJson method for a serializable class
+    /// Generate fromJson method
     pub fn generate_from_json(&self, class: &SerializableClass) -> String {
-        let mut code = format!(
-            "    fn fromJson(json: String) -> Result<{}, Error> {{\n",
-            class.name
-        );
+        format!("fn fromJson(json: String) -> Result<{}, Error> {{
+            // TODO: Implement JSON parsing
+            Err(Error::new(\"Not implemented\"))
+        }}", class.name)
+    }
+}
 
-        code.push_str("        // Parse JSON and create instance\n");
-        code.push_str("        // This is a simplified implementation\n");
-        code.push_str(&format!("        return Ok({} {{}});\n", class.name));
-        code.push_str("    }\n");
+/// Processor for serialization decorators
+pub struct SerializationDecoratorProcessor;
 
-        code
+impl SerializationDecoratorProcessor {
+    /// Process field decorators and return field configuration
+    pub fn process_field_decorators(&self, field_name: &str, decorators: &[&Decorator]) -> CompileResult<FieldConfig> {
+        for decorator in decorators {
+            match decorator.name.as_str() {
+                "serialize" => {
+                    if !decorator.arguments.is_empty() {
+                        if let Expression::Literal(lit) = &decorator.arguments[0] {
+                            if lit.kind == "string" {
+                                if let serde_json::Value::String(name) = &lit.value {
+                                    return Ok(FieldConfig::Include {
+                                        serialized_name: name.clone(),
+                                    });
+                                }
+                            }
+                        }
+                        return Err(CompileError::Internal(
+                            format!("@serialize decorator requires a string literal argument for field {}", field_name)
+                        ));
+                    } else {
+                        return Ok(FieldConfig::Include {
+                            serialized_name: field_name.to_string(),
+                        });
+                    }
+                }
+                "ignore" => {
+                    return Ok(FieldConfig::Ignore);
+                }
+                "custom" => {
+                    if decorator.arguments.len() != 1 {
+                        return Err(CompileError::Internal(
+                            format!("@custom decorator requires exactly one argument for field {}", field_name)
+                        ));
+                    }
+                    if let Expression::Identifier(serializer) = &decorator.arguments[0] {
+                        return Ok(FieldConfig::Custom {
+                            serializer: serializer.name.clone(),
+                        });
+                    }
+                    return Err(CompileError::Internal(
+                        format!("@custom decorator requires an identifier argument for field {}", field_name)
+                    ));
+                }
+                _ => {
+                    // Not a serialization decorator, continue
+                }
+            }
+        }
+
+        // Default: include field with original name
+        Ok(FieldConfig::Include {
+            serialized_name: field_name.to_string(),
+        })
     }
 
-    /// Generate value serialization for a field
-    fn generate_field_value(&self, field_name: &str) -> String {
-        // Simplified field value generation
-        // In a real implementation, this would handle different types
-        format!("        json += self.{}.toString();\n", field_name)
+    /// Process class decorators and return serializable class config
+    pub fn process_class_decorators(&self, class_name: &str, decorators: &[Decorator]) -> CompileResult<Option<SerializableClass>> {
+        let mut is_serializable = false;
+        let mut custom_serializer = None;
+
+        for decorator in decorators {
+            match decorator.name.as_str() {
+                "serializable" => {
+                    is_serializable = true;
+                    if !decorator.arguments.is_empty() {
+                        if let Expression::Identifier(serializer) = &decorator.arguments[0] {
+                            custom_serializer = Some(serializer.name.clone());
+                        }
+                    }
+                }
+                _ => {
+                    // Not a serialization decorator
+                }
+            }
+        }
+
+        if is_serializable {
+            Ok(Some(SerializableClass {
+                name: class_name.to_string(),
+                fields: HashMap::new(), // Will be populated by field processing
+                custom_serializer,
+            }))
+        } else {
+            Ok(None)
+        }
     }
 }
 
@@ -236,17 +170,21 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_process_field_decorators_serialize() {
+    fn test_process_field_decorators_serialize_with_name() {
         let processor = SerializationDecoratorProcessor;
 
         // Mock decorator @serialize("user_id")
         let decorator = Decorator {
             name: "serialize".to_string(),
-            args: vec![Expr::StringLiteral("user_id".to_string())],
-            span: 0..0,
+            arguments: vec![Expression::Literal(crate::ast::Literal {
+                node: crate::ast::ASTNode { range: create_range(0, 0, 0, 0) },
+                value: serde_json::Value::String("user_id".to_string()),
+                kind: "string".to_string(),
+            })],
+            range: create_range(0, 0, 0, 0),
         };
 
-        let config = processor.process_field_decorators("id", vec![&decorator]).unwrap();
+        let config = processor.process_field_decorators("id", &[&decorator]).unwrap();
 
         match config {
             FieldConfig::Include { serialized_name } => {
@@ -263,17 +201,56 @@ mod tests {
         // Mock decorator @ignore
         let decorator = Decorator {
             name: "ignore".to_string(),
-            args: vec![],
-            span: 0..0,
+            arguments: vec![],
+            range: create_range(0, 0, 0, 0),
         };
 
-        let config = processor.process_field_decorators("password", vec![&decorator]).unwrap();
+        let config = processor.process_field_decorators("password", &[&decorator]).unwrap();
 
         match config {
             FieldConfig::Ignore => {
                 // Correct
             }
             _ => panic!("Expected Ignore config"),
+        }
+    }
+
+    #[test]
+    fn test_process_field_decorators_custom() {
+        let processor = SerializationDecoratorProcessor;
+
+        // Mock decorator @custom(DateSerializer)
+        let decorator = Decorator {
+            name: "custom".to_string(),
+            arguments: vec![Expression::Identifier(crate::ast::Identifier {
+                node: crate::ast::ASTNode { range: create_range(0, 0, 0, 0) },
+                name: "DateSerializer".to_string(),
+            })],
+            range: create_range(0, 0, 0, 0),
+        };
+
+        let config = processor.process_field_decorators("birthDate", &[&decorator]).unwrap();
+
+        match config {
+            FieldConfig::Custom { serializer } => {
+                assert_eq!(serializer, "DateSerializer");
+            }
+            _ => panic!("Expected Custom config"),
+        }
+    }
+
+    #[test]
+    fn test_process_field_decorators_default() {
+        let processor = SerializationDecoratorProcessor;
+
+        // No decorators
+        let config = processor.process_field_decorators("name", &[]).unwrap();
+
+        match config {
+            FieldConfig::Include { serialized_name } => {
+                assert_eq!(serialized_name, "name");
+            }
+            _ => panic!("Expected Include config with default name"),
         }
     }
 }

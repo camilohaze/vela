@@ -37,6 +37,7 @@ pub mod resilience_decorators;
 pub mod observability_decorators;
 pub mod orm_decorators;
 pub mod serialization_decorators;
+pub mod serialization_tests;
 
 use std::path::Path;
 use config::Config;
