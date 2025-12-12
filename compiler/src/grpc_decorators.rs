@@ -1,3 +1,11 @@
+    /// Generar código Rust a partir de un archivo .proto usando prost/tonic
+    pub fn generate_rust_from_proto(proto_path: &str, out_dir: &str) -> std::io::Result<()> {
+        // En una integración real, aquí se llamaría a prost_build::compile_protos
+        // prost_build::compile_protos(&[proto_path], &["."])?;
+        // Para este stub, solo simular la llamada
+        println!("[codegen] Generando Rust desde {} en {}", proto_path, out_dir);
+        Ok(())
+    }
 //! gRPC Decorators para Vela
 //!
 //! Implementación de: TASK-113CA

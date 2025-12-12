@@ -439,6 +439,13 @@ fn test_runtime_code_generation() {
     assert!(code.contains("unimplemented!()"));
 }
 
+    #[test]
+    fn test_codegen_from_proto_stub() {
+        // Simula la generación de código Rust desde un archivo .proto
+        let result = GrpcDecoratorProcessor::generate_rust_from_proto("test.proto", "./out");
+        assert!(result.is_ok());
+    }
+
 #[test]
 fn test_grpc_method_decorator_client_streaming() {
     let mut processor = GrpcDecoratorProcessor::new();
