@@ -11,7 +11,8 @@
 use std::collections::HashMap;
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
-use crate::dynamic_router::{ServiceDiscovery, ServiceInfo, GatewayError};
+use crate::dynamic_router::{ServiceDiscovery, ServiceInfo};
+use crate::gateway::GatewayError;
 
 /// Service discovery estático (desde configuración)
 pub struct StaticServiceDiscovery {

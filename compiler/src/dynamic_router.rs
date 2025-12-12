@@ -9,6 +9,7 @@
 //! externos, service discovery, health checks y load balancing dinámico.
 
 use std::collections::HashMap;
+use std::fs;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use tokio::sync::RwLock;
@@ -97,7 +98,7 @@ impl DynamicRouter {
             router,
             config,
             services,
-            health_checker,
+            health_checker: Arc::new(health_checker),
             service_discovery: None,
             config_loader: None,
         }
@@ -138,8 +139,8 @@ impl DynamicRouter {
         let routes_config: RoutesConfig = if let Some(loader) = &self.config_loader {
             // Usar config loader si está disponible
             let loader = loader.lock().unwrap();
-            let content = loader.get_string(&format!("routes_file_{}", file_path))
-                .ok_or_else(|| GatewayError::Internal(format!("Routes file not found: {}", file_path)))?;
+            let content = std::fs::read_to_string(file_path)
+                .map_err(|e| GatewayError::Internal(format!("Cannot read routes file: {}", e)))?;
             serde_json::from_str(&content)
                 .map_err(|e| GatewayError::Internal(format!("Invalid routes config: {}", e)))?
         } else {
@@ -344,7 +345,7 @@ pub struct RouteConfig {
 }
 
 /// Información de un servicio para discovery
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ServiceInfo {
     pub name: String,
     pub endpoints: Vec<String>,
