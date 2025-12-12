@@ -590,3 +590,267 @@ fn test_grpc_method_decorator_bidirectional_streaming() {
     assert_eq!(method_info.method_name, "Chat");
     assert_eq!(method_info.streaming_type, GrpcStreamingType::BidirectionalStreaming);
 }
+
+#[test]
+fn test_grpc_service_performance_large_payload() {
+    use std::time::Instant;
+
+    let mut processor = GrpcDecoratorProcessor::new();
+
+    // Crear un servicio con método que maneje payloads grandes
+    let service_decorator = Decorator {
+        name: "grpc.service".to_string(),
+        arguments: vec![
+            string_expr("DataService"),
+            string_expr("vela.data.v1"),
+        ],
+        range: simple_range(),
+    };
+
+    let class = ClassDeclaration {
+        node: ASTNode::new(simple_range()),
+        is_public: false,
+        name: "DataService".to_string(),
+        decorators: vec![service_decorator],
+        constructor: None,
+        fields: vec![],
+        methods: vec![],
+        extends: None,
+        implements: vec![],
+        generic_params: vec![],
+    };
+
+    processor.process_class_decorators(&class).unwrap();
+
+    // Método con payload grande
+    let method_decorator = Decorator {
+        name: "grpc.method".to_string(),
+        arguments: vec![
+            string_expr("ProcessLargeData"),
+            string_expr("unary"),
+        ],
+        range: simple_range(),
+    };
+
+    let method = create_function_declaration(
+        "processLargeData",
+        vec![method_decorator],
+        vec![create_parameter("data", "LargeDataPayload")],
+        Some(named_type("ProcessedData")),
+        false,
+    );
+
+    let start = Instant::now();
+    let result = processor.process_method_decorators(&method);
+    let duration = start.elapsed();
+
+    // Verificar que el procesamiento sea rápido (< 1ms)
+    assert!(result.is_ok());
+    assert!(duration.as_millis() < 1, "Processing took too long: {:?}", duration);
+
+    // Verificar que el método se registró correctamente
+    let method_info = &processor.methods["processLargeData"];
+    assert_eq!(method_info.method_name, "ProcessLargeData");
+    assert_eq!(method_info.streaming_type, GrpcStreamingType::Unary);
+}
+
+#[test]
+fn test_grpc_streaming_performance_high_throughput() {
+    use std::time::Instant;
+
+    let mut processor = GrpcDecoratorProcessor::new();
+
+    // Crear servicio de streaming de alta velocidad
+    let service_decorator = Decorator {
+        name: "grpc.service".to_string(),
+        arguments: vec![
+            string_expr("StreamService"),
+            string_expr("vela.stream.v1"),
+        ],
+        range: simple_range(),
+    };
+
+    let class = ClassDeclaration {
+        node: ASTNode::new(simple_range()),
+        is_public: false,
+        name: "StreamService".to_string(),
+        decorators: vec![service_decorator],
+        constructor: None,
+        fields: vec![],
+        methods: vec![],
+        extends: None,
+        implements: vec![],
+        generic_params: vec![],
+    };
+
+    processor.process_class_decorators(&class).unwrap();
+
+    // Crear múltiples métodos de streaming
+    let methods = vec![
+        ("serverStreaming", "server_streaming", GrpcStreamingType::ServerStreaming),
+        ("clientStreaming", "client_streaming", GrpcStreamingType::ClientStreaming),
+        ("bidirectionalStreaming", "bidirectional_streaming", GrpcStreamingType::BidirectionalStreaming),
+    ];
+
+    let start = Instant::now();
+    for (method_name, streaming_type, expected_type) in methods {
+        let method_decorator = Decorator {
+            name: "grpc.method".to_string(),
+            arguments: vec![
+                string_expr(&method_name.replace("Streaming", "").to_uppercase()),
+                string_expr(streaming_type),
+            ],
+            range: simple_range(),
+        };
+
+        let method = create_function_declaration(
+            method_name,
+            vec![method_decorator],
+            vec![create_parameter("stream", "Stream<Data>")],
+            Some(named_type("Stream<Result>")),
+            true,
+        );
+
+        processor.process_method_decorators(&method).unwrap();
+    }
+    let duration = start.elapsed();
+
+    // Verificar rendimiento (< 5ms para 3 métodos)
+    assert!(duration.as_millis() < 5, "Batch processing took too long: {:?}", duration);
+
+    // Verificar que todos los métodos se registraron
+    assert_eq!(processor.methods.len(), 3);
+}
+
+#[test]
+fn test_grpc_service_error_handling() {
+    let mut processor = GrpcDecoratorProcessor::new();
+
+    // Intentar procesar método sin servicio registrado
+    let method_decorator = Decorator {
+        name: "grpc.method".to_string(),
+        arguments: vec![
+            string_expr("OrphanMethod"),
+            string_expr("unary"),
+        ],
+        range: simple_range(),
+    };
+
+    let method = create_function_declaration(
+        "orphanMethod",
+        vec![method_decorator],
+        vec![create_parameter("input", "String")],
+        Some(named_type("String")),
+        false,
+    );
+
+    // Esto debería fallar porque no hay servicio registrado
+    let result = processor.process_method_decorators(&method);
+    assert!(result.is_err(), "Should fail when no service is registered");
+
+    // Ahora registrar servicio y verificar que funcione
+    let service_decorator = Decorator {
+        name: "grpc.service".to_string(),
+        arguments: vec![
+            string_expr("TestService"),
+            string_expr("vela.test.v1"),
+        ],
+        range: simple_range(),
+    };
+
+    let class = ClassDeclaration {
+        node: ASTNode::new(simple_range()),
+        is_public: false,
+        name: "TestService".to_string(),
+        decorators: vec![service_decorator],
+        constructor: None,
+        fields: vec![],
+        methods: vec![],
+        extends: None,
+        implements: vec![],
+        generic_params: vec![],
+    };
+
+    processor.process_class_decorators(&class).unwrap();
+
+    // Ahora debería funcionar
+    let result = processor.process_method_decorators(&method);
+    assert!(result.is_ok());
+}
+
+#[test]
+fn test_grpc_codegen_integration() {
+    let mut processor = GrpcDecoratorProcessor::new();
+
+    // Crear un servicio completo con múltiples métodos
+    let service_decorator = Decorator {
+        name: "grpc.service".to_string(),
+        arguments: vec![
+            string_expr("CompleteService"),
+            string_expr("vela.complete.v1"),
+        ],
+        range: simple_range(),
+    };
+
+    let class = ClassDeclaration {
+        node: ASTNode::new(simple_range()),
+        is_public: false,
+        name: "CompleteService".to_string(),
+        decorators: vec![service_decorator],
+        constructor: None,
+        fields: vec![],
+        methods: vec![],
+        extends: None,
+        implements: vec![],
+        generic_params: vec![],
+    };
+
+    processor.process_class_decorators(&class).unwrap();
+
+    // Agregar métodos de diferentes tipos
+    let method_configs = vec![
+        ("getUser", "GetUser", "unary", "UserRequest", "UserResponse"),
+        ("listUsers", "ListUsers", "server_streaming", "ListRequest", "Stream<User>"),
+        ("uploadFile", "UploadFile", "client_streaming", "Stream<Chunk>", "UploadResponse"),
+        ("chat", "Chat", "bidirectional_streaming", "Stream<Message>", "Stream<Message>"),
+    ];
+
+    for (method_name, grpc_name, streaming, input_type, output_type) in method_configs {
+        let method_decorator = Decorator {
+            name: "grpc.method".to_string(),
+            arguments: vec![
+                string_expr(grpc_name),
+                string_expr(streaming),
+            ],
+            range: simple_range(),
+        };
+
+        let method = create_function_declaration(
+            method_name,
+            vec![method_decorator],
+            vec![create_parameter("input", input_type)],
+            Some(named_type(output_type)),
+            true,
+        );
+
+        processor.process_method_decorators(&method).unwrap();
+    }
+
+    // Verificar que el servicio esté completo
+    assert_eq!(processor.services.len(), 1);
+    assert_eq!(processor.methods.len(), 4);
+
+    let service = &processor.services["CompleteService"];
+    assert_eq!(service.methods.len(), 0); // Los métodos están en processor.methods
+
+    // Generar código runtime
+    let code = processor.generate_runtime_code();
+
+    // Verificar que el código generado contenga todos los métodos
+    assert!(code.contains("CompleteService"));
+    assert!(code.contains("#[tonic::async_trait]"));
+    assert!(code.contains("async fn get_user"));
+    assert!(code.contains("async fn list_users"));
+    assert!(code.contains("async fn upload_file"));
+    assert!(code.contains("async fn chat"));
+}
