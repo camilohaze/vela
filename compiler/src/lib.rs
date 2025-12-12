@@ -36,6 +36,7 @@ pub mod message_broker_decorators;
 pub mod resilience_decorators;
 pub mod observability_decorators;
 pub mod orm_decorators;
+pub mod serialization_decorators;
 
 use std::path::Path;
 use config::Config;
