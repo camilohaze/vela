@@ -47,6 +47,7 @@ pub use crate::rate_limiter;
 pub use crate::auth;
 pub use crate::plugins;
 pub use crate::metrics;
+pub use crate::dynamic_router;
 
 /// Configuración principal del API Gateway
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -128,6 +129,7 @@ pub enum GatewayError {
 pub struct ApiGateway {
     config: GatewayConfig,
     router: Arc<router::Router>,
+    dynamic_router: Option<Arc<RwLock<dynamic_router::DynamicRouter>>>,
     load_balancer: Arc<RwLock<load_balancer::LoadBalancer>>,
     rate_limiter: Arc<RwLock<rate_limiter::RateLimiter>>,
     auth_engine: Arc<RwLock<auth::AuthEngine>>,
@@ -140,6 +142,7 @@ impl ApiGateway {
     pub fn new(config: GatewayConfig) -> Self {
         Self {
             router: Arc::new(router::Router::new()),
+            dynamic_router: None,
             load_balancer: Arc::new(RwLock::new(load_balancer::LoadBalancer::new())),
             rate_limiter: Arc::new(RwLock::new(rate_limiter::RateLimiter::new())),
             auth_engine: Arc::new(RwLock::new(auth::AuthEngine::new())),
@@ -152,6 +155,12 @@ impl ApiGateway {
     /// Agregar un plugin al pipeline
     pub fn add_plugin<P: Plugin + 'static>(mut self, plugin: P) -> Self {
         self.plugin_chain.push(Box::new(plugin));
+        self
+    }
+
+    /// Configurar dynamic router
+    pub fn with_dynamic_router(mut self, dynamic_router: Arc<RwLock<dynamic_router::DynamicRouter>>) -> Self {
+        self.dynamic_router = Some(dynamic_router);
         self
     }
 
@@ -169,8 +178,17 @@ impl ApiGateway {
         }
 
         // Routing
-        let route = self.router.match_route(&ctx.request.path, &ctx.request.method)
-            .ok_or_else(|| GatewayError::Routing(format!("No route found for {}", ctx.request.path)))?;
+        let route = if let Some(dynamic_router) = &self.dynamic_router {
+            // Usar dynamic router
+            let router_guard = dynamic_router.read().await;
+            let dynamic_router_ref = router_guard.get_router();
+            let dynamic_router_guard = dynamic_router_ref.read().await;
+            dynamic_router_guard.match_route(&ctx.request.path, &ctx.request.method)
+        } else {
+            // Usar router estático
+            self.router.match_route(&ctx.request.path, &ctx.request.method)
+        }
+        .ok_or_else(|| GatewayError::Routing(format!("No route found for {}", ctx.request.path)))?;
 
         // Rate limiting
         {
