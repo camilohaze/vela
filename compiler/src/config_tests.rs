@@ -34,9 +34,11 @@ mod tests {
     #[test]
     fn test_with_profile() {
         let loader = ConfigLoader::new()
-            .with_profile("production".to_string());
+            .with_profile("dev".to_string());
 
-        assert_eq!(loader.profile, Some("production".to_string()));
+        assert_eq!(loader.profile, Some("dev".to_string()));
+        // Debería tener config-dev.json como primera fuente
+        assert_eq!(loader.sources[0], ConfigSource::File("config-dev.json".to_string()));
     }
 
     #[test]
@@ -167,13 +169,41 @@ mod tests {
     }
 
     #[test]
-    fn test_consul_vault_not_implemented() {
-        let loader = ConfigLoader::new();
+    fn test_validators() {
+        let loader = ConfigLoader::new()
+            .add_validator("required_field".to_string(), RequiredValidator)
+            .add_validator("port".to_string(), RangeValidator { min: Some(1024), max: Some(65535) })
+            .add_validator("email".to_string(), EmailValidator);
 
-        let consul_result = loader.load_from_source(&ConfigSource::Consul("localhost:8500".to_string()));
-        assert!(matches!(consul_result, Err(ConfigError::NotImplemented(_))));
+        // Test required validator
+        let mut test_loader = loader.clone();
+        test_loader.cache.insert("required_field".to_string(), ConfigValue {
+            value: "".to_string(),
+            source: ConfigSource::Environment,
+            profile: None,
+        });
 
-        let vault_result = loader.load_from_source(&ConfigSource::Vault("localhost:8200".to_string()));
-        assert!(matches!(vault_result, Err(ConfigError::NotImplemented(_))));
+        // Esto debería fallar en load, pero como estamos testeando manualmente
+        let validator = RequiredValidator;
+        assert!(validator.validate("required_field", "").is_err());
+        assert!(validator.validate("required_field", "value").is_ok());
+
+        // Test range validator
+        let range_validator = RangeValidator { min: Some(10), max: Some(20) };
+        assert!(range_validator.validate("port", "15").is_ok());
+        assert!(range_validator.validate("port", "5").is_err());
+        assert!(range_validator.validate("port", "25").is_err());
+        assert!(range_validator.validate("port", "not_a_number").is_err());
+
+        // Test email validator
+        let email_validator = EmailValidator;
+        assert!(email_validator.validate("email", "user@example.com").is_ok());
+        assert!(email_validator.validate("email", "invalid-email").is_err());
+    }
+
+    #[test]
+    fn test_hot_reload_enabled() {
+        let loader = ConfigLoader::new().enable_hot_reload();
+        assert!(loader.hot_reload_enabled);
     }
 }
