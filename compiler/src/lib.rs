@@ -40,6 +40,8 @@ pub mod serialization_decorators;
 pub mod serialization_tests;
 pub mod config_loader;
 pub mod config_tests;
+pub mod config_decorators;
+pub mod config_decorator_tests;
 
 use std::path::Path;
 use config::Config;
