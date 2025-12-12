@@ -9,7 +9,7 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use tempfile::NamedTempFile;
 use tokio::time::sleep;
-use crate::config_loader::{ConfigLoader, ConfigSource, ConfigError, RequiredValidator, RangeValidator, EmailValidator};
+use crate::config_loader::{ConfigLoader, ConfigSource, ConfigError, RequiredValidator, RangeValidator, EmailValidator, ConfigValidator};
 use crate::hot_reload::{HotReloadManager, HotReloadBuilder, ConfigChangeEvent, ReloadState};
 
 #[cfg(test)]
@@ -34,7 +34,9 @@ mod integration_tests {
         env::set_var("VELA_DATABASE_HOST", "prod-db.example.com");
 
         let mut loader = ConfigLoader::new()
+            .clear_sources()
             .add_source(ConfigSource::File(temp_file.path().to_str().unwrap().to_string()))
+            .add_source(ConfigSource::Environment)
             .add_validator("app.name".to_string(), RequiredValidator)
             .add_validator("database.port".to_string(), RangeValidator { min: Some(1024), max: Some(65535) });
 
@@ -54,6 +56,13 @@ mod integration_tests {
 
     #[tokio::test]
     async fn test_profile_based_loading() {
+        // Clear any VELA_ environment variables from previous tests
+        for (key, _) in env::vars() {
+            if key.starts_with("VELA_") {
+                env::remove_var(key);
+            }
+        }
+
         // Config base
         let base_config = r#"{
             "app.name": "myapp",
@@ -106,7 +115,9 @@ mod integration_tests {
         fs::write(&temp_file, config_data).unwrap();
 
         let mut loader = ConfigLoader::new()
+            .clear_sources()
             .add_source(ConfigSource::File(temp_file.path().to_str().unwrap().to_string()))
+            .add_source(ConfigSource::Environment)
             .add_validator("user.email".to_string(), EmailValidator)
             .add_validator("server.port".to_string(), RangeValidator { min: Some(1024), max: Some(65535) })
             .add_validator("app.name".to_string(), RequiredValidator);
@@ -135,9 +146,13 @@ mod integration_tests {
     async fn test_hot_reload_end_to_end() {
         // Create initial config
         let initial_config = r#"{"app.version": "1.0.0"}"#;
-        fs::write("config.json", initial_config).unwrap();
+        let temp_file = NamedTempFile::new().unwrap();
+        let config_path = temp_file.path().to_str().unwrap();
+        fs::write(config_path, initial_config).unwrap();
 
-        let loader = ConfigLoader::new();
+        let loader = ConfigLoader::new()
+            .clear_sources()
+            .add_source(ConfigSource::File(config_path.to_string()));
         let mut manager = HotReloadBuilder::new()
             .with_loader("test".to_string(), loader).unwrap()
             .with_debounce(Duration::from_millis(100))
@@ -148,12 +163,12 @@ mod integration_tests {
         manager.force_reload().await.unwrap();
 
         let loader_ref = manager.get_loader("test").unwrap();
-        let initial_version = loader_ref.lock().unwrap().get_string("app.version");
+        let initial_version = loader_ref.lock().await.get_string("app.version");
         assert_eq!(initial_version, Some("1.0.0".to_string()));
 
         // Modify config file
         let updated_config = r#"{"app.version": "2.0.0"}"#;
-        fs::write("config.json", updated_config).unwrap();
+        fs::write(config_path, updated_config).unwrap();
 
         // Wait for reload (with debounce)
         sleep(Duration::from_millis(200)).await;
@@ -161,45 +176,56 @@ mod integration_tests {
         // Force reload to simulate file change detection
         manager.force_reload().await.unwrap();
 
-        let updated_version = loader_ref.lock().unwrap().get_string("app.version");
+        let updated_version = loader_ref.lock().await.get_string("app.version");
         assert_eq!(updated_version, Some("2.0.0".to_string()));
 
         manager.stop();
 
-        // Clean up
-        fs::remove_file("config.json").unwrap();
+        // Keep temp file alive until here
+        drop(temp_file);
     }
 
     #[tokio::test]
     async fn test_error_handling_integration() {
         // Config with invalid JSON
         let invalid_config = r#"{"invalid": json"#;
-        fs::write("config.json", invalid_config).unwrap();
+        let temp_file = NamedTempFile::new().unwrap();
+        let config_path = temp_file.path().to_str().unwrap();
+        fs::write(config_path, invalid_config).unwrap();
 
-        let loader = ConfigLoader::new();
+        let mut loader = ConfigLoader::new()
+            .clear_sources()
+            .add_source(ConfigSource::File(config_path.to_string()));
         let result = loader.load();
 
         // Should fail due to invalid JSON
         assert!(result.is_err());
         assert!(matches!(result.unwrap_err(), ConfigError::Json(_)));
 
-        // Clean up
-        fs::remove_file("config.json").unwrap();
+        // Keep temp file alive until here
+        drop(temp_file);
     }
 
     #[tokio::test]
     async fn test_multiple_loaders_coordination() {
         // App config
         let app_config = r#"{"app.name": "myapp", "app.port": 3000}"#;
-        fs::write("config.json", app_config).unwrap();
+        let app_temp_file = NamedTempFile::new().unwrap();
+        let app_config_path = app_temp_file.path().to_str().unwrap();
+        fs::write(app_config_path, app_config).unwrap();
 
         // DB config
         let db_config = r#"{"db.host": "localhost", "db.port": 5432}"#;
-        fs::write("db-config.json", db_config).unwrap();
+        let db_temp_file = NamedTempFile::new().unwrap();
+        let db_config_path = db_temp_file.path().to_str().unwrap();
+        fs::write(db_config_path, db_config).unwrap();
 
-        let app_loader = ConfigLoader::new();
+        let app_loader = ConfigLoader::new()
+            .clear_sources()
+            .add_source(ConfigSource::File(app_config_path.to_string()));
         let db_loader = ConfigLoader::new()
-            .add_source(ConfigSource::File("db-config.json".to_string()));
+            .clear_sources()
+            .add_source(ConfigSource::File(db_config_path.to_string()));
 
         let manager = HotReloadBuilder::new()
             .with_loader("app".to_string(), app_loader).unwrap()
@@ -214,12 +240,12 @@ mod integration_tests {
         let app_loader_ref = manager.get_loader("app").unwrap();
         let db_loader_ref = manager.get_loader("db").unwrap();
 
-        assert_eq!(app_loader_ref.lock().unwrap().get_string("app.name"), Some("myapp".to_string()));
-        assert_eq!(db_loader_ref.lock().unwrap().get_string("db.host"), Some("localhost".to_string()));
+        assert_eq!(app_loader_ref.lock().await.get_string("app.name"), Some("myapp".to_string()));
+        assert_eq!(db_loader_ref.lock().await.get_string("db.host"), Some("localhost".to_string()));
 
-        // Clean up
-        fs::remove_file("config.json").unwrap();
-        fs::remove_file("db-config.json").unwrap();
+        // Keep temp files alive until here
+        drop(app_temp_file);
+        drop(db_temp_file);
     }
 
     #[tokio::test]
@@ -231,10 +257,13 @@ mod integration_tests {
         }
 
         let json = serde_json::to_string(&large_config).unwrap();
-        fs::write("large-config.json", json).unwrap();
+        let temp_file = NamedTempFile::new().unwrap();
+        let config_path = temp_file.path().to_str().unwrap();
+        fs::write(config_path, json).unwrap();
 
-        let loader = ConfigLoader::new()
-            .add_source(ConfigSource::File("large-config.json".to_string()));
+        let mut loader = ConfigLoader::new()
+            .clear_sources() // Clear default sources
+            .add_source(ConfigSource::File(config_path.to_string()));
 
         let start = Instant::now();
         loader.load().unwrap();
@@ -247,23 +276,30 @@ mod integration_tests {
         assert_eq!(loader.get_string("key_0"), Some("value_0".to_string()));
         assert_eq!(loader.get_string("key_999"), Some("value_999".to_string()));
 
-        // Clean up
-        fs::remove_file("large-config.json").unwrap();
+        // Keep temp file alive until here
+        drop(temp_file);
     }
 
     #[tokio::test]
     async fn test_concurrent_access() {
         let config_data = r#"{"counter": 0}"#;
-        fs::write("config.json", config_data).unwrap();
+        let temp_file = NamedTempFile::new().unwrap();
+        let config_path = temp_file.path().to_str().unwrap();
+        fs::write(config_path, config_data).unwrap();
 
-        let loader = Arc::new(Mutex::new(ConfigLoader::new()));
+        let mut loader = ConfigLoader::new();
+        // Remove default file source and add our temp file
+        loader.sources = vec![ConfigSource::File(config_path.to_string()), ConfigSource::Environment];
+        loader.load().unwrap();
+
+        // Spawn multiple tasks trying to access config concurrently
+        let loader = Arc::new(tokio::sync::Mutex::new(loader));
         let loader_clone = loader.clone();
 
-        // Spawn multiple tasks trying to access config
-        let handles: Vec<_> = (0..10).map(|i| {
+        let handles: Vec<_> = (0..10).map(|_| {
             let loader = loader_clone.clone();
             tokio::spawn(async move {
-                let mut loader = loader.lock().unwrap();
+                let loader = loader.lock().await;
                 let current = loader.get_int("counter").unwrap().unwrap_or(0);
                 // Simulate some work
                 sleep(Duration::from_millis(1)).await;
@@ -277,14 +313,15 @@ mod integration_tests {
             let _ = handle.await.unwrap();
         }
 
-        // Clean up
-        fs::remove_file("config.json").unwrap();
+        // The temp file will be automatically cleaned up when temp_file goes out of scope
     }
 
     #[tokio::test]
     async fn test_hot_reload_with_callbacks() {
         let config_data = r#"{"version": "1.0"}"#;
-        fs::write("config.json", config_data).unwrap();
+        let temp_file = NamedTempFile::new().unwrap();
+        let config_path = temp_file.path().to_str().unwrap();
+        fs::write(config_path, config_data).unwrap();
 
         let callback_called = Arc::new(Mutex::new(false));
         let callback_data = Arc::new(Mutex::new(None));
@@ -292,11 +329,19 @@ mod integration_tests {
         let callback_called_clone = callback_called.clone();
         let callback_data_clone = callback_data.clone();
 
+        let loader = ConfigLoader::new()
+            .clear_sources()
+            .add_source(ConfigSource::File(config_path.to_string()));
         let manager = HotReloadBuilder::new()
-            .with_loader("test".to_string(), ConfigLoader::new()).unwrap()
+            .with_loader("test".to_string(), loader).unwrap()
             .with_callback(move |event| {
-                *callback_called_clone.lock().unwrap() = true;
-                *callback_data_clone.lock().unwrap() = Some(event.reload_state.clone());
+                let callback_called_clone = callback_called_clone.clone();
+                let callback_data_clone = callback_data_clone.clone();
+                let event = event.clone();
+                async move {
+                    *callback_called_clone.lock().unwrap() = true;
+                    *callback_data_clone.lock().unwrap() = Some(event.reload_state);
+                }
             })
             .build()
             .unwrap();
@@ -310,7 +355,7 @@ mod integration_tests {
         assert_eq!(state, ReloadState::Success);
 
         // Clean up
-        fs::remove_file("config.json").unwrap();
+        drop(temp_file);
     }
 
     #[tokio::test]
@@ -337,7 +382,7 @@ mod integration_tests {
         assert_eq!(loader.get_string("app.name"), Some("env_app".to_string())); // env overrides file
         assert_eq!(loader.get_bool("app.debug").unwrap().unwrap(), true); // only in env
         assert_eq!(loader.get_int("app.timeout").unwrap().unwrap(), 30); // from file
-        assert_eq!(loader.get_string("new_feature"), Some("cache".to_string())); // only in env
+        assert_eq!(loader.get_string("new.feature"), Some("cache".to_string())); // only in env
 
         // Clean up
         env::remove_var("VELA_APP_NAME");
@@ -367,7 +412,7 @@ mod integration_tests {
 
         fs::write("config.json", nested_config).unwrap();
 
-        let loader = ConfigLoader::new();
+        let mut loader = ConfigLoader::new();
         loader.load().unwrap();
 
         // Verify flattened keys
@@ -385,9 +430,13 @@ mod integration_tests {
     #[tokio::test]
     async fn test_config_reload_error_recovery() {
         let valid_config = r#"{"valid": true}"#;
-        fs::write("config.json", valid_config).unwrap();
+        let temp_file = NamedTempFile::new().unwrap();
+        let config_path = temp_file.path().to_str().unwrap();
+        fs::write(config_path, valid_config).unwrap();
 
-        let loader = ConfigLoader::new();
+        let loader = ConfigLoader::new()
+            .clear_sources()
+            .add_source(ConfigSource::File(config_path.to_string()));
         let manager = HotReloadBuilder::new()
             .with_loader("test".to_string(), loader).unwrap()
             .build()
@@ -398,7 +447,7 @@ mod integration_tests {
 
         // Corrupt the config file
         let invalid_config = r#"{"invalid": json"#;
-        fs::write("config.json", invalid_config).unwrap();
+        fs::write(config_path, invalid_config).unwrap();
 
         // Reload should fail but not crash the system
         let result = manager.force_reload().await;
@@ -407,9 +456,9 @@ mod integration_tests {
         // System should still be functional
         let loader_ref = manager.get_loader("test").unwrap();
         // The old valid config should still be cached
-        assert_eq!(loader_ref.lock().unwrap().get_bool("valid").unwrap().unwrap(), true);
+        assert_eq!(loader_ref.lock().await.get_bool("valid").unwrap().unwrap(), true);
 
-        // Clean up
-        fs::remove_file("config.json").unwrap();
+        // Keep temp file alive until here
+        drop(temp_file);
     }
 }

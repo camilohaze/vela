@@ -6,7 +6,7 @@
 use std::fs;
 use std::env;
 use tempfile::NamedTempFile;
-use crate::config_loader::{ConfigLoader, ConfigSource, ConfigError};
+use crate::config_loader::{ConfigLoader, ConfigSource, ConfigError, ConfigValue, RequiredValidator, RangeValidator, EmailValidator, ConfigValidator};
 
 #[cfg(test)]
 mod tests {
@@ -35,8 +35,8 @@ mod tests {
             .with_profile("dev".to_string());
 
         assert_eq!(loader.profile, Some("dev".to_string()));
-        // Debería tener config-dev.json como primera fuente
-        assert_eq!(loader.sources[0], ConfigSource::File("config-dev.json".to_string()));
+        // Debería tener config-dev.json como segunda fuente (después del archivo base)
+        assert_eq!(loader.sources[1], ConfigSource::File("config-dev.json".to_string()));
     }
 
     #[test]
@@ -49,8 +49,8 @@ mod tests {
         let loader = ConfigLoader::new();
         let result = loader.load_from_env().unwrap();
 
-        assert_eq!(result.get("vela_app_name"), Some(&"test_app".to_string()));
-        assert_eq!(result.get("vela_app_port"), Some(&"8080".to_string()));
+        assert_eq!(result.get("app.name"), Some(&"test_app".to_string()));
+        assert_eq!(result.get("app.port"), Some(&"8080".to_string()));
         assert!(!result.contains_key("ignored_var"));
 
         // Clean up
@@ -76,20 +76,20 @@ mod tests {
         let temp_file = NamedTempFile::new().unwrap();
         fs::write(&temp_file, json_content).unwrap();
 
-        let loader = ConfigLoader::new();
-        let result = loader.load_from_file(temp_file.path().to_str().unwrap()).unwrap();
+        let mut loader = ConfigLoader::new();
+        loader.load_from_file(temp_file.path().to_str().unwrap()).unwrap();
 
-        assert_eq!(result.get("app.name"), Some(&"test_app".to_string()));
-        assert_eq!(result.get("app.port"), Some(&"8080".to_string()));
-        assert_eq!(result.get("database.host"), Some(&"localhost".to_string()));
-        assert_eq!(result.get("database.port"), Some(&"5432".to_string()));
-        assert_eq!(result.get("app.features[0]"), Some(&"auth".to_string()));
-        assert_eq!(result.get("app.features[1]"), Some(&"logging".to_string()));
+        assert_eq!(loader.get_string("app.name"), Some("test_app".to_string()));
+        assert_eq!(loader.get_string("app.port"), Some("8080".to_string()));
+        assert_eq!(loader.get_string("database.host"), Some("localhost".to_string()));
+        assert_eq!(loader.get_string("database.port"), Some("5432".to_string()));
+        assert_eq!(loader.get_string("app.features[0]"), Some("auth".to_string()));
+        assert_eq!(loader.get_string("app.features[1]"), Some("logging".to_string()));
     }
 
     #[test]
     fn test_load_from_file_not_found() {
-        let loader = ConfigLoader::new();
+        let mut loader = ConfigLoader::new();
         let result = loader.load_from_file("nonexistent.json");
 
         assert!(matches!(result, Err(ConfigError::Io(_))));
@@ -100,7 +100,7 @@ mod tests {
         let temp_file = NamedTempFile::new().unwrap();
         fs::write(&temp_file, "invalid json {").unwrap();
 
-        let loader = ConfigLoader::new();
+        let mut loader = ConfigLoader::new();
         let result = loader.load_from_file(temp_file.path().to_str().unwrap());
 
         assert!(matches!(result, Err(ConfigError::Json(_))));
@@ -117,12 +117,14 @@ mod tests {
         env::set_var("VELA_APP_NAME", "env_app");
 
         let mut loader = ConfigLoader::new()
-            .add_source(ConfigSource::File(temp_file.path().to_str().unwrap().to_string()));
+            .clear_sources()
+            .add_source(ConfigSource::File(temp_file.path().to_str().unwrap().to_string()))
+            .add_source(ConfigSource::Environment);
 
         loader.load().unwrap();
 
         // Env var should override file
-        assert_eq!(loader.get_string("vela_app_name"), Some("env_app".to_string()));
+        assert_eq!(loader.get_string("app.name"), Some("env_app".to_string()));
         assert_eq!(loader.get_string("app.version"), Some("1.0".to_string()));
 
         // Clean up

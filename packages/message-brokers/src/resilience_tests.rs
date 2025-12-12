@@ -9,16 +9,18 @@ use tokio::sync::Mutex;
 use tokio::time::timeout;
 
 use crate::resilience::{
-    CircuitBreaker, CircuitBreakerConfig, CircuitBreakerState, DeadLetterConfig, ErrorKind,
-    ResilientConsumer, ResilientConsumerBuilder, RetryPolicy, classify_error,
+    CircuitBreaker, CircuitBreakerConfig, DeadLetterConfig, ErrorKind, CircuitState,
+    ResilientConsumerBuilder, RetryPolicy, classify_error,
 };
 use crate::{BrokerError, ConsumerError, MessageConsumer, RawMessage};
 
 // Mock consumer para testing
+#[derive(Clone)]
 struct MockConsumer {
     pub call_count: Arc<Mutex<usize>>,
     pub should_fail: Arc<Mutex<bool>>,
     pub fail_count: Arc<Mutex<usize>>,
+    pub fail_times: Arc<Mutex<usize>>,
 }
 
 impl MockConsumer {
@@ -27,11 +29,16 @@ impl MockConsumer {
             call_count: Arc::new(Mutex::new(0)),
             should_fail: Arc::new(Mutex::new(false)),
             fail_count: Arc::new(Mutex::new(0)),
+            fail_times: Arc::new(Mutex::new(0)),
         }
     }
 
     async fn set_should_fail(&self, fail: bool) {
         *self.should_fail.lock().await = fail;
+    }
+
+    async fn set_fail_times(&self, times: usize) {
+        *self.fail_times.lock().await = times;
     }
 
     async fn get_call_count(&self) -> usize {
@@ -51,6 +58,15 @@ impl MessageConsumer for MockConsumer {
 
         let should_fail = *self.should_fail.lock().await;
         if should_fail {
+            let mut fail_count = self.fail_count.lock().await;
+            *fail_count += 1;
+            return Err(ConsumerError::ProcessingFailed { message: "Mock failure".to_string() });
+        }
+
+        let fail_times = *self.fail_times.lock().await;
+        let current_fail_count = *self.fail_count.lock().await;
+
+        if current_fail_count < fail_times {
             let mut fail_count = self.fail_count.lock().await;
             *fail_count += 1;
             return Err(ConsumerError::ProcessingFailed { message: "Mock failure".to_string() });
@@ -88,32 +104,27 @@ mod retry_policy_tests {
             payload: vec![1, 2, 3],
             timestamp: chrono::Utc::now(),
             headers: std::collections::HashMap::new(),
-            correlation_id: None,
+            correlation_id: Some("correlation-id".to_string()),
         };
 
         let result = resilient.consume(message).await;
         assert!(result.is_ok());
 
         // Debería haber sido llamado solo una vez
-        assert_eq!(resilient.consumer.get_call_count().await, 1);
+        assert_eq!(resilient.consumer().get_call_count().await, 1);
     }
 
     #[tokio::test]
     async fn test_retry_policy_eventual_success() {
         let consumer = MockConsumer::new();
-        let consumer_clone = consumer.clone();
-
-        // Configurar para fallar las primeras 2 veces, luego éxito
-        tokio::spawn(async move {
-            tokio::time::sleep(Duration::from_millis(50)).await;
-            consumer_clone.set_should_fail(false).await;
-        });
+        consumer.set_fail_times(2).await;
 
         let policy = RetryPolicy {
             max_attempts: 3,
             initial_delay: Duration::from_millis(10),
             backoff_multiplier: 2.0,
             max_delay: Duration::from_millis(1000),
+            exponential_backoff: true,
         };
 
         let resilient = ResilientConsumerBuilder::new(consumer)
@@ -126,6 +137,7 @@ mod retry_policy_tests {
             payload: vec![1, 2, 3],
             timestamp: chrono::Utc::now(),
             headers: std::collections::HashMap::new(),
+            correlation_id: Some("correlation-id".to_string()),
         };
 
         let result = timeout(Duration::from_secs(2), resilient.consume(message)).await;
@@ -133,8 +145,8 @@ mod retry_policy_tests {
         assert!(result.unwrap().is_ok());
 
         // Debería haber sido llamado 3 veces (2 fallos + 1 éxito)
-        assert_eq!(resilient.consumer.get_call_count().await, 3);
-        assert_eq!(resilient.consumer.get_fail_count().await, 2);
+        assert_eq!(resilient.consumer().get_call_count().await, 3);
+        assert_eq!(resilient.consumer().get_fail_count().await, 2);
     }
 
     #[tokio::test]
@@ -147,6 +159,7 @@ mod retry_policy_tests {
             initial_delay: Duration::from_millis(10),
             backoff_multiplier: 2.0,
             max_delay: Duration::from_millis(1000),
+            exponential_backoff: true,
         };
 
         let resilient = ResilientConsumerBuilder::new(consumer)
@@ -159,6 +172,7 @@ mod retry_policy_tests {
             payload: vec![1, 2, 3],
             timestamp: chrono::Utc::now(),
             headers: std::collections::HashMap::new(),
+            correlation_id: Some("correlation-id".to_string()),
         };
 
         let result = timeout(Duration::from_secs(2), resilient.consume(message)).await;
@@ -166,8 +180,8 @@ mod retry_policy_tests {
         assert!(result.unwrap().is_err());
 
         // Debería haber sido llamado 3 veces (todos fallos)
-        assert_eq!(resilient.consumer.get_call_count().await, 3);
-        assert_eq!(resilient.consumer.get_fail_count().await, 3);
+        assert_eq!(resilient.consumer().get_call_count().await, 3);
+        assert_eq!(resilient.consumer().get_fail_count().await, 3);
     }
 }
 
@@ -178,14 +192,13 @@ mod circuit_breaker_tests {
     async fn test_circuit_breaker_closed_state() {
         let config = CircuitBreakerConfig {
             failure_threshold: 2,
-            recovery_timeout: Duration::from_secs(1),
             success_threshold: 1,
             timeout: Duration::from_secs(1),
         };
         let mut breaker = CircuitBreaker::new(config);
 
         // Estado inicial: Closed
-        assert_eq!(breaker.state(), CircuitBreakerState::Closed);
+        assert_eq!(*breaker.state(), CircuitState::Closed);
 
         // Permitir requests
         assert!(breaker.allow_request());
@@ -196,7 +209,6 @@ mod circuit_breaker_tests {
     async fn test_circuit_breaker_open_state() {
         let config = CircuitBreakerConfig {
             failure_threshold: 2,
-            recovery_timeout: Duration::from_secs(1),
             success_threshold: 1,
             timeout: Duration::from_secs(1),
         };
@@ -207,7 +219,7 @@ mod circuit_breaker_tests {
         breaker.record_failure();
 
         // Estado: Open
-        assert_eq!(breaker.state(), CircuitBreakerState::Open);
+        assert_eq!(*breaker.state(), CircuitState::Open);
 
         // No permitir requests
         assert!(!breaker.allow_request());
@@ -216,25 +228,30 @@ mod circuit_breaker_tests {
 
     #[tokio::test]
     async fn test_circuit_breaker_half_open_recovery() {
-        let mut breaker = CircuitBreaker::new(2, Duration::from_millis(100));
+        let config = CircuitBreakerConfig {
+            failure_threshold: 2,
+            success_threshold: 1,
+            timeout: Duration::from_millis(100),
+        };
+        let mut breaker = CircuitBreaker::new(config);
 
         // Abrir el circuito
-        breaker.record_failure().await;
-        breaker.record_failure().await;
-        assert_eq!(breaker.state(), CircuitBreakerState::Open);
+        breaker.record_failure();
+        breaker.record_failure();
+        assert_eq!(*breaker.state(), CircuitState::Open);
 
         // Esperar timeout para half-open
         tokio::time::sleep(Duration::from_millis(150)).await;
 
-        // Estado: HalfOpen
-        assert_eq!(breaker.state(), CircuitBreakerState::HalfOpen);
+        // Permitir una request de prueba (esto debería cambiar el estado a HalfOpen)
+        assert!(breaker.allow_request());
 
-        // Permitir una request de prueba
-        assert!(breaker.allow_request().await);
+        // Estado: HalfOpen
+        assert_eq!(*breaker.state(), CircuitState::HalfOpen);
 
         // Registrar éxito - debería cerrarse
-        breaker.record_success().await;
-        assert_eq!(breaker.state(), CircuitBreakerState::Closed);
+        breaker.record_success();
+        assert_eq!(*breaker.state(), CircuitState::Closed);
     }
 }
 
@@ -259,8 +276,9 @@ mod error_classification_tests {
 
     #[test]
     fn test_error_classification_non_retryable() {
+        // Use a different error for NonRetryable test (e.g., InvalidConfiguration)
         assert_eq!(
-            classify_error(&BrokerError::SerializationError(serde_json::Error::custom("test"))),
+            classify_error(&BrokerError::InvalidConfiguration { message: "test".to_string() }),
             ErrorKind::NonRetryable
         );
         assert_eq!(
@@ -289,16 +307,27 @@ mod resilient_consumer_tests {
             .retry_policy(RetryPolicy::default())
             .dlq_config(Some(DeadLetterConfig {
                 queue_name: "test.dlq".to_string(),
-                max_age_days: 7,
-                max_size_mb: 100,
+                max_age: Some(7),
+                max_size: Some(100),
             }))
-            .circuit_breaker_threshold(3)
-            .circuit_breaker_timeout(Duration::from_secs(30))
+            .circuit_breaker(CircuitBreaker::new(CircuitBreakerConfig {
+                failure_threshold: 3,
+                success_threshold: 1,
+                timeout: Duration::from_secs(30),
+            }))
             .build();
 
-        assert!(resilient.retry_policy.is_some());
-        assert!(resilient.dlq_config.is_some());
-        assert!(resilient.circuit_breaker.is_some());
+        // Instead of checking private fields, test that consuming works and doesn't panic
+        let message = RawMessage {
+            id: "test2".to_string(),
+            topic: "test.topic".to_string(),
+            payload: vec![1, 2, 3],
+            headers: std::collections::HashMap::new(),
+            timestamp: chrono::Utc::now(),
+            correlation_id: Some("correlation-id".to_string()),
+        };
+        let result = resilient.consume(message).await;
+        assert!(result.is_ok());
     }
 
     #[tokio::test]
@@ -311,14 +340,15 @@ mod resilient_consumer_tests {
             id: "test".to_string(),
             topic: "test.topic".to_string(),
             payload: vec![1, 2, 3],
-            timestamp: chrono::Utc::now(),
             headers: std::collections::HashMap::new(),
+            timestamp: chrono::Utc::now(),
+            correlation_id: Some("correlation-id".to_string()),
         };
 
         let result = resilient.consume(message).await;
         assert!(result.is_ok());
 
         // Sin resilience, debería ser llamado directamente
-        assert_eq!(resilient.consumer.get_call_count().await, 1);
+        assert_eq!(resilient.consumer().get_call_count().await, 1);
     }
 }

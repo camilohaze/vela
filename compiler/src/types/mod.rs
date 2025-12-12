@@ -88,6 +88,9 @@ pub enum Type {
 
     /// Range types
     Range(special::RangeType),
+
+    /// Simple types (e.g., String, Number)
+    Simple(String),
 }
 
 impl Type {
@@ -178,7 +181,7 @@ impl Type {
             Type::Range(special::RangeType { element_type, .. }) => {
                 element_type.free_vars()
             }
-            Type::Option(special::OptionVariant::None) | Type::Primitive(_) => {
+            Type::Option(special::OptionVariant::None) | Type::Primitive(_) | Type::Simple(_) => {
                 HashSet::new()
             }
         }
@@ -348,7 +351,7 @@ impl Type {
                 })
             }
             // Types that don't contain other types
-            Type::Primitive(_) | Type::Option(special::OptionVariant::None) => self.clone(),
+            Type::Primitive(_) | Type::Option(special::OptionVariant::None) | Type::Simple(_) => self.clone(),
         }
     }
 
@@ -375,6 +378,7 @@ impl Type {
             Type::Stream(st) => st.to_string(),
             Type::Iterator(it) => it.to_string(),
             Type::Range(rt) => rt.to_string(),
+            Type::Simple(s) => s.clone(),
         }
     }
 }

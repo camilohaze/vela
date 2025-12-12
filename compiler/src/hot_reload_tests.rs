@@ -3,11 +3,12 @@
 //! Jira: VELA-609
 //! Historia: VELA-609
 
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc};
 use std::time::{Duration, Instant};
 use tokio::time::sleep;
 use crate::hot_reload::{HotReloadManager, HotReloadBuilder, ConfigChangeEvent, ReloadState};
 use crate::config_loader::ConfigLoader;
+use tokio::sync::Mutex;
 
 #[cfg(test)]
 mod tests {
@@ -17,7 +18,8 @@ mod tests {
     async fn test_hot_reload_manager_creation() {
         let manager = HotReloadManager::new();
         assert!(manager.loaders.is_empty());
-        assert!(manager.callbacks.is_empty());
+        let callbacks = manager.callbacks.lock().await;
+        assert!(callbacks.is_empty());
         assert_eq!(manager.debounce_duration, Duration::from_millis(500));
     }
 
@@ -48,11 +50,19 @@ mod tests {
         let callback_data_clone = callback_data.clone();
 
         manager.add_change_callback(move |event| {
-            *callback_called_clone.lock().unwrap() = true;
-            *callback_data_clone.lock().unwrap() = Some(event.clone());
+            let callback_called_clone = callback_called_clone.clone();
+            let callback_data_clone = callback_data_clone.clone();
+            let event = event.clone();
+            async move {
+                let mut called = callback_called_clone.lock().await;
+                *called = true;
+                let mut data = callback_data_clone.lock().await;
+                *data = Some(event);
+            }
         });
 
-        assert_eq!(manager.callbacks.len(), 1);
+        let callbacks = manager.callbacks.lock().await;
+        assert_eq!(callbacks.len(), 1);
 
         // Simular evento
         let test_event = ConfigChangeEvent {
@@ -63,13 +73,15 @@ mod tests {
         };
 
         // Llamar callback manualmente
-        manager.callbacks[0](&test_event);
+        (callbacks[0])(&test_event).await;
 
         // Verificar que se llamó
-        assert!(*callback_called.lock().unwrap());
+        let called = callback_called.lock().await;
+        assert!(*called);
 
         // Verificar datos
-        let received_event = callback_data.lock().unwrap().as_ref().unwrap().clone();
+        let data = callback_data.lock().await;
+        let received_event = data.as_ref().unwrap().clone();
         assert_eq!(received_event.changed_files, test_event.changed_files);
         assert_eq!(received_event.reload_state, ReloadState::Success);
     }
@@ -119,19 +131,21 @@ mod tests {
     async fn test_builder_pattern() {
         let loader = ConfigLoader::new();
 
-        let result = HotReloadBuilder::new()
+        let builder = HotReloadBuilder::new()
             .with_loader("test".to_string(), loader)
             .unwrap()
             .with_callback(|event| {
-                println!("Config changed: {:?}", event.reload_state);
+                let event = event.clone();
+                async move {
+                    println!("Config changed: {:?}", event.reload_state);
+                }
             })
             .with_debounce(Duration::from_millis(200));
 
-        assert!(result.is_ok());
-
-        let manager = result.unwrap();
+        let manager = builder.build().unwrap();
         assert!(manager.loaders.contains_key("test"));
-        assert_eq!(manager.callbacks.len(), 1);
+        let callbacks = manager.callbacks.lock().await;
+        assert_eq!(callbacks.len(), 1);
         assert_eq!(manager.debounce_duration, Duration::from_millis(200));
     }
 
@@ -218,8 +232,11 @@ mod tests {
 
         let event_count_clone = event_count.clone();
         manager.add_change_callback(move |event| {
-            let mut count = event_count_clone.lock().unwrap();
-            *count += 1;
+            let event_count_clone = event_count_clone.clone();
+            async move {
+                let mut count = event_count_clone.lock().await;
+                *count += 1;
+            }
         });
 
         // Simular múltiples eventos
@@ -237,9 +254,11 @@ mod tests {
             error_message: None,
         };
 
-        manager.callbacks[0](&event1);
-        manager.callbacks[0](&event2);
+        let callbacks = manager.callbacks.lock().await;
+        callbacks[0](&event1).await;
+        callbacks[0](&event2).await;
 
-        assert_eq!(*event_count.lock().unwrap(), 2);
+        let count = event_count.lock().await;
+        assert_eq!(*count, 2);
     }
 }

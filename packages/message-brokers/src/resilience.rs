@@ -41,22 +41,40 @@ impl Default for RetryPolicy {
     }
 }
 
+impl RetryPolicy {
+    /// Calculate delay for the given attempt number
+    pub fn calculate_delay(&self, attempt: u32) -> Duration {
+        if !self.exponential_backoff {
+            return self.initial_delay.min(self.max_delay);
+        }
+
+        let delay = if attempt == 0 {
+            self.initial_delay
+        } else {
+            let multiplier = self.backoff_multiplier.powi(attempt as i32);
+            self.initial_delay.mul_f64(multiplier)
+        };
+
+        delay.min(self.max_delay)
+    }
+}
+
 /// Configuration for dead letter queue
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DeadLetterConfig {
     /// Name of the dead letter exchange/queue/topic
     pub queue_name: String,
     /// Maximum age of messages in DLQ before deletion
-    pub max_age: Option<Duration>,
+    pub max_age: Option<u64>,
     /// Maximum size of DLQ
-    pub max_size: Option<usize>,
+    pub max_size: Option<u64>,
 }
 
 impl Default for DeadLetterConfig {
     fn default() -> Self {
         Self {
             queue_name: "dead-letter-queue".to_string(),
-            max_age: Some(Duration::from_secs(7 * 24 * 3600)), // 7 days
+            max_age: Some(7), // 7 days
             max_size: Some(10000),
         }
     }
@@ -157,6 +175,11 @@ impl CircuitBreaker {
             self.state = CircuitState::Open;
         }
     }
+
+    /// Get the current state of the circuit breaker
+    pub fn state(&self) -> &CircuitState {
+        &self.state
+    }
 }
 
 /// Error classification for retry decisions
@@ -222,12 +245,54 @@ impl<C: MessageConsumer> ResilientConsumer<C> {
         }
     }
 
+    /// Getter for the consumer field
+    pub fn consumer(&self) -> &C {
+        &self.consumer
+    }
+
+    /// Check if an error is retryable
+    fn is_retryable_error(&self, error: &ConsumerError) -> bool {
+        match error {
+            ConsumerError::ProcessingFailed { .. } => true,
+            ConsumerError::DeserializationError(_) => false, // Usually not retryable
+            ConsumerError::RetryExhausted => false,
+            ConsumerError::InvalidMessageFormat { .. } => false,
+            ConsumerError::Temporary(_) => true,
+        }
+    }
+
     /// Process message with resilience patterns (implements MessageConsumer)
     pub async fn consume(&self, message: RawMessage) -> Result<(), ConsumerError> {
-        // For now, this is a simplified version without broker access
-        // In a real implementation, this would need broker access for DLQ
-        // This is just a placeholder - the full implementation needs broker access
-        self.consumer.consume(message).await
+        let mut attempt = 0;
+        let mut last_error = None;
+
+        while attempt < self.retry_policy.max_attempts {
+            attempt += 1;
+
+            match self.consumer.consume(message.clone()).await {
+                Ok(()) => return Ok(()),
+                Err(error) => {
+                    last_error = Some(error);
+
+                    // If this is the last attempt, don't retry
+                    if attempt >= self.retry_policy.max_attempts {
+                        break;
+                    }
+
+                    // Check if error is retryable
+                    if !self.is_retryable_error(&last_error.as_ref().unwrap()) {
+                        break;
+                    }
+
+                    // Calculate delay
+                    let delay = self.retry_policy.calculate_delay(attempt - 1);
+                    tokio::time::sleep(delay).await;
+                }
+            }
+        }
+
+        // If we get here, all attempts failed
+        Err(last_error.unwrap_or(ConsumerError::RetryExhausted))
     }
 
     /// Process message with full resilience patterns (requires broker access)
@@ -268,6 +333,8 @@ impl<C: MessageConsumer> ResilientConsumer<C> {
                             BrokerError::Timeout { message: "Retry exhausted".to_string() },
                         ConsumerError::InvalidMessageFormat { message } =>
                             BrokerError::InvalidConfiguration { message },
+                        ConsumerError::Temporary(msg) =>
+                            BrokerError::Timeout { message: format!("Temporary error: {}", msg) },
                     };
 
                     last_error = Some(format!("{:?}", broker_error));
@@ -405,8 +472,8 @@ impl<C: MessageConsumer> ResilientConsumerBuilder<C> {
         self
     }
 
-    pub fn circuit_breaker(mut self, config: Option<CircuitBreakerConfig>) -> Self {
-        self.circuit_breaker = config.map(CircuitBreaker::new);
+    pub fn circuit_breaker(mut self, breaker: CircuitBreaker) -> Self {
+        self.circuit_breaker = Some(breaker);
         self
     }
 
@@ -423,7 +490,7 @@ impl<C: MessageConsumer> ResilientConsumerBuilder<C> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{MockMessageConsumer, RawMessage};
+    use crate::RawMessage;
     use std::sync::Arc;
     use tokio::sync::Mutex;
 
@@ -434,17 +501,22 @@ mod tests {
     }
 
     #[async_trait]
+    #[async_trait]
     impl MessageConsumer for MockMessageConsumer {
-        async fn process_message(&self, _message: RawMessage) -> Result<(), BrokerError> {
+        async fn consume(&self, _message: RawMessage) -> Result<(), ConsumerError> {
             let mut fail_count = self.fail_count.lock().await;
             *fail_count += 1;
 
             let should_fail = *self.should_fail.lock().await;
             if should_fail && *fail_count < 3 {
-                Err(BrokerError::ConsumerError("Temporary failure".to_string()))
+                Err(ConsumerError::Temporary("Temporary failure".to_string()))
             } else {
                 Ok(())
             }
+        }
+
+        fn topic(&self) -> &str {
+            "test-topic"
         }
     }
 
@@ -464,29 +536,31 @@ mod tests {
         let mut resilient = ResilientConsumerBuilder::new(consumer)
             .retry_policy(retry_policy)
             .dlq_config(None)
-            .circuit_breaker(None)
+            .circuit_breaker(CircuitBreaker::new(CircuitBreakerConfig::default()))
             .build();
 
         // Mock broker (not used in this test)
         struct MockBroker;
         #[async_trait]
         impl MessageBroker for MockBroker {
-            async fn publish(&mut self, _message: RawMessage) -> Result<(), BrokerError> {
+            async fn publish(&self, _topic: &str, _message: RawMessage) -> Result<(), BrokerError> {
                 Ok(())
             }
-            async fn subscribe(&mut self, _topic: &str, _consumer: Box<dyn MessageConsumer + Send + Sync>) -> Result<(), BrokerError> {
+            async fn subscribe(&self, _topic: &str, _consumer: Box<dyn MessageConsumer>) -> Result<(), BrokerError> {
                 Ok(())
             }
-            async fn unsubscribe(&mut self, _topic: &str) -> Result<(), BrokerError> {
+            async fn unsubscribe(&self, _topic: &str) -> Result<(), BrokerError> {
                 Ok(())
             }
-            async fn close(&mut self) -> Result<(), BrokerError> {
+            async fn close(&self) -> Result<(), BrokerError> {
                 Ok(())
             }
         }
 
         let mut broker = MockBroker;
         let message = RawMessage {
+            correlation_id: Some("test-correlation-id".to_string()),
+            id: "test-id".to_string(),
             topic: "test".to_string(),
             payload: b"test".to_vec(),
             headers: HashMap::new(),

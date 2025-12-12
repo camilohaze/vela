@@ -599,8 +599,8 @@ class WorkflowManager:
         print(f"📊 Subtasks completadas: {len(subtasks_links)}")
         print(f"📦 Total de entregables: {sum(len(d) for d in all_deliverables)}")
         print(f"📁 Documentación: docs/features/{historia_key}/")
-        print(f"💻 Código fuente: src/")
-        print(f"🧪 Tests: tests/")
+        print("   - src/")
+        print("   - tests/")
         
         return True
     

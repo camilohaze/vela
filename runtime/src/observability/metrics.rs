@@ -264,6 +264,7 @@ impl Summary {
 
 /// Metrics registry for managing all metrics
 #[derive(Debug)]
+#[derive(Clone)]
 pub struct MetricsRegistry {
     config: MetricsConfig,
     counters: Arc<RwLock<HashMap<String, Counter>>>,

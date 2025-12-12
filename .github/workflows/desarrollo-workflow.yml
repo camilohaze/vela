@@ -31,9 +31,9 @@ jobs:
 
             - name: Ejecutar desarrollo
               env:
-                  JIRA_URL: ${{ secrets.JIRA_URL }}
-                  JIRA_EMAIL: ${{ secrets.JIRA_EMAIL }}
-                  JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
+                  JIRA_URL: ${{ secrets.JIRA_URL || 'undefined' }}
+                  JIRA_EMAIL: ${{ secrets.JIRA_EMAIL || 'undefined' }}
+                  JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN || 'undefined' }}
                   HISTORIA_KEY: ${{ inputs.historia_key }}
                   SPRINT_ID: ${{ inputs.sprint_id }}
               run: |

@@ -48,6 +48,8 @@ pub mod config_integration_tests;
 pub mod gateway;
 pub mod gateway_decorators;
 pub mod gateway_decorator_tests;
+pub mod grpc_decorators;
+pub mod grpc_decorator_tests;
 pub mod router;
 pub mod load_balancer;
 pub mod rate_limiter;
@@ -237,7 +239,6 @@ impl Compiler {
     }
 }
 
-#[cfg(test)]
 mod tests {
     use super::*;
 
@@ -255,3 +256,4 @@ mod tests {
         assert!(result.is_ok());
     }
 }
+

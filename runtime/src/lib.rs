@@ -16,6 +16,12 @@ pub use events as events;
 pub use di as di;
 pub use state_management as state_management;
 
+// Re-export channels and async from concurrency module
+pub use concurrency::channels;
+pub use concurrency::r#async;
+// Re-export event system types from events module
+pub use events::{Event, EventHandler, EventPublisher, EventSubscriber, TypedEventHandler, HandlerWrapperTrait, HandlerWrapper, EventBus, EventError, EventResult};
+
 // Resilience patterns
 pub mod resilience;
 

@@ -56,7 +56,7 @@
     // Highlight current section in sidebar
     function highlightCurrentSection() {
         const chapters = document.querySelectorAll('.chapter');
-        const currentPath = window.location.pathname;
+        const currentPath = globalThis.location.pathname;
 
         chapters.forEach((chapter) => {
             const link = chapter.querySelector('a');
@@ -71,7 +71,7 @@
         const links = document.querySelectorAll('.content a');
 
         links.forEach((link) => {
-            if (link.hostname && link.hostname !== window.location.hostname) {
+            if (link.hostname && link.hostname !== globalThis.location.hostname) {
                 link.setAttribute('target', '_blank');
                 link.setAttribute('rel', 'noopener noreferrer');
                 link.insertAdjacentHTML('beforeend', ' <span style="font-size: 0.8em;">↗</span>');
@@ -128,5 +128,5 @@
     }
 
     // Re-initialize on page navigation (for single-page navigation)
-    window.addEventListener('popstate', init);
+    globalThis.addEventListener('popstate', init);
 })();

@@ -114,6 +114,11 @@ impl CircuitBreaker {
         self.success_count = 0;
     }
 
+    /// Get the current state of the circuit breaker
+    pub fn state(&self) -> &CircuitBreakerState {
+        &self.state
+    }
+
     pub async fn call<F, Fut, T, E>(&mut self, f: F) -> Result<T, ResilienceError<E>>
     where
         F: FnOnce() -> Fut,

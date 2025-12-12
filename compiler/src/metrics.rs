@@ -359,7 +359,7 @@ mod tests {
         assert_eq!(status, HealthStatus::Starting);
 
         // Simulate some time passing and add successful requests
-        tokio::time::sleep(Duration::from_secs(1)).await;
+        tokio::time::sleep(Duration::from_secs(35)).await; // Wait longer than 30 seconds
 
         for _ in 0..10 {
             let request = create_test_request("GET", "/health");

@@ -35,9 +35,7 @@ pub struct LoadBalancer {
     backends: HashMap<String, Vec<Backend>>,
     strategy: LoadBalancingStrategy,
     round_robin_index: HashMap<String, AtomicUsize>,
-    weighted_round_robin_current_weight: HashMap<String, AtomicUsize>,
-    weighted_round_robin_gcd: HashMap<String, u32>,
-    weighted_round_robin_max_weight: HashMap<String, u32>,
+    weighted_round_robin_current_weights: HashMap<String, Vec<AtomicUsize>>,
 }
 
 impl LoadBalancer {
@@ -47,9 +45,7 @@ impl LoadBalancer {
             backends: HashMap::new(),
             strategy: LoadBalancingStrategy::RoundRobin,
             round_robin_index: HashMap::new(),
-            weighted_round_robin_current_weight: HashMap::new(),
-            weighted_round_robin_gcd: HashMap::new(),
-            weighted_round_robin_max_weight: HashMap::new(),
+            weighted_round_robin_current_weights: HashMap::new(),
         }
     }
 
@@ -64,17 +60,12 @@ impl LoadBalancer {
         self.backends.insert(service.clone(), backends);
         self.round_robin_index.insert(service.clone(), AtomicUsize::new(0));
         
-        // Inicializar valores para weighted round-robin
-        self.weighted_round_robin_current_weight.insert(service.clone(), AtomicUsize::new(0));
-        
-        // Calcular GCD y max weight para el algoritmo de weighted round-robin
+        // Inicializar pesos actuales para weighted round-robin (iguales a los pesos originales)
         if let Some(service_backends) = self.backends.get(&service) {
-            let weights: Vec<u32> = service_backends.iter().map(|b| b.weight).collect();
-            let gcd = Self::calculate_gcd(&weights);
-            let max_weight = weights.iter().max().copied().unwrap_or(1);
-            
-            self.weighted_round_robin_gcd.insert(service.clone(), gcd);
-            self.weighted_round_robin_max_weight.insert(service.clone(), max_weight);
+            let current_weights: Vec<AtomicUsize> = service_backends.iter()
+                .map(|b| AtomicUsize::new(b.weight as usize))
+                .collect();
+            self.weighted_round_robin_current_weights.insert(service.clone(), current_weights);
         }
     }
 
@@ -152,34 +143,34 @@ impl LoadBalancer {
 
     /// Seleccionar backend con weighted round-robin
     fn select_weighted_round_robin<'a>(&self, service: &str, backends: &[&'a Backend]) -> &'a Backend {
-        let current_weight = self.weighted_round_robin_current_weight.get(service).unwrap();
-        let gcd = self.weighted_round_robin_gcd.get(service).copied().unwrap_or(1);
-        let max_weight = self.weighted_round_robin_max_weight.get(service).copied().unwrap_or(1);
-
-        let mut current = current_weight.load(Ordering::SeqCst) as i32;
+        let current_weights = self.weighted_round_robin_current_weights.get(service).unwrap();
+        
+        // Encontrar el backend con el mayor peso actual
+        let mut max_weight = 0;
         let mut selected_index = 0;
-        let mut selected_weight = -1;
-
-        // Encontrar el backend con el mayor peso efectivo
-        for (i, backend) in backends.iter().enumerate() {
-            let effective_weight = backend.weight as i32;
-            if effective_weight > selected_weight {
-                selected_weight = effective_weight;
+        
+        for (i, current_weight) in current_weights.iter().enumerate() {
+            let weight = current_weight.load(Ordering::SeqCst);
+            if weight > max_weight {
+                max_weight = weight;
                 selected_index = i;
             }
         }
-
-        // Actualizar el peso actual
-        current -= gcd as i32;
-        if current <= 0 {
-            current = max_weight as i32;
-            if current == 0 {
-                current = 1; // Evitar división por cero
-            }
+        
+        // Calcular la suma de todos los pesos originales
+        let total_weight: usize = backends.iter().map(|b| b.weight as usize).sum();
+        
+        // Decrementar el peso actual del backend seleccionado por la suma total
+        let selected_current_weight = &current_weights[selected_index];
+        let new_selected_weight = selected_current_weight.load(Ordering::SeqCst).saturating_sub(total_weight);
+        selected_current_weight.store(new_selected_weight, Ordering::SeqCst);
+        
+        // Incrementar el peso actual de todos los backends por su peso original
+        for (backend, current_weight) in backends.iter().zip(current_weights.iter()) {
+            let new_weight = current_weight.load(Ordering::SeqCst) + backend.weight as usize;
+            current_weight.store(new_weight, Ordering::SeqCst);
         }
-
-        current_weight.store(current as usize, Ordering::SeqCst);
-
+        
         &backends[selected_index]
     }
 

@@ -192,7 +192,7 @@ impl PrometheusExporter {
     /// Export metrics to Prometheus format
     pub async fn export(&self) -> Result<String, Box<dyn std::error::Error>> {
         // Get metrics from registry and format as Prometheus
-        generate_prometheus_metrics().await
+        Ok(generate_prometheus_metrics().await)
     }
 }
 

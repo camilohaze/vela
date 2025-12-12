@@ -1,6 +1,6 @@
 //! Tests for the event system
 
-use vela_runtime::event::{EventBus, EventError, EventResult, EventHandler};
+use vela_runtime::{EventBus, EventError, EventResult, EventHandler};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use async_trait::async_trait;

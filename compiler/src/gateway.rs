@@ -239,6 +239,19 @@ impl ApiGateway {
         // Por ahora solo imprimimos
         Ok(())
     }
+
+    /// Expose config for testing (read-only)
+    pub fn config(&self) -> &GatewayConfig {
+        &self.config
+    }
+    /// Expose plugin_chain for testing (read-only)
+    pub fn plugin_chain(&self) -> &Vec<Box<dyn Plugin>> {
+        &self.plugin_chain
+    }
+    /// Expose metrics for testing (read-only)
+    pub fn metrics(&self) -> &Arc<metrics::Metrics> {
+        &self.metrics
+    }
 }
 
 #[cfg(test)]

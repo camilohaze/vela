@@ -36,11 +36,19 @@ pub struct ConfigValue {
 }
 
 /// Trait para validadores de configuración
-pub trait ConfigValidator {
+pub trait ConfigValidator: Send + Sync {
     fn validate(&self, key: &str, value: &str) -> Result<(), ValidationError>;
+    fn clone_box(&self) -> Box<dyn ConfigValidator + Send + Sync>;
+}
+
+impl Clone for Box<dyn ConfigValidator + Send + Sync> {
+    fn clone(&self) -> Box<dyn ConfigValidator + Send + Sync> {
+        self.clone_box()
+    }
 }
 
 /// Validador requerido
+#[derive(Clone)]
 pub struct RequiredValidator;
 
 impl ConfigValidator for RequiredValidator {
@@ -50,9 +58,14 @@ impl ConfigValidator for RequiredValidator {
         }
         Ok(())
     }
+
+    fn clone_box(&self) -> Box<dyn ConfigValidator + Send + Sync> {
+        Box::new(self.clone())
+    }
 }
 
 /// Validador de rango numérico
+#[derive(Clone)]
 pub struct RangeValidator {
     pub min: Option<i64>,
     pub max: Option<i64>,
@@ -76,9 +89,14 @@ impl ConfigValidator for RangeValidator {
 
         Ok(())
     }
+
+    fn clone_box(&self) -> Box<dyn ConfigValidator + Send + Sync> {
+        Box::new(self.clone())
+    }
 }
 
 /// Validador de email básico
+#[derive(Clone)]
 pub struct EmailValidator;
 
 impl ConfigValidator for EmailValidator {
@@ -87,6 +105,10 @@ impl ConfigValidator for EmailValidator {
             return Err(ValidationError::InvalidFormat(key.to_string(), "email".to_string()));
         }
         Ok(())
+    }
+
+    fn clone_box(&self) -> Box<dyn ConfigValidator + Send + Sync> {
+        Box::new(self.clone())
     }
 }
 
@@ -119,14 +141,16 @@ impl std::fmt::Display for ValidationError {
 }
 
 /// Loader principal de configuración con validación y hot reload
+#[derive(Clone)]
 pub struct ConfigLoader {
-    sources: Vec<ConfigSource>,
-    profile: Option<String>,
-    cache: HashMap<String, ConfigValue>,
-    validators: HashMap<String, Box<dyn ConfigValidator + Send + Sync>>,
-    hot_reload_enabled: bool,
-    reload_tx: broadcast::Sender<()>,
+    pub sources: Vec<ConfigSource>,
+    pub profile: Option<String>,
+    pub cache: HashMap<String, ConfigValue>,
+    pub validators: HashMap<String, Box<dyn ConfigValidator + Send + Sync>>,
+    pub hot_reload_enabled: bool,
+    pub reload_tx: broadcast::Sender<()>,
 }
+
 
 impl ConfigLoader {
     /// Crear nuevo ConfigLoader con fuentes por defecto
@@ -152,12 +176,19 @@ impl ConfigLoader {
         self
     }
 
+    /// Limpiar todas las fuentes de configuración
+    pub fn clear_sources(mut self) -> Self {
+        self.sources.clear();
+        self
+    }
+
     /// Establecer perfil (dev, staging, prod)
     pub fn with_profile(mut self, profile: String) -> Self {
         self.profile = Some(profile.clone());
 
-        // Agregar archivos específicos del perfil
-        self.sources.insert(0, ConfigSource::File(format!("config-{}.json", profile)));
+        // Agregar archivos específicos del perfil después del archivo base
+        // para que el perfil tenga mayor prioridad que la base
+        self.sources.insert(1, ConfigSource::File(format!("config-{}.json", profile)));
 
         self
     }
@@ -185,10 +216,31 @@ impl ConfigLoader {
 
     /// Recargar configuración desde todas las fuentes
     pub fn load(&mut self) -> Result<(), ConfigError> {
+        // Crear backup de la configuración actual para recuperación en caso de error
+        let backup_cache = self.cache.clone();
+        
         // Limpiar configuración actual
         self.cache.clear();
         
-        // Recargar desde todas las fuentes en orden de prioridad
+        // Intentar recargar desde todas las fuentes en orden de prioridad
+        let result = self.load_from_sources();
+        
+        match result {
+            Ok(_) => {
+                // Notificar cambios
+                let _ = self.reload_tx.send(());
+                Ok(())
+            }
+            Err(e) => {
+                // Restaurar configuración anterior en caso de error
+                self.cache = backup_cache;
+                Err(e)
+            }
+        }
+    }
+
+    /// Cargar desde todas las fuentes (extraído para mejor manejo de errores)
+    fn load_from_sources(&mut self) -> Result<(), ConfigError> {
         let sources = self.sources.clone();
         for source in sources {
             match source {
@@ -217,27 +269,30 @@ impl ConfigLoader {
         // Validar configuración
         self.validate_config()?;
         
-        // Notificar cambios
-        let _ = self.reload_tx.send(());
-        
         Ok(())
     }
 
     /// Cargar desde variables de entorno
-    fn load_from_env(&self) -> Result<HashMap<String, String>, ConfigError> {
+    pub fn load_from_env(&self) -> Result<HashMap<String, String>, ConfigError> {
         let mut result = HashMap::new();
         
         for (key, value) in env::vars() {
             // Convertir a lowercase y reemplazar _ por .
-            let config_key = key.to_lowercase().replace("_", ".");
-            result.insert(config_key, value);
+            if key.starts_with("VELA_") {
+                // Strip VELA_ prefix, then convert
+                let converted = key[5..].to_lowercase().replace("_", ".");
+                result.insert(converted, value);
+            } else {
+                let converted = key.to_lowercase().replace("_", ".");
+                result.insert(converted, value);
+            }
         }
         
         Ok(result)
     }
 
     /// Cargar desde archivo JSON
-    fn load_from_file(&mut self, path: &str) -> Result<(), ConfigError> {
+    pub fn load_from_file(&mut self, path: &str) -> Result<(), ConfigError> {
         let content = fs::read_to_string(path)?;
         let json: serde_json::Value = serde_json::from_str(&content)?;
         
@@ -263,6 +318,12 @@ impl ConfigLoader {
                     self.load_from_json_recursive(val, full_key, source_path);
                 }
             }
+            serde_json::Value::Array(arr) => {
+                for (index, val) in arr.iter().enumerate() {
+                    let full_key = format!("{}[{}]", prefix, index);
+                    self.load_from_json_recursive(val.clone(), full_key, source_path);
+                }
+            }
             _ => {
                 // Para valores primitivos, almacenar en cache
                 let config_value = ConfigValue {
@@ -277,7 +338,22 @@ impl ConfigLoader {
 
     /// Validar configuración
     fn validate_config(&self) -> Result<(), ConfigError> {
-        // Implementar validación básica
+        for (key, validator) in &self.validators {
+            if let Some(config_value) = self.cache.get(key) {
+                validator.validate(key, &config_value.value)?;
+            } else {
+                // If no value is set for a required field, check if it's required
+                // For RequiredValidator, we need to check if the field is missing
+                // But since RequiredValidator.validate() checks if value is empty,
+                // and we don't have a value, we should fail
+                if let Some(required_validator) = self.validators.get(key) {
+                    // For RequiredValidator, we need to check if the field is missing
+                    // But since RequiredValidator.validate() checks if value is empty,
+                    // and we don't have a value, we should fail
+                    required_validator.validate(key, "")?;
+                }
+            }
+        }
         Ok(())
     }
 
@@ -285,6 +361,21 @@ impl ConfigLoader {
     fn is_required(&self, key: &str) -> bool {
         // Por defecto, ninguna clave es requerida
         false
+    }
+
+    /// Obtener un valor como String
+    pub fn get_string(&self, key: &str) -> Option<String> {
+        self.cache.get(key).map(|config_value| config_value.value.clone())
+    }
+
+    /// Obtener un valor como i32
+    pub fn get_int(&self, key: &str) -> Option<Result<i32, std::num::ParseIntError>> {
+        self.cache.get(key).map(|config_value| config_value.value.parse::<i32>())
+    }
+
+    /// Obtener un valor como bool
+    pub fn get_bool(&self, key: &str) -> Option<Result<bool, std::str::ParseBoolError>> {
+        self.cache.get(key).map(|config_value| config_value.value.parse::<bool>())
     }
 }
 
@@ -313,6 +404,12 @@ impl std::fmt::Display for ConfigError {
             ConfigError::Watcher(msg) => write!(f, "Watcher Error: {}", msg),
             ConfigError::Notify(msg) => write!(f, "Notify Error: {}", msg),
         }
+    }
+}
+
+impl From<ValidationError> for ConfigError {
+    fn from(err: ValidationError) -> Self {
+        ConfigError::Validation(err)
     }
 }
 
@@ -351,7 +448,7 @@ mod tests {
         let loader = ConfigLoader::new();
         let result = loader.load_from_env().unwrap();
 
-        assert_eq!(result.get("vela_test_key"), Some(&"test_value".to_string()));
+        assert_eq!(result.get("test.key"), Some(&"test_value".to_string()));
 
         // Clean up
         env::remove_var("VELA_TEST_KEY");

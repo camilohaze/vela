@@ -504,7 +504,8 @@ mod tests {
         assert!(services.contains_key("api-service"));
 
         // Verificar que la ruta fue agregada al router
-        let router_guard = router.get_router().read().await;
+        let binding = router.get_router();
+        let router_guard = binding.read().await;
         let matched = router_guard.match_route("/api/v1/users", "GET");
         assert!(matched.is_some());
         assert_eq!(matched.unwrap().service, "api-service");

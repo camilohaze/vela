@@ -9,12 +9,16 @@
 //! sin reiniciar servicios, con notificaciones y manejo de errores.
 
 use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc};
 use std::time::{Duration, Instant};
+use std::future::Future;
+use std::pin::Pin;
+use futures::executor::block_on;
 use tokio::sync::{broadcast, mpsc};
 use tokio::time;
 use notify::{Watcher, RecursiveMode, Event, EventKind};
 use crate::config_loader::{ConfigLoader, ConfigError};
+use tokio::sync::Mutex;
 
 /// Estado del hot reload
 #[derive(Debug, Clone, PartialEq)]
@@ -35,16 +39,16 @@ pub struct ConfigChangeEvent {
 }
 
 /// Callback para notificaciones de cambio
-pub type ConfigChangeCallback = Box<dyn Fn(&ConfigChangeEvent) + Send + Sync>;
+pub type ConfigChangeCallback = Box<dyn Fn(&ConfigChangeEvent) -> Pin<Box<dyn Future<Output = ()> + Send>> + Send + Sync>;
 
 /// Manager para hot reload de configuración
 pub struct HotReloadManager {
-    loaders: HashMap<String, Arc<Mutex<ConfigLoader>>>,
-    watched_files: HashMap<String, Vec<String>>, // loader_name -> files
-    callbacks: Arc<Mutex<Vec<ConfigChangeCallback>>>,
-    reload_tx: broadcast::Sender<ConfigChangeEvent>,
-    debounce_duration: Duration,
-    _watcher: Option<notify::RecommendedWatcher>,
+    pub loaders: HashMap<String, Arc<Mutex<ConfigLoader>>>,
+    pub watched_files: HashMap<String, Vec<String>>, // loader_name -> files
+    pub callbacks: Arc<Mutex<Vec<ConfigChangeCallback>>>,
+    pub reload_tx: broadcast::Sender<ConfigChangeEvent>,
+    pub debounce_duration: Duration,
+    pub _watcher: Option<notify::RecommendedWatcher>,
 }
 
 impl HotReloadManager {
@@ -75,11 +79,22 @@ impl HotReloadManager {
     }
 
     /// Agregar callback para cambios de configuración
-    pub fn add_change_callback<F>(&mut self, callback: F)
+    pub fn add_change_callback<F, Fut>(&mut self, callback: F)
     where
-        F: Fn(&ConfigChangeEvent) + Send + Sync + 'static,
+        F: Fn(&ConfigChangeEvent) -> Fut + Send + Sync + 'static,
+        Fut: std::future::Future<Output = ()> + Send + 'static,
     {
-        self.callbacks.lock().unwrap().push(Box::new(callback));
+        // Use synchronous locking since callbacks is Arc<Mutex<...>>
+        if let Ok(mut callbacks) = self.callbacks.try_lock() {
+            callbacks.push(Box::new(move |event| Box::pin(callback(event))));
+        } else {
+            // Fallback: if we can't get the lock immediately, spawn a task
+            let callbacks = self.callbacks.clone();
+            tokio::spawn(async move {
+                let mut callbacks = callbacks.lock().await;
+                callbacks.push(Box::new(move |event| Box::pin(callback(event))));
+            });
+        }
     }
 
     /// Obtener canal para suscribirse a eventos de cambio
@@ -158,7 +173,23 @@ impl HotReloadManager {
 
     /// Forzar reload manual
     pub async fn force_reload(&self) -> Result<(), ConfigError> {
-        self.perform_reload().await
+        // Perform the reload
+        self.perform_reload().await?;
+
+        // Call callbacks with success event
+        let success_event = ConfigChangeEvent {
+            timestamp: std::time::Instant::now(),
+            changed_files: vec![], // No specific files for force reload
+            reload_state: ReloadState::Success,
+            error_message: None,
+        };
+
+        let callbacks_guard = self.callbacks.lock().await;
+        for callback in callbacks_guard.iter() {
+            callback(&success_event).await;
+        }
+
+        Ok(())
     }
 
     /// Obtener estado de un loader
@@ -167,7 +198,7 @@ impl HotReloadManager {
     }
 
     /// Extraer archivos watched de un loader
-    fn extract_watched_files(&self, loader: &Arc<Mutex<ConfigLoader>>) -> Vec<String> {
+    pub fn extract_watched_files(&self, loader: &Arc<Mutex<ConfigLoader>>) -> Vec<String> {
         // En una implementación real, el loader expondría sus archivos watched
         // Por ahora, hardcodeamos archivos comunes
         vec![
@@ -230,9 +261,9 @@ impl HotReloadManager {
                                         error_message: None,
                                     };
 
-                                    let callbacks_guard = callbacks.lock().unwrap();
+                                    let callbacks_guard = callbacks.lock().await;
                                     for callback in callbacks_guard.iter() {
-                                        callback(&success_event);
+                                        callback(&success_event).await;
                                     }
                                 }
                                 Err(e) => {
@@ -243,9 +274,9 @@ impl HotReloadManager {
                                         error_message: Some(e.to_string()),
                                     };
 
-                                    let callbacks_guard = callbacks.lock().unwrap();
+                                    let callbacks_guard = callbacks.lock().await;
                                     for callback in callbacks_guard.iter() {
-                                        callback(&error_event);
+                                        callback(&error_event).await;
                                     }
                                 }
                             }
@@ -267,7 +298,7 @@ impl HotReloadManager {
     /// Función estática para reload (necesaria para el task)
     async fn perform_reload_static(loaders: &HashMap<String, Arc<Mutex<ConfigLoader>>>) -> Result<(), ConfigError> {
         for (name, loader) in loaders {
-            let mut loader_guard = loader.lock().unwrap();
+            let mut loader_guard = loader.lock().await;
             match loader_guard.load() {
                 Ok(_) => {
                     println!("Successfully reloaded config for loader: {}", name);
@@ -299,9 +330,10 @@ impl HotReloadBuilder {
         Ok(self)
     }
 
-    pub fn with_callback<F>(mut self, callback: F) -> Self
+    pub fn with_callback<F, Fut>(mut self, callback: F) -> Self
     where
-        F: Fn(&ConfigChangeEvent) + Send + Sync + 'static,
+        F: Fn(&ConfigChangeEvent) -> Fut + Send + Sync + 'static,
+        Fut: std::future::Future<Output = ()> + Send + 'static,
     {
         self.manager.add_change_callback(callback);
         self
@@ -328,7 +360,8 @@ mod tests {
     async fn test_hot_reload_manager_creation() {
         let manager = HotReloadManager::new();
         assert!(manager.loaders.is_empty());
-        assert!(manager.callbacks.is_empty());
+        let callbacks = manager.callbacks.lock().await;
+        assert!(callbacks.is_empty());
     }
 
     #[tokio::test]
@@ -348,11 +381,16 @@ mod tests {
         let callback_called = Arc::new(Mutex::new(false));
 
         let callback_called_clone = callback_called.clone();
-        manager.add_change_callback(move |event| {
-            *callback_called_clone.lock().unwrap() = true;
+        manager.add_change_callback(move |_event| {
+            let callback_called_clone = callback_called_clone.clone();
+            async move {
+                let mut called = callback_called_clone.lock().await;
+                *called = true;
+            }
         });
 
-        assert_eq!(manager.callbacks.len(), 1);
+        let callbacks = manager.callbacks.lock().await;
+        assert_eq!(callbacks.len(), 1);
 
         // Simular llamada al callback
         let event = ConfigChangeEvent {
@@ -362,8 +400,10 @@ mod tests {
             error_message: None,
         };
 
-        manager.callbacks[0](&event);
-        assert!(*callback_called.lock().unwrap());
+        // Call the callback
+        (callbacks[0])(&event).await;
+        let called = callback_called.lock().await;
+        assert!(*called);
     }
 
     #[tokio::test]
@@ -371,10 +411,11 @@ mod tests {
         let loader = ConfigLoader::new();
 
         let result = HotReloadBuilder::new()
-            .with_loader("test".to_string(), loader)
-            .with_debounce(Duration::from_millis(100));
-
+            .with_loader("test".to_string(), loader);
         assert!(result.is_ok());
+        let builder = result.unwrap().with_debounce(Duration::from_millis(100));
+        // Just check builder is constructed
+        let _ = builder;
     }
 
     #[test]

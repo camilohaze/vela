@@ -3,6 +3,7 @@
 use crate::widget::Widget;
 use crate::context::BuildContext;
 use crate::key::Key;
+#[cfg(feature = "reactive")]
 use crate::reactive_widgets::WidgetId;
 use std::collections::HashMap;
 
@@ -41,7 +42,10 @@ pub struct VDomTree {
     pub root: VDomNode,
     pub needs_update: bool,
     /// Mapping of widget IDs to their positions in the tree (for reactive updates)
+    #[cfg(feature = "reactive")]
     pub widget_ids: HashMap<String, WidgetId>,
+    #[cfg(not(feature = "reactive"))]
+    pub widget_ids: (),
 }
 
 impl VDomTree {
@@ -53,11 +57,15 @@ impl VDomTree {
         Self {
             root,
             needs_update: false,
+            #[cfg(feature = "reactive")]
             widget_ids: HashMap::new(),
+            #[cfg(not(feature = "reactive"))]
+            widget_ids: (),
         }
     }
 
-    /// Create tree with widget ID mapping
+    /// Create tree with widget ID mapping (reactive only)
+    #[cfg(feature = "reactive")]
     pub fn with_widget_ids(root: VDomNode, widget_ids: HashMap<String, WidgetId>) -> Self {
         Self {
             root,
@@ -71,7 +79,10 @@ impl VDomTree {
         Self {
             root,
             needs_update: false,
+            #[cfg(feature = "reactive")]
             widget_ids: HashMap::new(),
+            #[cfg(not(feature = "reactive"))]
+            widget_ids: (),
         }
     }
 
@@ -85,12 +96,14 @@ impl VDomTree {
         self.needs_update = true;
     }
 
-    /// Get widget IDs mapping
+    /// Get widget IDs mapping (reactive only)
+    #[cfg(feature = "reactive")]
     pub fn widget_ids(&self) -> &HashMap<String, WidgetId> {
         &self.widget_ids
     }
 
-    /// Add widget ID mapping
+    /// Add widget ID mapping (reactive only)
+    #[cfg(feature = "reactive")]
     pub fn add_widget_id(&mut self, key: String, widget_id: WidgetId) {
         self.widget_ids.insert(key, widget_id);
     }
@@ -365,6 +378,7 @@ mod tests {
         assert_eq!(fragment.children[1].text_content, Some("Item 2".to_string()));
     }
 
+    #[cfg(feature = "reactive")]
     #[test]
     fn test_vdom_tree_with_widget_ids() {
         let mut tree = VDomTree::with_widget_ids(

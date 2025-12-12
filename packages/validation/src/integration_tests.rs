@@ -6,8 +6,11 @@
 
 #[cfg(test)]
 mod integration_tests {
-    use crate::validation::*;
     use serde_json::json;
+    use crate::integration::{CreateUserDTO, UpdateUserDTO, UserController, ValidationMiddleware, Validatable, ValidatableWithSchema};
+    use crate::schema::Schema;
+    use crate::schema::types;
+    use crate::ValidationErrors;
 
     /// Test completo del flujo de validación desde decoradores hasta controllers
     #[test]

@@ -59,6 +59,15 @@ impl Plugin for LoggingPlugin {
     }
 }
 
+#[cfg(feature = "gateway-async-plugin")]
+#[async_trait::async_trait]
+impl crate::gateway::Plugin for LoggingPlugin {
+    async fn execute(&self, ctx: &mut crate::gateway::Context) -> Result<(), crate::gateway::GatewayError> {
+        // Call the sync version for compatibility
+        Plugin::execute(self, ctx)
+    }
+}
+
 /// Plugin de CORS
 pub struct CorsPlugin {
     allowed_origins: Vec<String>,
@@ -251,7 +260,7 @@ mod tests {
         let plugin = LoggingPlugin;
         let mut ctx = create_test_context();
 
-        let result = plugin.execute(&mut ctx).await;
+        let result = plugin.execute(&mut ctx);
         assert!(result.is_ok());
         assert_eq!(plugin.name(), "logging");
     }
@@ -262,7 +271,7 @@ mod tests {
         let mut ctx = create_test_context();
         ctx.request.method = "OPTIONS".to_string();
 
-        let result = plugin.execute(&mut ctx).await;
+        let result = plugin.execute(&mut ctx);
         assert!(result.is_ok());
         assert!(ctx.response.is_some());
 
@@ -293,7 +302,7 @@ mod tests {
             body: None,
         });
 
-        let result = registry.execute_all(&mut ctx).await;
+        let result = registry.execute_all(&mut ctx);
         assert!(result.is_ok());
 
         // El último plugin debería sobrescribir
@@ -307,7 +316,7 @@ mod tests {
         let mut ctx = create_test_context();
         ctx.metadata.insert("error".to_string(), serde_json::Value::String("Test error".to_string()));
 
-        let result = plugin.execute(&mut ctx).await;
+        let result = plugin.execute(&mut ctx);
         assert!(result.is_ok());
         assert!(ctx.response.is_some());
 

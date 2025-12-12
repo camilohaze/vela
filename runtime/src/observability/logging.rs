@@ -1,7 +1,8 @@
-//! Structured logging for Vela services
-//!
-//! This module provides structured logging with automatic trace context
-//! injection and multiple output sinks.
+use std::io::Write;
+// Structured logging for Vela services
+//
+// This module provides structured logging with automatic trace context
+// injection and multiple output sinks.
 
 use std::collections::HashMap;
 use std::fmt;
@@ -162,10 +163,13 @@ impl LogSink for ConsoleSink {
         let color = self.color_code(record.level);
         let reset = self.reset_code();
 
-        let output = if record.level >= Level::WARN {
-            &mut std::io::stderr()
+        use std::io::Write;
+        let mut stderr = std::io::stderr();
+        let mut stdout = std::io::stdout();
+        let output: &mut dyn Write = if record.level >= Level::WARN {
+            &mut stderr
         } else {
-            &mut std::io::stdout()
+            &mut stdout
         };
 
         let json = serde_json::to_string(record)?;

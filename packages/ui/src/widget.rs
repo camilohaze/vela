@@ -3,6 +3,8 @@
 use crate::vdom::{VDomNode, VDomTree};
 use crate::context::BuildContext;
 use crate::key::Key;
+#[cfg(feature = "reactive")]
+use crate::reactive_widgets::WidgetId;
 use crate::lifecycle::{Lifecycle, LifecycleState};
 use crate::layout::{BoxConstraints, Size, Offset, EdgeInsets, Alignment};
 
@@ -28,6 +30,7 @@ pub trait Widget: std::fmt::Debug {
     }
 
     /// Unique widget ID for reactive tracking (default implementation)
+    #[cfg(feature = "reactive")]
     fn widget_id(&self) -> WidgetId {
         // Default implementation: use type name + optional key
         if let Some(key) = self.key() {

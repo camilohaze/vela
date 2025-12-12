@@ -124,11 +124,11 @@ impl ValidationErrors {
     }
 
     /// Obtiene un resumen de errores por campo
-    pub fn summary(&self) -> HashMap<&String, Vec<&str>> {
+    pub fn summary(&self) -> HashMap<String, Vec<&str>> {
         self.field_errors
             .iter()
             .map(|(field, errors)| {
-                (field, errors.iter().map(|e| e.code.as_str()).collect())
+                (field.clone(), errors.iter().map(|e| e.code.as_str()).collect())
             })
             .collect()
     }
@@ -293,10 +293,10 @@ mod tests {
 
         let summary = errors.summary();
 
-        assert_eq!(summary.get("name").unwrap().len(), 2);
-        assert_eq!(summary.get("email").unwrap().len(), 1);
-        assert!(summary.get("name").unwrap().contains(&"REQUIRED"));
-        assert!(summary.get("name").unwrap().contains(&"LENGTH"));
+        assert_eq!(summary.get(&"name".to_string()).unwrap().len(), 2);
+        assert_eq!(summary.get(&"email".to_string()).unwrap().len(), 1);
+        assert!(summary.get(&"name".to_string()).unwrap().contains(&"REQUIRED"));
+        assert!(summary.get(&"name".to_string()).unwrap().contains(&"LENGTH"));
     }
 
     #[test]

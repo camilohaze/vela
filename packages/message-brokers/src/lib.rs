@@ -96,6 +96,10 @@ pub enum ConsumerError {
 
     #[error("Invalid message format: {message}")]
     InvalidMessageFormat { message: String },
+    
+    /// Temporary error, e.g. for retryable failures
+    #[error("Temporary error: {0}")]
+    Temporary(String),
 }
 
 /// Mensaje type-safe con serialización automática
