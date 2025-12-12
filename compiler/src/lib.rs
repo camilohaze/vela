@@ -44,6 +44,7 @@ pub mod config_decorators;
 pub mod config_decorator_tests;
 pub mod hot_reload;
 pub mod hot_reload_tests;
+pub mod config_integration_tests;
 
 use std::path::Path;
 use config::Config;
