@@ -1,0 +1,61 @@
+[package]
+name = "vela-crypto"
+version = "0.1.0"
+edition = "2021"
+description = "Cryptography library for Vela programming language"
+license = "Apache-2.0"
+authors = ["Vela Team <team@velalang.org>"]
+repository = "https://github.com/velalang/vela"
+homepage = "https://velalang.org"
+documentation = "https://docs.velalang.org"
+
+[dependencies]
+# Hashing
+sha2 = "0.10"
+bcrypt = "0.15"
+argon2 = "0.5"
+hmac = "0.12"
+pbkdf2 = "0.12"
+
+# Encryption
+aes-gcm = "0.10"
+chacha20poly1305 = "0.10"
+aead = "0.5"
+
+# JWT
+jsonwebtoken = "9.0"
+
+# Signatures
+rsa = "0.9"
+ecdsa = "0.16"
+p256 = "0.13"
+p384 = "0.13"
+p521 = "0.13"
+
+# Random generation
+rand = "0.8"
+
+# Encoding
+base64 = "0.21"
+hex = "0.4"
+
+# Async runtime
+tokio = { version = "1.0", features = ["full"] }
+
+# Error handling
+thiserror = "1.0"
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+[dev-dependencies]
+tokio-test = "0.4"
+criterion = "0.5"
+
+[features]
+default = ["jwt", "rsa", "ecdsa", "aes-gcm"]
+jwt = []
+rsa = []
+ecdsa = []
+aes-gcm = []
