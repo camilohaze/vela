@@ -1,9 +1,7 @@
-"""
-Tests unitarios para Hot Reload System
-
-Jira: VELA-609
-Historia: VELA-609
-"""
+//! Tests unitarios para Hot Reload System
+//!
+//! Jira: VELA-609
+//! Historia: VELA-609
 
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};

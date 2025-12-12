@@ -1,9 +1,7 @@
-"""
-Tests unitarios para Config Decorators
-
-Jira: VELA-609
-Historia: VELA-609
-"""
+//! Tests unitarios para Config Decorators
+//!
+//! Jira: VELA-609
+//! Historia: VELA-609
 
 use crate::config_decorators::{ConfigDecoratorProcessor, ConfigCodeGenerator, ConfigClassInfo, ConfigFieldInfo};
 use crate::ast::*;

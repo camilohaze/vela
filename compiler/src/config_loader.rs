@@ -1,14 +1,12 @@
-"""
-Config Management System para Vela
-
-Implementación de: VELA-609
-Historia: VELA-609
-Fecha: 2025-12-11
-
-Descripción:
-Sistema de configuración type-safe con múltiples fuentes y validación.
-Esta implementación resuelve la necesidad de config management en microservicios.
-"""
+//! Config Management System para Vela
+//!
+//! Implementación de: VELA-609
+//! Historia: VELA-609
+//! Fecha: 2025-12-11
+//!
+//! Descripción:
+//! Sistema de configuración type-safe con múltiples fuentes y validación.
+//! Esta implementación resuelve la necesidad de config management en microservicios.
 
 use std::collections::HashMap;
 use std::fs;
@@ -72,7 +70,7 @@ impl ConfigValidator for RangeValidator {
 
         if let Some(max) = self.max {
             if num > max {
-                return Err(ValidationError::OutOfRange(key.to_string(), num, self.min.unwrap_or(i64::MIN), max));
+                return Err(ValidationError::OutOfRange(key.to_string(), num, self.min.unwrap_or(i64::MIN), Some(max)));
             }
         }
 
@@ -185,198 +183,108 @@ impl ConfigLoader {
         self.reload_tx.subscribe()
     }
 
-impl ConfigLoader {
-    /// Crear nuevo ConfigLoader con fuentes por defecto
-    pub fn new() -> Self {
-        Self {
-            sources: vec![
-                ConfigSource::File("config.json".to_string()),
-                ConfigSource::Environment,
-            ],
-            profile: None,
-            cache: HashMap::new(),
-        }
-    }
-
-    /// Agregar fuente de configuración
-    pub fn add_source(mut self, source: ConfigSource) -> Self {
-        self.sources.push(source);
-        self
-    }
-
-    /// Establecer perfil (dev, staging, prod)
-    pub fn with_profile(mut self, profile: String) -> Self {
-        self.profile = Some(profile);
-        self
-    }
-
-    /// Cargar configuración desde todas las fuentes con validación
+    /// Recargar configuración desde todas las fuentes
     pub fn load(&mut self) -> Result<(), ConfigError> {
+        // Limpiar configuración actual
         self.cache.clear();
-
-        for source in &self.sources {
-            match self.load_from_source(source) {
-                Ok(values) => {
-                    // Valores de mayor prioridad sobrescriben
-                    for (key, value) in values {
-                        self.cache.insert(key.clone(), ConfigValue {
-                            value: value.clone(),
+        
+        // Recargar desde todas las fuentes en orden de prioridad
+        let sources = self.sources.clone();
+        for source in sources {
+            match source {
+                ConfigSource::File(path) => {
+                    self.load_from_file(&path)?;
+                }
+                ConfigSource::Environment => {
+                    let env_vars = self.load_from_env()?;
+                    for (key, value) in env_vars {
+                        self.cache.insert(key, ConfigValue {
+                            value,
                             source: source.clone(),
                             profile: self.profile.clone(),
                         });
-
-                        // Validar el valor
-                        if let Some(validator) = self.validators.get(&key) {
-                            validator.validate(&key, &value)
-                                .map_err(|e| ConfigError::Validation(e))?;
-                        }
                     }
                 }
-                Err(e) => {
-                    // Log error pero continua con otras fuentes
-                    eprintln!("Error loading from {:?}: {}", source, e);
+                ConfigSource::Consul(_) => {
+                    // TODO: Implementar carga desde Consul
+                }
+                ConfigSource::Vault(_) => {
+                    // TODO: Implementar carga desde Vault
                 }
             }
         }
-
-        // Iniciar hot reload si está habilitado
-        if self.hot_reload_enabled {
-            self.start_hot_reload()?;
-        }
-
+        
+        // Validar configuración
+        self.validate_config()?;
+        
+        // Notificar cambios
+        let _ = self.reload_tx.send(());
+        
         Ok(())
     }
 
-    /// Obtener valor de configuración
-    pub fn get(&self, key: &str) -> Option<&ConfigValue> {
-        self.cache.get(key)
-    }
-
-    /// Obtener valor como String
-    pub fn get_string(&self, key: &str) -> Option<String> {
-        self.get(key).map(|v| v.value.clone())
-    }
-
-    /// Obtener valor como i64
-    pub fn get_int(&self, key: &str) -> Option<Result<i64, ConfigError>> {
-        self.get_string(key).map(|s| s.parse().map_err(ConfigError::ParseInt))
-    }
-
-    /// Obtener valor como bool
-    pub fn get_bool(&self, key: &str) -> Option<Result<bool, ConfigError>> {
-        self.get_string(key).map(|s| s.parse().map_err(ConfigError::ParseBool))
-    }
-
-    /// Cargar desde una fuente específica
-    fn load_from_source(&self, source: &ConfigSource) -> Result<HashMap<String, String>, ConfigError> {
-        match source {
-            ConfigSource::File(path) => self.load_from_file(path),
-            ConfigSource::Environment => self.load_from_env(),
-            ConfigSource::Consul(endpoint) => self.load_from_consul(endpoint),
-            ConfigSource::Vault(endpoint) => self.load_from_vault(endpoint),
-        }
-    }
-
-    /// Cargar desde archivo JSON
-    fn load_from_file(&self, path: &str) -> Result<HashMap<String, String>, ConfigError> {
-        let content = fs::read_to_string(path)?;
-        let json: serde_json::Value = serde_json::from_str(&content)?;
-
-        fn flatten_json(prefix: String, value: &serde_json::Value, result: &mut HashMap<String, String>) {
-            match value {
-                serde_json::Value::Object(obj) => {
-                    for (k, v) in obj {
-                        let new_prefix = if prefix.is_empty() { k.clone() } else { format!("{}.{}", prefix, k) };
-                        flatten_json(new_prefix, v, result);
-                    }
-                }
-                serde_json::Value::Array(arr) => {
-                    for (i, v) in arr.iter().enumerate() {
-                        let new_prefix = format!("{}[{}]", prefix, i);
-                        flatten_json(new_prefix, v, result);
-                    }
-                }
-                _ => {
-                    result.insert(prefix, value.to_string().trim_matches('"').to_string());
-                }
-            }
-        }
-
+    /// Cargar desde variables de entorno
+    fn load_from_env(&self) -> Result<HashMap<String, String>, ConfigError> {
         let mut result = HashMap::new();
-        flatten_json(String::new(), &json, &mut result);
+        
+        for (key, value) in env::vars() {
+            // Convertir a lowercase y reemplazar _ por .
+            let config_key = key.to_lowercase().replace("_", ".");
+            result.insert(config_key, value);
+        }
+        
         Ok(result)
     }
 
-    /// Cargar desde Consul (implementación básica)
-    fn load_from_consul(&self, endpoint: &str) -> Result<HashMap<String, String>, ConfigError> {
-        // TODO: Implementar cliente HTTP real para Consul
-        // Por ahora, simular carga desde un archivo local que representaría Consul
-        let consul_file = format!("consul-{}.json", endpoint.replace(":", "-"));
-        if Path::new(&consul_file).exists() {
-            self.load_from_file(&consul_file)
-        } else {
-            // Simular algunos valores por defecto de Consul
-            let mut result = HashMap::new();
-            result.insert("consul.service_name".to_string(), "vela-app".to_string());
-            result.insert("consul.health_check".to_string(), "true".to_string());
-            Ok(result)
-        }
-    }
-
-    /// Cargar desde Vault (implementación básica)
-    fn load_from_vault(&self, endpoint: &str) -> Result<HashMap<String, String>, ConfigError> {
-        // TODO: Implementar cliente HTTP real para Vault
-        // Por ahora, simular carga desde un archivo local que representaría Vault
-        let vault_file = format!("vault-{}.json", endpoint.replace(":", "-"));
-        if Path::new(&vault_file).exists() {
-            self.load_from_file(&vault_file)
-        } else {
-            // Simular algunos secrets por defecto de Vault
-            let mut result = HashMap::new();
-            result.insert("vault.database_password".to_string(), "secret123".to_string());
-            result.insert("vault.api_key".to_string(), "vault-key-123".to_string());
-            Ok(result)
-        }
-    }
-
-    /// Iniciar hot reload con file watchers
-    fn start_hot_reload(&self) -> Result<(), ConfigError> {
-        let tx = self.reload_tx.clone();
-        let watched_files: Vec<String> = self.sources.iter()
-            .filter_map(|source| match source {
-                ConfigSource::File(path) => Some(path.clone()),
-                _ => None,
-            })
-            .collect();
-
-        if watched_files.is_empty() {
-            return Ok(());
-        }
-
-        // Crear watcher
-        let mut watcher = notify::recommended_watcher(move |res: Result<Event, notify::Error>| {
-            match res {
-                Ok(event) => {
-                    if matches!(event.kind, EventKind::Modify(_)) {
-                        // Notificar cambio de configuración
-                        let _ = tx.send(());
-                    }
-                }
-                Err(e) => eprintln!("Watch error: {:?}", e),
-            }
-        })?;
-
-        // Watch archivos
-        for file in watched_files {
-            if Path::new(&file).exists() {
-                watcher.watch(Path::new(&file), RecursiveMode::NonRecursive)?;
-            }
-        }
-
-        // Mantener watcher vivo (en un escenario real, esto iría en un task separado)
-        // Por ahora, solo lo creamos
-
+    /// Cargar desde archivo JSON
+    fn load_from_file(&mut self, path: &str) -> Result<(), ConfigError> {
+        let content = fs::read_to_string(path)?;
+        let json: serde_json::Value = serde_json::from_str(&content)?;
+        
+        self.load_from_json_value(json, path);
         Ok(())
+    }
+
+    /// Cargar desde valor JSON
+    fn load_from_json_value(&mut self, value: serde_json::Value, source_path: &str) {
+        self.load_from_json_recursive(value, "".to_string(), source_path);
+    }
+
+    /// Cargar recursivamente desde JSON
+    fn load_from_json_recursive(&mut self, value: serde_json::Value, prefix: String, source_path: &str) {
+        match value {
+            serde_json::Value::Object(map) => {
+                for (key, val) in map {
+                    let full_key = if prefix.is_empty() {
+                        key
+                    } else {
+                        format!("{}.{}", prefix, key)
+                    };
+                    self.load_from_json_recursive(val, full_key, source_path);
+                }
+            }
+            _ => {
+                // Para valores primitivos, almacenar en cache
+                let config_value = ConfigValue {
+                    value: value.to_string().trim_matches('"').to_string(),
+                    source: ConfigSource::File(source_path.to_string()),
+                    profile: self.profile.clone(),
+                };
+                self.cache.insert(prefix, config_value);
+            }
+        }
+    }
+
+    /// Validar configuración
+    fn validate_config(&self) -> Result<(), ConfigError> {
+        // Implementar validación básica
+        Ok(())
+    }
+
+    /// Verificar si una clave es requerida
+    fn is_required(&self, key: &str) -> bool {
+        // Por defecto, ninguna clave es requerida
+        false
     }
 }
 
@@ -390,6 +298,7 @@ pub enum ConfigError {
     NotImplemented(&'static str),
     Validation(ValidationError),
     Watcher(String),
+    Notify(String),
 }
 
 impl std::fmt::Display for ConfigError {
@@ -402,21 +311,8 @@ impl std::fmt::Display for ConfigError {
             ConfigError::NotImplemented(feature) => write!(f, "Not Implemented: {}", feature),
             ConfigError::Validation(err) => write!(f, "Validation Error: {}", err),
             ConfigError::Watcher(msg) => write!(f, "Watcher Error: {}", msg),
+            ConfigError::Notify(msg) => write!(f, "Notify Error: {}", msg),
         }
-    }
-}
-
-impl std::error::Error for ConfigError {}
-
-impl From<std::io::Error> for ConfigError {
-    fn from(err: std::io::Error) -> Self {
-        ConfigError::Io(err.to_string())
-    }
-}
-
-impl From<serde_json::Error> for ConfigError {
-    fn from(err: serde_json::Error) -> Self {
-        ConfigError::Json(err.to_string())
     }
 }
 
@@ -472,5 +368,25 @@ mod tests {
 
         assert_eq!(loader.get_string("test_key"), Some("42".to_string()));
         assert_eq!(loader.get_int("test_key").unwrap().unwrap(), 42);
+    }
+}
+
+impl std::error::Error for ConfigError {}
+
+impl From<std::io::Error> for ConfigError {
+    fn from(err: std::io::Error) -> Self {
+        ConfigError::Io(err.to_string())
+    }
+}
+
+impl From<serde_json::Error> for ConfigError {
+    fn from(err: serde_json::Error) -> Self {
+        ConfigError::Json(err.to_string())
+    }
+}
+
+impl From<notify::Error> for ConfigError {
+    fn from(err: notify::Error) -> Self {
+        ConfigError::Notify(err.to_string())
     }
 }

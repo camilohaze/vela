@@ -3371,6 +3371,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6205bd8bb1e454ad2e27422015fb5e4f2bcc7e08fa8f27058670d208324a4d2d"
 dependencies = [
  "bitflags 2.10.0",
+ "crossbeam-channel",
  "filetime",
  "fsevent-sys",
  "inotify",
@@ -6019,17 +6020,22 @@ name = "vela-compiler"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "async-trait",
  "bincode",
  "criterion",
  "nom",
+ "notify",
  "num_cpus",
  "proc-macro2",
  "proptest",
  "quote",
+ "rand 0.8.5",
  "regex",
  "serde",
  "serde_json",
+ "tempfile",
  "thiserror 1.0.69",
+ "tokio",
  "tracing",
  "tracing-subscriber",
  "vela-vm",

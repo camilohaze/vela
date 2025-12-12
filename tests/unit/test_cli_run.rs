@@ -1,9 +1,7 @@
-"""
-Tests unitarios para el comando vela run
-
-Jira: TASK-098
-Historia: VELA-592
-"""
+//! Tests unitarios para el comando vela run
+//!
+//! Jira: TASK-098
+//! Historia: VELA-592
 
 import pytest
 import tempfile
@@ -14,21 +12,21 @@ from vela_cli.main import handle_run
 
 
 class TestVelaRun:
-    """Suite de tests para el comando vela run."""
+    // Suite de tests para el comando vela run.
 
     def test_run_nonexistent_file(self):
-        """Test que falla con archivo inexistente."""
+    // Test que falla con archivo inexistente.
         with pytest.raises(SystemExit):  # any::bail! causes exit
             handle_run(Path("nonexistent.velac"), vec![], false, false)
 
     def test_run_invalid_extension(self):
-        """Test que falla con extensión inválida."""
+        // Test que falla con extensión inválida.
         with tempfile.NamedTemporaryFile(suffix=".txt") as f:
             with pytest.raises(SystemExit):
                 handle_run(Path(f.name), vec![], false, false)
 
     def test_run_valid_bytecode_file(self):
-        """Test ejecución exitosa de archivo bytecode válido."""
+        // Test ejecución exitosa de archivo bytecode válido.
         # Crear archivo bytecode mock
         bytecode_data = b"mock bytecode data"
 
@@ -62,7 +60,7 @@ class TestVelaRun:
             os.unlink(temp_path)
 
     def test_run_with_trace_option(self):
-        """Test ejecución con opción --trace."""
+        // Test ejecución con opción --trace.
         bytecode_data = b"mock bytecode"
 
         with tempfile.NamedTemporaryFile(suffix=".velac", delete=False) as f:
@@ -90,7 +88,7 @@ class TestVelaRun:
             os.unlink(temp_path)
 
     def test_run_with_gc_stats_option(self):
-        """Test ejecución con opción --gc-stats."""
+        // Test ejecución con opción --gc-stats.
         bytecode_data = b"mock bytecode"
 
         with tempfile.NamedTemporaryFile(suffix=".velac", delete=False) as f:
@@ -119,7 +117,7 @@ class TestVelaRun:
             os.unlink(temp_path)
 
     def test_run_with_command_line_args(self):
-        """Test ejecución con argumentos de línea de comandos."""
+        // Test ejecución con argumentos de línea de comandos.
         bytecode_data = b"mock bytecode"
         args = vec!["arg1", "arg2", "arg3"]
 

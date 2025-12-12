@@ -45,6 +45,14 @@ pub mod config_decorator_tests;
 pub mod hot_reload;
 pub mod hot_reload_tests;
 pub mod config_integration_tests;
+pub mod gateway;
+pub mod router;
+pub mod load_balancer;
+pub mod rate_limiter;
+pub mod auth;
+pub mod plugins;
+pub mod metrics;
+pub mod gateway_tests;
 
 use std::path::Path;
 use config::Config;

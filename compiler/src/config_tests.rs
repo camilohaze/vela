@@ -1,9 +1,7 @@
-"""
-Tests unitarios para Config Management
-
-Jira: VELA-609
-Historia: VELA-609
-"""
+//! Tests unitarios para Config Management
+//!
+//! Jira: VELA-609
+//! Historia: VELA-609
 
 use std::fs;
 use std::env;

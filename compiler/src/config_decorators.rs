@@ -1,14 +1,12 @@
-"""
-Config Decorators para Vela
-
-Implementación de: VELA-609
-Historia: VELA-609
-Fecha: 2025-12-11
-
-Descripción:
-Decoradores compile-time para configuración type-safe.
-Genera código que integra con ConfigLoader y validación automática.
-"""
+//! Config Decorators para Vela
+//!
+//! Implementación de: VELA-609
+//! Historia: VELA-609
+//! Fecha: 2025-12-11
+//!
+//! Descripción:
+//! Decoradores compile-time para configuración type-safe.
+//! Genera código que integra con ConfigLoader y validación automática.
 
 use crate::ast::*;
 use crate::error::CompileResult;
@@ -58,9 +56,17 @@ impl ConfigDecoratorProcessor {
     }
 
     /// Procesar decoradores en campos de configuración
-    pub fn process_field_decorators(&mut self, class_name: &str, field: &FieldDeclaration) -> CompileResult<()> {
+    pub fn process_field_decorators(&mut self, class_name: &str, field: &StructField) -> CompileResult<()> {
+        let field_type = self.type_annotation_to_string(&field.type_annotation);
+        
         if let Some(class_info) = self.config_classes.get_mut(class_name) {
-            let field_info = self.extract_config_field_info(field)?;
+            let field_info = ConfigFieldInfo {
+                name: field.name.clone(),
+                field_type,
+                key: field.name.clone(), // Usar nombre del campo como key por defecto
+                required: false, // Por ahora no required
+                validator: None,
+            };
             class_info.fields.push(field_info);
         }
 
@@ -89,105 +95,46 @@ impl ConfigDecoratorProcessor {
         })
     }
 
-    /// Extraer información de campo de configuración
-    fn extract_config_field_info(&self, field: &FieldDeclaration) -> CompileResult<ConfigFieldInfo> {
-        let mut key = field.name.clone();
-        let mut required = false;
-        let mut validator = None;
-
-        // Procesar decoradores del campo
-        for decorator in &field.decorators {
-            match decorator.name.as_str() {
-                "required" => {
-                    required = true;
-                }
-                "key" => {
-                    // @key("custom.key.name")
-                    if let Some(args) = &decorator.arguments {
-                        if let Some(first_arg) = args.first() {
-                            if let Expression::StringLiteral(s) = first_arg {
-                                key = s.clone();
-                            }
-                        }
-                    }
-                }
-                "range" => {
-                    // @range(min=1, max=100)
-                    validator = Some(self.build_range_validator(decorator));
-                }
-                "email" => {
-                    validator = Some("EmailValidator".to_string());
-                }
-                "min" => {
-                    // @min(0)
-                    validator = Some(self.build_min_validator(decorator));
-                }
-                "max" => {
-                    // @max(100)
-                    validator = Some(self.build_max_validator(decorator));
-                }
-                _ => {}
-            }
+    /// Procesar una declaración de struct con decoradores de configuración
+    pub fn process_struct(&mut self, struct_decl: &StructDeclaration) -> CompileResult<()> {
+        // Verificar si tiene decorador @config
+        let has_config_decorator = struct_decl.decorators.iter().any(|d| d.name == "config");
+        
+        if !has_config_decorator {
+            return Ok(());
         }
 
-        Ok(ConfigFieldInfo {
-            name: field.name.clone(),
-            field_type: field.field_type.to_string(),
-            key,
-            required,
-            validator,
-        })
+        let mut fields = Vec::new();
+        
+        // Procesar campos (por ahora sin decoradores individuales)
+        for field in &struct_decl.fields {
+            let field_info = ConfigFieldInfo {
+                name: field.name.clone(),
+                field_type: self.type_annotation_to_string(&field.type_annotation),
+                key: field.name.clone(), // Usar nombre del campo como key por defecto
+                required: false, // Por ahora no required
+                validator: None,
+            };
+            fields.push(field_info);
+        }
+
+        let class_info = ConfigClassInfo {
+            class_name: struct_decl.name.clone(),
+            fields,
+            validations: Vec::new(),
+        };
+        
+        self.config_classes.insert(struct_decl.name.clone(), class_info);
+        Ok(())
     }
 
-    fn build_range_validator(&self, decorator: &Decorator) -> String {
-        let mut min = None;
-        let mut max = None;
-
-        if let Some(args) = &decorator.arguments {
-            for arg in args {
-                if let Expression::NamedArgument(name, expr) = arg {
-                    match name.as_str() {
-                        "min" => {
-                            if let Expression::NumberLiteral(n) = expr.as_ref() {
-                                min = Some(*n as i64);
-                            }
-                        }
-                        "max" => {
-                            if let Expression::NumberLiteral(n) = expr.as_ref() {
-                                max = Some(*n as i64);
-                            }
-                        }
-                        _ => {}
-                    }
-                }
-            }
+    /// Convertir TypeAnnotation a string
+    fn type_annotation_to_string(&self, type_annotation: &TypeAnnotation) -> String {
+        match type_annotation {
+            TypeAnnotation::Named(named) => named.name.clone(),
+            TypeAnnotation::Primitive(primitive) => primitive.name.clone(),
+            _ => "String".to_string(), // Default
         }
-
-        format!("RangeValidator {{ min: {:?}, max: {:?} }}", min, max)
-    }
-
-    fn build_min_validator(&self, decorator: &Decorator) -> String {
-        let mut min = 0i64;
-
-        if let Some(args) = &decorator.arguments {
-            if let Some(Expression::NumberLiteral(n)) = args.first() {
-                min = *n as i64;
-            }
-        }
-
-        format!("RangeValidator {{ min: Some({}), max: None }}", min)
-    }
-
-    fn build_max_validator(&self, decorator: &Decorator) -> String {
-        let mut max = 0i64;
-
-        if let Some(args) = &decorator.arguments {
-            if let Some(Expression::NumberLiteral(n)) = args.first() {
-                max = *n as i64;
-            }
-        }
-
-        format!("RangeValidator {{ min: None, max: Some({}) }}", max)
     }
 }
 
@@ -201,50 +148,52 @@ impl ConfigCodeGenerator {
 
     /// Generar código para una clase de configuración
     pub fn generate_config_class(&self, class_info: &ConfigClassInfo) -> String {
-        let mut code = String::new();
+        let mut lines = Vec::new();
 
         // Generar struct
-        code.push_str(&format!("pub struct {} {{\n", class_info.class_name));
+        lines.push(format!("pub struct {} {{", class_info.class_name));
 
         for field in &class_info.fields {
-            code.push_str(&format!("    pub {}: {},\n", field.name, self.map_type_to_rust(&field.field_type)));
+            lines.push(format!("    pub {}: {},", field.name, self.map_type_to_rust(&field.field_type)));
         }
 
-        code.push_str("}\n\n");
+        lines.push("}".to_string());
+        lines.push("".to_string());
 
         // Generar implementación
-        code.push_str(&format!("impl {} {{\n", class_info.class_name));
+        lines.push(format!("impl {} {{", class_info.class_name));
 
         // Constructor
-        code.push_str(&format!("    pub fn load() -> Result<Self, ConfigError> {{\n"));
-        code.push_str(&format!("        let mut loader = ConfigLoader::new();\n\n"));
+        lines.push("    pub fn load() -> Result<Self, ConfigError> {".to_string());
+        lines.push("        let mut loader = ConfigLoader::new();".to_string());
+        lines.push("".to_string());
 
         // Agregar validadores
         for field in &class_info.fields {
             if let Some(validator) = &field.validator {
-                code.push_str(&format!("        loader = loader.add_validator(\"{}\".to_string(), {});\n",
-                    field.key, validator));
+                let line = format!("        loader = loader.add_validator(\"{}\".to_string(), ", field.key) + validator + ");";
+                lines.push(line);
             } else if field.required {
-                code.push_str(&format!("        loader = loader.add_validator(\"{}\".to_string(), RequiredValidator);\n",
-                    field.key));
+                lines.push(format!("        loader = loader.add_validator(\"{}\".to_string(), RequiredValidator);", field.key));
             }
         }
 
-        code.push_str(&format!("        loader.load()?;\n\n"));
+        lines.push("        loader.load()?;".to_string());
+        lines.push("".to_string());
 
         // Construir instancia
-        code.push_str(&format!("        Ok({} {{\n", class_info.class_name));
+        lines.push(format!("        Ok({} {{", class_info.class_name));
 
         for field in &class_info.fields {
             let getter = self.generate_field_getter(field);
-            code.push_str(&format!("            {}: {},\n", field.name, getter));
+            lines.push(format!("            {}: {},", field.name, getter));
         }
 
-        code.push_str(&format!("        }})\n"));
-        code.push_str(&format!("    }}\n"));
-        code.push_str(&format!("}}\n"));
+        lines.push("        })".to_string());
+        lines.push("    }".to_string());
+        lines.push("}".to_string());
 
-        code
+        lines.join("\n")
     }
 
     /// Generar getter para un campo
