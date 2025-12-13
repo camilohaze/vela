@@ -53,6 +53,7 @@ pub mod gateway_decorator_tests;
 pub mod grpc_decorators;
 pub mod grpc_decorator_tests;
 pub mod lambda_patterns_test;
+pub mod advanced_pattern_matching_tests;
 pub mod router;
 pub mod load_balancer;
 pub mod rate_limiter;
