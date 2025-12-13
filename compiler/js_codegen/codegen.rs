@@ -13,6 +13,7 @@ pub struct JSCodegen {
     indent_level: usize,
     in_function: bool,
     variables: HashMap<String, String>, // name -> js_name
+    stack: Vec<String>, // Virtual stack for expression evaluation
 }
 
 impl JSCodegen {
@@ -21,6 +22,7 @@ impl JSCodegen {
             indent_level: 0,
             in_function: false,
             variables: HashMap::new(),
+            stack: Vec::new(),
         }
     }
 
@@ -114,19 +116,33 @@ impl JSCodegen {
                 }
 
                 IRInstruction::LoadConst(value) => {
-                    // This would push to a virtual stack in a stack-based generator
-                    // For now, we'll handle this in context
+                    // Push constant value to virtual stack
+                    let js_value = self.generate_value(value);
+                    self.stack.push(js_value);
                 }
 
                 IRInstruction::Return => {
                     let indent = self.get_indent();
-                    output.push_str(&format!("{}return;\n", indent));
+                    if let Some(value) = self.stack.pop() {
+                        output.push_str(&format!("{}return {};\n", indent, value));
+                    } else {
+                        output.push_str(&format!("{}return;\n", indent));
+                    }
                 }
 
                 IRInstruction::Call { function, arg_count } => {
-                    // This is simplified - in a real implementation we'd need to track the stack
+                    // Pop arguments from stack
+                    let mut args = Vec::new();
+                    for _ in 0..*arg_count {
+                        if let Some(arg) = self.stack.pop() {
+                            args.push(arg);
+                        }
+                    }
+                    args.reverse(); // Stack is LIFO, so reverse to get correct order
+                    
                     let indent = self.get_indent();
-                    output.push_str(&format!("{}{}();\n", indent, function));
+                    let args_str = args.join(", ");
+                    output.push_str(&format!("{}{}({});\n", indent, function, args_str));
                 }
 
                 IRInstruction::Label(label) => {
