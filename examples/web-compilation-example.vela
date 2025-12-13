@@ -1,0 +1,657 @@
+"""
+Ejemplo de compilación a JavaScript (US-25)
+
+Este ejemplo muestra cómo Vela compila a JavaScript para desarrollo web,
+incluyendo widgets reactivos, controladores HTTP y signals runtime.
+"""
+
+# ========================================
+# APLICACIÓN WEB COMPLETA EN VELA
+# ========================================
+
+# Controlador REST API (se compila a Express.js routes)
+controller TodoController {
+  service: TodoService = inject(TodoService)
+
+  @get("/api/todos")
+  fn getTodos() -> Result<List<Todo>, ApiError> {
+    todos = self.service.getAllTodos()
+    return Ok(todos)
+  }
+
+  @post("/api/todos")
+  @validate
+  fn createTodo(dto: CreateTodoDTO) -> Result<Todo, ApiError> {
+    match self.service.createTodo(dto.title, dto.description) {
+      Ok(todo) => Ok(todo)
+      Err(error) => Err(ApiError.BadRequest(error.message))
+    }
+  }
+
+  @put("/api/todos/:id")
+  @validate
+  fn updateTodo(id: String, dto: UpdateTodoDTO) -> Result<Todo, ApiError> {
+    match TodoId.parse(id) {
+      Ok(todoId) => {
+        match self.service.updateTodo(todoId, dto) {
+          Ok(todo) => Ok(todo)
+          Err(error) => Err(ApiError.from(error))
+        }
+      }
+      Err(_) => Err(ApiError.BadRequest("Invalid todo ID"))
+    }
+  }
+
+  @delete("/api/todos/:id")
+  fn deleteTodo(id: String) -> Result<void, ApiError> {
+    match TodoId.parse(id) {
+      Ok(todoId) => {
+        match self.service.deleteTodo(todoId) {
+          Ok(_) => Ok(void)
+          Err(error) => Err(ApiError.from(error))
+        }
+      }
+      Err(_) => Err(ApiError.BadRequest("Invalid todo ID"))
+    }
+  }
+}
+
+# Servicio de negocio con validación
+@injectable
+service TodoService {
+  repository: TodoRepository = inject(TodoRepository)
+
+  @validate
+  fn createTodo(@required title: String, description: Option<String>) -> Result<Todo, ValidationError> {
+    if title.length() < 3 {
+      return Err(ValidationError("Title must be at least 3 characters"))
+    }
+
+    todo = Todo(
+      id: TodoId.generate(),
+      title: title,
+      description: description,
+      completed: false,
+      createdAt: Date.now(),
+      updatedAt: Date.now()
+    )
+
+    return self.repository.save(todo)
+  }
+
+  fn getAllTodos() -> List<Todo> {
+    return self.repository.findAll()
+  }
+
+  fn updateTodo(id: TodoId, dto: UpdateTodoDTO) -> Result<Todo, TodoError> {
+    match self.repository.findById(id) {
+      Some(existing) => {
+        updated = Todo(
+          id: existing.id,
+          title: dto.title.unwrapOr(existing.title),
+          description: dto.description.or(existing.description),
+          completed: dto.completed.unwrapOr(existing.completed),
+          createdAt: existing.createdAt,
+          updatedAt: Date.now()
+        )
+        self.repository.save(updated)
+        Ok(updated)
+      }
+      None => Err(TodoError.NotFound)
+    }
+  }
+
+  fn deleteTodo(id: TodoId) -> Result<void, TodoError> {
+    match self.repository.findById(id) {
+      Some(_) => {
+        self.repository.delete(id)
+        Ok(void)
+      }
+      None => Err(TodoError.NotFound)
+    }
+  }
+}
+
+# Entidades de dominio
+entity Todo {
+  id: TodoId
+  title: String
+  description: Option<String>
+  completed: Bool
+  createdAt: Date
+  updatedAt: Date
+}
+
+valueObject TodoId {
+  value: String
+
+  static fn generate() -> TodoId {
+    return TodoId(value: uuid4())
+  }
+
+  static fn parse(id: String) -> Result<TodoId, ParseError> {
+    if id.isEmpty() {
+      return Err(ParseError("ID cannot be empty"))
+    }
+    return Ok(TodoId(value: id))
+  }
+}
+
+# DTOs para API
+dto CreateTodoDTO {
+  @required
+  title: String
+
+  description: Option<String>
+}
+
+dto UpdateTodoDTO {
+  title: Option<String>
+  description: Option<String>
+  completed: Option<Bool>
+}
+
+# Errores personalizados
+enum TodoError {
+  NotFound
+  ValidationError(message: String)
+  DatabaseError(message: String)
+}
+
+enum ApiError {
+  BadRequest(message: String)
+  NotFound(message: String)
+  InternalServerError(message: String)
+
+  static fn from(todoError: TodoError) -> ApiError {
+    match todoError {
+      TodoError.NotFound => ApiError.NotFound("Todo not found")
+      TodoError.ValidationError(msg) => ApiError.BadRequest(msg)
+      TodoError.DatabaseError(msg) => ApiError.InternalServerError(msg)
+    }
+  }
+}
+
+# ========================================
+# UI REACTIVA (Compilable a React/Vue)
+# ========================================
+
+# Widget principal de la aplicación
+@component
+class TodoApp extends StatefulWidget {
+  state todos: List<Todo> = []
+  state filter: TodoFilter = TodoFilter.All
+  state loading: Bool = false
+
+  computed filteredTodos: List<Todo> {
+    match self.filter {
+      TodoFilter.All => self.todos
+      TodoFilter.Active => self.todos.filter(t => !t.completed)
+      TodoFilter.Completed => self.todos.filter(t => t.completed)
+    }
+  }
+
+  computed activeCount: Number {
+    return self.todos.filter(t => !t.completed).length()
+  }
+
+  effect {
+    print("Todos updated: ${self.todos.length()} total, ${self.activeCount} active")
+  }
+
+  async fn loadTodos() -> void {
+    self.loading = true
+    try {
+      response = await fetch("/api/todos")
+      self.todos = await response.json()
+    } catch (e) {
+      print("Error loading todos: ${e.message}")
+    } finally {
+      self.loading = false
+    }
+  }
+
+  async fn addTodo(title: String) -> void {
+    if title.trim().isEmpty() {
+      return
+    }
+
+    try {
+      response = await fetch("/api/todos", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: json({ title: title, description: None })
+      })
+
+      if response.ok {
+        newTodo = await response.json()
+        self.todos = [...self.todos, newTodo]
+      }
+    } catch (e) {
+      print("Error creating todo: ${e.message}")
+    }
+  }
+
+  async fn toggleTodo(id: TodoId) -> void {
+    try {
+      todo = self.todos.find(t => t.id == id).unwrap()
+      response = await fetch("/api/todos/${id.value}", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: json({ completed: !todo.completed })
+      })
+
+      if response.ok {
+        updatedTodo = await response.json()
+        self.todos = self.todos.map(t => t.id == id ? updatedTodo : t)
+      }
+    } catch (e) {
+      print("Error updating todo: ${e.message}")
+    }
+  }
+
+  async fn deleteTodo(id: TodoId) -> void {
+    try {
+      response = await fetch("/api/todos/${id.value}", { method: "DELETE" })
+
+      if response.ok {
+        self.todos = self.todos.filter(t => t.id != id)
+      }
+    } catch (e) {
+      print("Error deleting todo: ${e.message}")
+    }
+  }
+
+  fn build() -> Widget {
+    return Scaffold(
+      appBar: AppBar(title: "Vela Todo App"),
+      body: Container(
+        padding: EdgeInsets.all(16),
+        child: Column(
+          children: [
+            # Input para nuevos todos
+            TodoInput(onSubmit: self.addTodo),
+
+            # Filtros
+            TodoFilters(
+              currentFilter: self.filter,
+              onFilterChange: (filter) => { self.filter = filter }
+            ),
+
+            # Lista de todos
+            if self.loading {
+              CircularProgressIndicator()
+            } else {
+              TodoList(
+                todos: self.filteredTodos,
+                onToggle: self.toggleTodo,
+                onDelete: self.deleteTodo
+              )
+            },
+
+            # Footer con estadísticas
+            TodoFooter(
+              activeCount: self.activeCount,
+              totalCount: self.todos.length()
+            )
+          ]
+        )
+      )
+    )
+  }
+}
+
+# Componente de input para nuevos todos
+@component
+class TodoInput extends StatefulWidget {
+  onSubmit: (String) -> void
+
+  state text: String = ""
+
+  fn build() -> Widget {
+    return Row(
+      children: [
+        Expanded(
+          child: TextField(
+            value: self.text,
+            placeholder: "What needs to be done?",
+            onChange: (value) => { self.text = value }
+          )
+        ),
+        ElevatedButton(
+          text: "Add",
+          onPressed: () => {
+            self.onSubmit(self.text)
+            self.text = ""
+          }
+        )
+      ]
+    )
+  }
+}
+
+# Filtros de todos
+@component
+class TodoFilters extends StatelessWidget {
+  currentFilter: TodoFilter
+  onFilterChange: (TodoFilter) -> void
+
+  fn build() -> Widget {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        FilterButton(
+          text: "All",
+          active: self.currentFilter == TodoFilter.All,
+          onPressed: () => self.onFilterChange(TodoFilter.All)
+        ),
+        FilterButton(
+          text: "Active",
+          active: self.currentFilter == TodoFilter.Active,
+          onPressed: () => self.onFilterChange(TodoFilter.Active)
+        ),
+        FilterButton(
+          text: "Completed",
+          active: self.currentFilter == TodoFilter.Completed,
+          onPressed: () => self.onFilterChange(TodoFilter.Completed)
+        )
+      ]
+    )
+  }
+}
+
+# Botón de filtro individual
+@component
+class FilterButton extends StatelessWidget {
+  text: String
+  active: Bool
+  onPressed: () -> void
+
+  fn build() -> Widget {
+    return TextButton(
+      text: self.text,
+      style: self.active ? ButtonStyle.primary : ButtonStyle.secondary,
+      onPressed: self.onPressed
+    )
+  }
+}
+
+# Lista de todos
+@component
+class TodoList extends StatelessWidget {
+  todos: List<Todo>
+  onToggle: (TodoId) -> void
+  onDelete: (TodoId) -> void
+
+  fn build() -> Widget {
+    if self.todos.isEmpty() {
+      return Center(child: Text("No todos yet. Add one above!"))
+    }
+
+    return Column(
+      children: self.todos.map(todo =>
+        TodoItem(
+          todo: todo,
+          onToggle: () => self.onToggle(todo.id),
+          onDelete: () => self.onDelete(todo.id)
+        )
+      )
+    )
+  }
+}
+
+# Item individual de todo
+@component
+class TodoItem extends StatelessWidget {
+  todo: Todo
+  onToggle: () -> void
+  onDelete: () -> void
+
+  fn build() -> Widget {
+    return Row(
+      children: [
+        Checkbox(
+          value: self.todo.completed,
+          onChanged: (_) => self.onToggle()
+        ),
+        Expanded(
+          child: Text(
+            self.todo.title,
+            style: self.todo.completed ?
+              TextStyle.lineThrough :
+              TextStyle.normal
+          )
+        ),
+        IconButton(
+          icon: Icons.delete,
+          onPressed: self.onDelete
+        )
+      ]
+    )
+  }
+}
+
+# Footer con estadísticas
+@component
+class TodoFooter extends StatelessWidget {
+  activeCount: Number
+  totalCount: Number
+
+  fn build() -> Widget {
+    completedCount = self.totalCount - self.activeCount
+
+    return Container(
+      margin: EdgeInsets.only(top: 16),
+      child: Text(
+        "${self.activeCount} active, ${completedCount} completed",
+        style: TextStyle.secondary
+      )
+    )
+  }
+}
+
+# Enums y tipos auxiliares
+enum TodoFilter {
+  All
+  Active
+  Completed
+}
+
+# ========================================
+# JAVASCRIPT GENERADO (Output de US-25)
+# ========================================
+
+/*
+// Código JavaScript generado para el backend (Express.js)
+
+const express = require('express');
+const router = express.Router();
+
+// GET /api/todos
+router.get('/api/todos', async (req, res) => {
+  try {
+    const todos = await todoService.getAllTodos();
+    res.json(todos);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// POST /api/todos
+router.post('/api/todos', async (req, res) => {
+  try {
+    const { title, description } = req.body;
+
+    // Validation
+    if (!title || title.length < 3) {
+      return res.status(400).json({
+        error: 'Title must be at least 3 characters'
+      });
+    }
+
+    const todo = await todoService.createTodo(title, description);
+    res.json(todo);
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+// PUT /api/todos/:id
+router.put('/api/todos/:id', async (req, res) => {
+  try {
+    const { title, description, completed } = req.body;
+    const todo = await todoService.updateTodo(req.params.id, {
+      title, description, completed
+    });
+    res.json(todo);
+  } catch (error) {
+    res.status(404).json({ error: 'Todo not found' });
+  }
+});
+
+// DELETE /api/todos/:id
+router.delete('/api/todos/:id', async (req, res) => {
+  try {
+    await todoService.deleteTodo(req.params.id);
+    res.status(204).send();
+  } catch (error) {
+    res.status(404).json({ error: 'Todo not found' });
+  }
+});
+
+module.exports = router;
+*/
+
+/*
+// Código JavaScript/React generado para el frontend
+
+import React, { useState, useEffect } from 'react';
+import { createSignal } from 'vela-signals'; // Runtime de signals
+
+function TodoApp() {
+  const [todos, setTodos] = useState([]);
+  const [filter, setFilter] = useState('All');
+  const [loading, setLoading] = useState(false);
+
+  // Signals reactivos (de Vela)
+  const filteredTodos = createSignal(() => {
+    switch (filter) {
+      case 'All': return todos;
+      case 'Active': return todos.filter(t => !t.completed);
+      case 'Completed': return todos.filter(t => t.completed);
+      default: return todos;
+    }
+  });
+
+  const activeCount = createSignal(() =>
+    todos.filter(t => !t.completed).length
+  );
+
+  // Effects
+  useEffect(() => {
+    console.log(`Todos updated: ${todos.length} total, ${activeCount.value} active`);
+  }, [todos]);
+
+  const loadTodos = async () => {
+    setLoading(true);
+    try {
+      const response = await fetch('/api/todos');
+      const todos = await response.json();
+      setTodos(todos);
+    } catch (e) {
+      console.error('Error loading todos:', e);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const addTodo = async (title) => {
+    if (!title.trim()) return;
+
+    try {
+      const response = await fetch('/api/todos', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title, description: null })
+      });
+
+      if (response.ok) {
+        const newTodo = await response.json();
+        setTodos([...todos, newTodo]);
+      }
+    } catch (e) {
+      console.error('Error creating todo:', e);
+    }
+  };
+
+  // ... resto de funciones
+
+  return (
+    <div className="todo-app">
+      <header>
+        <h1>Vela Todo App</h1>
+      </header>
+
+      <TodoInput onSubmit={addTodo} />
+
+      <TodoFilters
+        currentFilter={filter}
+        onFilterChange={setFilter}
+      />
+
+      {loading ? (
+        <div className="loading">Loading...</div>
+      ) : (
+        <TodoList
+          todos={filteredTodos.value}
+          onToggle={toggleTodo}
+          onDelete={deleteTodo}
+        />
+      )}
+
+      <TodoFooter
+        activeCount={activeCount.value}
+        totalCount={todos.length}
+      />
+    </div>
+  );
+}
+
+export default TodoApp;
+*/
+
+# ========================================
+# FUNCIÓN MAIN (Punto de entrada)
+# ========================================
+
+fn main() -> void {
+  print("🚀 Vela Todo App Starting...")
+
+  # Inicializar DI container
+  container = DIContainer()
+  container.register(TodoService)
+  container.register(TodoRepository)
+
+  # Configurar rutas HTTP
+  app = ExpressApp()
+
+  # Registrar controlador
+  todoController = container.resolve(TodoController)
+  app.registerController(todoController)
+
+  # Servir archivos estáticos del frontend compilado
+  app.static("/static", "./dist")
+
+  # Ruta catch-all para SPA
+  app.get("/*", (req, res) => {
+    res.sendFile("./dist/index.html")
+  })
+
+  # Iniciar servidor
+  port = env("PORT").unwrapOr("3000")
+  app.listen(port, () => {
+    print("✅ Server running on http://localhost:${port}")
+    print("✅ API available at http://localhost:${port}/api")
+    print("✅ Frontend available at http://localhost:${port}")
+  })
+}

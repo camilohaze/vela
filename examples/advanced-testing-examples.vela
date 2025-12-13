@@ -1,0 +1,367 @@
+"""
+Ejemplos avanzados de testing en Vela
+
+Demuestra todas las capacidades del framework de testing integrado:
+- Unit testing con mocking
+- Integration testing
+- Property-based testing
+- Snapshot testing
+- Meta-testing
+"""
+
+# ========================================
+# 1. UNIT TESTING CON MOCKING AVANZADO
+# ========================================
+
+@test
+fn testUserServiceWithMocking() -> void {
+  # Crear mock del repository
+  mockRepo = mock(UserRepository)
+
+  # Configurar comportamiento esperado
+  expectedUser = User(id: UserId(1), name: "John", email: "john@test.com")
+  mockRepo.findById(UserId(1)).returns(Some(expectedUser))
+  mockRepo.findById(UserId(999)).returns(None)  # Usuario no existe
+
+  # Crear servicio con mock
+  service = UserService(repository: mockRepo)
+
+  # Test: encontrar usuario existente
+  result = service.findUserById(UserId(1))
+  assert(result.isSome(), "Should find existing user")
+  assert(result.unwrap().name == "John", "Should return correct user")
+
+  # Test: usuario no encontrado
+  notFound = service.findUserById(UserId(999))
+  assert(notFound.isNone(), "Should return None for non-existent user")
+
+  # Verificar que los métodos del mock fueron llamados
+  verify(mockRepo.findById(UserId(1))).wasCalled(1)
+  verify(mockRepo.findById(UserId(999))).wasCalled(1)
+}
+
+@test
+fn testUserCreationValidation() -> void {
+  mockRepo = mock(UserRepository)
+  mockRepo.save(any()).returns(Ok(User(id: UserId(1), name: "Test", email: "test@test.com")))
+
+  service = UserService(repository: mockRepo)
+
+  # Test: creación exitosa
+  result = service.createUser("Valid Name", "valid@email.com")
+  assert(result.isOk(), "Should create user with valid data")
+
+  # Test: nombre requerido falla
+  invalidResult = service.createUser("", "valid@email.com")
+  assert(invalidResult.isErr(), "Should fail with empty name")
+
+  # Test: email inválido falla
+  emailResult = service.createUser("Name", "invalid-email")
+  assert(emailResult.isErr(), "Should fail with invalid email")
+}
+
+# ========================================
+# 2. INTEGRATION TESTING
+# ========================================
+
+@integration
+fn testUserControllerEndToEnd() -> void {
+  # Setup base de datos en memoria para tests
+  testDb = setupInMemoryDatabase()
+
+  # Crear servicios reales
+  repo = UserRepository(testDb)
+  service = UserService(repository: repo)
+  controller = UserController(service: service)
+
+  # Test: crear usuario vía API
+  createDto = CreateUserDTO(name: "Integration Test", email: "integration@test.com")
+  createdUser = controller.createUser(createDto).unwrap()
+
+  # Verificar que se guardó en DB
+  assert(createdUser.name == "Integration Test", "User should be created")
+  assert(createdUser.email == "integration@test.com", "Email should be saved")
+
+  # Test: obtener usuario por ID
+  retrieved = controller.getUser(createdUser.id.toString()).unwrap()
+  assert(retrieved.id == createdUser.id, "Should retrieve same user")
+  assert(retrieved.name == createdUser.name, "Data should match")
+
+  # Test: listar todos los usuarios
+  allUsers = controller.getUsers().unwrap()
+  assert(allUsers.length() >= 1, "Should have at least one user")
+  assert(allUsers.any(u => u.id == createdUser.id), "Created user should be in list")
+}
+
+@integration
+fn testConcurrentUserOperations() -> void {
+  testDb = setupInMemoryDatabase()
+  service = UserService(repository: UserRepository(testDb))
+
+  # Crear múltiples usuarios concurrentemente
+  tasks = (1..10).map(i =>
+    async { service.createUser("User ${i}", "user${i}@test.com") }
+  )
+
+  # Esperar que todas las operaciones terminen
+  results = await Promise.all(tasks)
+
+  # Verificar que todas tuvieron éxito
+  successful = results.filter(r => r.isOk()).length()
+  assert(successful == 10, "All user creations should succeed")
+
+  # Verificar que todos los usuarios existen
+  allUsers = service.getAllUsers()
+  assert(allUsers.length() == 10, "All users should be persisted")
+}
+
+# ========================================
+# 3. PROPERTY-BASED TESTING
+# ========================================
+
+@property
+fn userEmailAlwaysContainsAtSymbol(email: String) -> Bool {
+  # Generar emails válidos para la propiedad
+  if !email.contains("@") {
+    return true  # Skip caso inválido
+  }
+
+  # Crear usuario con email generado
+  service = UserService(repository: mock(UserRepository))
+  result = service.createUser("Test User", email)
+
+  # Propiedad: si la creación tiene éxito, el email debe contener @
+  if result.isOk() {
+    return result.unwrap().email.contains("@")
+  }
+
+  return true  # Si falla validación, está bien
+}
+
+@property
+fn userNameLengthIsPreserved(name: String) -> Bool {
+  # Solo probar con nombres no vacíos
+  if name.isEmpty() {
+    return true
+  }
+
+  service = UserService(repository: mock(UserRepository))
+  result = service.createUser(name, "test@example.com")
+
+  if result.isOk() {
+    createdName = result.unwrap().name
+    return createdName.length() == name.length()
+  }
+
+  return true
+}
+
+@property
+fn userIdsAreUnique() -> Bool {
+  service = UserService(repository: mock(UserRepository))
+
+  # Crear múltiples usuarios
+  users = (1..100).map(i => {
+    result = service.createUser("User ${i}", "user${i}@test.com")
+    if result.isOk() { Some(result.unwrap()) } else { None }
+  }).filter(u => u.isSome()).map(u => u.unwrap())
+
+  # Verificar que todos los IDs son únicos
+  ids = users.map(u => u.id)
+  uniqueIds = ids.distinct()
+
+  return ids.length() == uniqueIds.length()
+}
+
+# ========================================
+# 4. SNAPSHOT TESTING PARA UI
+# ========================================
+
+@snapshot
+fn testUserCardWidgetRendering() -> void {
+  user = User(
+    id: UserId(123),
+    name: "Alice Johnson",
+    email: "alice.johnson@example.com",
+    createdAt: Date.fromISOString("2024-01-15T10:30:00Z")
+  )
+
+  widget = UserCard(user: user)
+  rendered = widget.renderToHtml()
+
+  # Framework compara automáticamente con snapshot guardado
+  # Si cambia, el test falla y pide aprobación del nuevo snapshot
+  assertSnapshot(rendered)
+}
+
+@snapshot
+fn testUserListWidgetWithDifferentStates() -> void {
+  # Test: estado vacío
+  emptyWidget = UserListWidget(users: [])
+  assertSnapshot(emptyWidget.renderToHtml(), name: "empty-state")
+
+  # Test: con usuarios
+  users = [
+    User(id: UserId(1), name: "Alice", email: "alice@test.com"),
+    User(id: UserId(2), name: "Bob", email: "bob@test.com")
+  ]
+  populatedWidget = UserListWidget(users: users)
+  assertSnapshot(populatedWidget.renderToHtml(), name: "with-users")
+
+  # Test: estado de error
+  errorWidget = UserListWidget(users: [], error: Some("Network error"))
+  assertSnapshot(errorWidget.renderToHtml(), name: "error-state")
+}
+
+# ========================================
+# 5. META-TESTING (TESTS DE TESTS)
+# ========================================
+
+@meta
+fn testThatAllUserTestsPass() -> void {
+  # Ejecutar todos los tests relacionados con User
+  testResults = runTestsMatching("test.*User.*")
+
+  # Verificar que pasaron todos
+  passed = testResults.filter(r => r.status == "PASSED").length()
+  total = testResults.length()
+
+  assert(passed == total, "All user tests should pass: ${passed}/${total}")
+}
+
+@meta
+fn testMockingFrameworkWorksCorrectly() -> void {
+  # Test que el framework de mocking funciona
+  mockObj = mock(SomeInterface)
+
+  # Configurar expectativas
+  mockObj.someMethod("expected").returns("result")
+
+  # Ejecutar
+  result = mockObj.someMethod("expected")
+
+  # Verificar
+  assert(result == "result", "Mock should return configured value")
+  verify(mockObj.someMethod("expected")).wasCalled(1)
+}
+
+@meta
+fn testPropertyTestsGenerateDiverseInputs() -> void {
+  # Ejecutar property test múltiples veces
+  results = runPropertyTest("userEmailAlwaysContainsAtSymbol", iterations: 1000)
+
+  # Verificar que generó inputs diversos
+  inputs = results.map(r => r.input.email)
+  uniqueInputs = inputs.distinct()
+
+  # Debería haber generado al menos 50% inputs únicos
+  assert(uniqueInputs.length() >= 500, "Property test should generate diverse inputs")
+}
+
+# ========================================
+# 6. ASYNC TESTING
+# ========================================
+
+@test
+async fn testAsyncUserOperations() -> void {
+  mockRepo = mock(UserRepository)
+
+  # Mock async operations
+  mockRepo.saveAsync(any()).returns(async Ok(testUser))
+  mockRepo.findByIdAsync(any()).returns(async Some(testUser))
+
+  service = UserService(repository: mockRepo)
+
+  # Test async creation
+  result = await service.createUserAsync("Async User", "async@test.com")
+  assert(result.isOk(), "Async creation should succeed")
+
+  # Test async retrieval
+  found = await service.findUserByIdAsync(UserId(1))
+  assert(found.isSome(), "Async find should succeed")
+}
+
+# ========================================
+# 7. PERFORMANCE TESTING
+# ========================================
+
+@performance
+fn testUserServicePerformance() -> void {
+  service = UserService(repository: mock(UserRepository))
+
+  # Medir tiempo de 1000 operaciones
+  startTime = Date.now()
+
+  (1..1000).forEach(i => {
+    result = service.createUser("User ${i}", "user${i}@test.com")
+    assert(result.isOk(), "Creation should succeed")
+  })
+
+  endTime = Date.now()
+  duration = endTime - startTime
+
+  # Verificar que sea razonablemente rápido (< 1 segundo)
+  assert(duration < 1000, "1000 user creations should take less than 1 second")
+}
+
+# ========================================
+# 8. FUZZ TESTING
+# ========================================
+
+@fuzz
+fn testUserServiceWithRandomInputs(randomName: String, randomEmail: String) -> void {
+  service = UserService(repository: mock(UserRepository))
+
+  # El fuzzer genera inputs aleatorios
+  # Test que el servicio no crashee con cualquier input
+  try {
+    result = service.createUser(randomName, randomEmail)
+    # No importa si falla validación, solo que no crashee
+    assert(result.isOk() || result.isErr(), "Should return Result, not crash")
+  } catch (e) {
+    # Si hay excepción, es un bug
+    fail("Service should not crash with random inputs: ${e.message}")
+  }
+}
+
+# ========================================
+# SETUP Y TEARDOWN HELPERS
+# ========================================
+
+fn setupTestUser() -> User {
+  return User(
+    id: UserId(1),
+    name: "Test User",
+    email: "test@example.com",
+    createdAt: Date.now()
+  )
+}
+
+fn setupInMemoryDatabase() -> Database {
+  # Configurar base de datos en memoria para tests
+  db = Database.inMemory()
+  db.migrate()  # Ejecutar migraciones
+  return db
+}
+
+# Ejecutar todos los tests cuando se ejecute este archivo
+if __name__ == "__main__":
+  print("🧪 Ejecutando suite de tests avanzados...")
+
+  # Ejecutar tests unitarios
+  unitResults = runTestsWithTag("test")
+  print("✅ Tests unitarios: ${unitResults.passed}/${unitResults.total}")
+
+  # Ejecutar tests de integración
+  integrationResults = runTestsWithTag("integration")
+  print("✅ Tests integración: ${integrationResults.passed}/${integrationResults.total}")
+
+  # Ejecutar property tests
+  propertyResults = runTestsWithTag("property")
+  print("✅ Property tests: ${propertyResults.passed}/${propertyResults.total}")
+
+  # Ejecutar snapshot tests
+  snapshotResults = runTestsWithTag("snapshot")
+  print("✅ Snapshot tests: ${snapshotResults.passed}/${snapshotResults.total}")
+
+  print("🎉 Todos los tests completados!")

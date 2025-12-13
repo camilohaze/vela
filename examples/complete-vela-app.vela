@@ -1,0 +1,266 @@
+"""
+Ejemplo completo de aplicación Vela con testing avanzado
+
+Esta aplicación demuestra las capacidades de Vela después de integrar
+el framework de testing avanzado y las nuevas features de US-25.
+"""
+
+# Sistema de módulos con DI
+@injectable
+service UserService {
+  repository: UserRepository = inject(UserRepository)
+
+  @validate
+  fn createUser(@required name: String, @email email: String) -> Result<User, ValidationError> {
+    user = User(name: name, email: email, createdAt: Date.now())
+    return self.repository.save(user)
+  }
+
+  fn findUserById(id: UserId) -> Option<User> {
+    return self.repository.findById(id)
+  }
+
+  fn getAllUsers() -> List<User> {
+    return self.repository.findAll()
+  }
+}
+
+# Entidad de dominio
+entity User {
+  id: UserId
+  name: String
+  email: String
+  createdAt: Date
+}
+
+# DTO para validación
+dto CreateUserDTO {
+  @required
+  name: String
+
+  @required
+  @email
+  email: String
+}
+
+# Controlador web (compilable a JS con US-25)
+controller UserController {
+  service: UserService = inject(UserService)
+
+  @get("/users")
+  fn getUsers() -> Result<List<User>, ApiError> {
+    users = self.service.getAllUsers()
+    return Ok(users)
+  }
+
+  @post("/users")
+  @validate
+  fn createUser(dto: CreateUserDTO) -> Result<User, ApiError> {
+    match self.service.createUser(dto.name, dto.email) {
+      Ok(user) => Ok(user)
+      Err(error) => Err(ApiError.BadRequest(error.message))
+    }
+  }
+
+  @get("/users/:id")
+  fn getUser(id: String) -> Result<User, ApiError> {
+    # Pattern matching avanzado para parsing
+    match UserId.parse(id) {
+      Ok(userId) => {
+        match self.service.findUserById(userId) {
+          Some(user) => Ok(user)
+          None => Err(ApiError.NotFound("User not found"))
+        }
+      }
+      Err(_) => Err(ApiError.BadRequest("Invalid user ID"))
+    }
+  }
+}
+
+# Widget reactivo (compilable a DOM con US-25)
+@component
+class UserListWidget extends StatefulWidget {
+  state users: List<User> = []
+  state loading: Bool = false
+  state error: Option<String> = None
+
+  computed userCount: Number {
+    return self.users.length()
+  }
+
+  effect {
+    print("Users updated: ${self.userCount} users")
+  }
+
+  async fn loadUsers() -> void {
+    self.loading = true
+    self.error = None
+
+    try {
+      response = await fetch("/api/users")
+      match response.status {
+        200 => {
+          users = await response.json()
+          self.users = users
+        }
+        _ => {
+          self.error = Some("Failed to load users")
+        }
+      }
+    } catch (e) {
+      self.error = Some("Network error: ${e.message}")
+    } finally {
+      self.loading = false
+    }
+  }
+
+  fn build() -> Widget {
+    if self.loading {
+      return LoadingSpinner()
+    }
+
+    if let Some(error) = self.error {
+      return ErrorMessage(error)
+    }
+
+    return Column(
+      children: [
+        Text("Users (${self.userCount})", style: TextStyle.bold),
+        ...self.users.map(user => UserCard(user))
+      ]
+    )
+  }
+}
+
+# Widget individual de usuario
+@component
+class UserCard extends StatelessWidget {
+  user: User
+
+  fn build() -> Widget {
+    return Card(
+      child: Column(
+        children: [
+          Text(self.user.name, style: TextStyle.large),
+          Text(self.user.email, style: TextStyle.secondary),
+          Text("Created: ${self.user.createdAt.format()}")
+        ]
+      )
+    )
+  }
+}
+
+# Función utilitaria con pattern matching avanzado
+fn processUserAction(action: UserAction) -> String {
+  match action {
+    UserAction.Login(user) => "User ${user.name} logged in"
+    UserAction.Logout(user) => "User ${user.name} logged out"
+    UserAction.UpdateProfile(user, changes) => {
+      "User ${user.name} updated: ${changes.join(', ')}"
+    }
+    UserAction.Delete(userId) => "User ${userId} deleted"
+    _ => "Unknown action"
+  }
+}
+
+# Enum con datos asociados (pattern matching avanzado)
+enum UserAction {
+  Login(user: User)
+  Logout(user: User)
+  UpdateProfile(user: User, changes: List<String>)
+  Delete(userId: UserId)
+}
+
+# Tests unitarios usando el framework avanzado
+@test
+fn testUserService() -> void {
+  # Setup con mocking
+  mockRepo = mock(UserRepository)
+  mockRepo.findById(any()).returns(Some(testUser))
+  mockRepo.save(any()).returns(Ok(testUser))
+
+  service = UserService(repository: mockRepo)
+
+  # Test básico
+  result = service.findUserById(UserId(1))
+  assert(result.isSome(), "Should find user")
+
+  # Test de creación
+  createResult = service.createUser("John", "john@example.com")
+  assert(createResult.isOk(), "Should create user successfully")
+}
+
+# Tests de integración
+@integration
+fn testUserCreationFlow() -> void {
+  # Setup base de datos de test
+  testDb = setupTestDatabase()
+
+  # Crear servicio real
+  service = UserService(repository: UserRepository(testDb))
+
+  # Test end-to-end
+  user = service.createUser("Alice", "alice@test.com").unwrap()
+  retrieved = service.findUserById(user.id).unwrap()
+
+  assert(user.name == retrieved.name, "User should be retrievable")
+  assert(user.email == retrieved.email, "Email should match")
+}
+
+# Property-based testing
+@property
+fn userCreationAlwaysSucceedsWithValidData(name: String, email: String) -> Bool {
+  # Generar datos válidos
+  validName = name.filter(c => c.isLetter()).take(50)
+  validEmail = if email.contains("@") { email } else { "${email}@test.com" }
+
+  if validName.isEmpty() || validEmail.isEmpty() {
+    return true  # Skip invalid inputs
+  }
+
+  service = UserService(repository: mock(UserRepository))
+  result = service.createUser(validName, validEmail)
+
+  return result.isOk()
+}
+
+# Snapshot testing para UI
+@snapshot
+fn testUserListWidgetSnapshot() -> void {
+  users = [
+    User(id: UserId(1), name: "Alice", email: "alice@test.com", createdAt: Date.now()),
+    User(id: UserId(2), name: "Bob", email: "bob@test.com", createdAt: Date.now())
+  ]
+
+  widget = UserListWidget(users: users)
+  snapshot = widget.renderToString()
+
+  # El framework compara automáticamente con snapshot guardado
+  assertSnapshot(snapshot)
+}
+
+# Función main para ejecutar la aplicación
+fn main() -> void {
+  print("🚀 Vela Application Started")
+
+  # Inicializar DI container
+  container = DIContainer()
+  container.register(UserService)
+  container.register(UserRepository)
+
+  # Crear y ejecutar controlador
+  controller = UserController()
+
+  # Simular algunas operaciones
+  testUser = controller.createUser(CreateUserDTO(
+    name: "Test User",
+    email: "test@example.com"
+  )).unwrap()
+
+  print("✅ User created: ${testUser.name}")
+
+  # Ejecutar tests si estamos en modo test
+  if isTestMode() {
+    runAllTests()
+  }
+}
