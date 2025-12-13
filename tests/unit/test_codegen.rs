@@ -99,16 +99,8 @@ mod tests {
                 Declaration::Function(FunctionDeclaration {
                     name: "add".to_string(),
                     params: vec![
-                        Parameter {
-                            name: "a".to_string(),
-                            type_annotation: None,
-                            range: Range::default(),
-                        },
-                        Parameter {
-                            name: "b".to_string(),
-                            type_annotation: None,
-                            range: Range::default(),
-                        },
+                        Parameter::from_name("a".to_string()),
+                        Parameter::from_name("b".to_string()),
                     ],
                     return_type: None,
                     body: vec![
@@ -363,11 +355,7 @@ mod tests {
                 Declaration::Function(FunctionDeclaration {
                     name: "factorial".to_string(),
                     params: vec![
-                        Parameter {
-                            name: "n".to_string(),
-                            type_annotation: None,
-                            range: Range::default(),
-                        }
+                        Parameter::from_name("n".to_string()),
                     ],
                     return_type: None,
                     body: vec![

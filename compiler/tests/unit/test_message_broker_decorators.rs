@@ -147,11 +147,7 @@ mod tests {
             is_public: false,
             name: "handle_message".to_string(),
             decorators: vec![],
-            parameters: vec![Parameter {
-                name: "message".to_string(),
-                type_annotation: Some(TypeAnnotation::Simple("String".to_string())),
-                range: Range::new(Position::new(0, 0), Position::new(0, 0)),
-            }],
+            parameters: vec![Parameter::from_name("message".to_string()).with_type_annotation(Some(TypeAnnotation::Simple("String".to_string()))).with_range(Range::new(Position::new(0, 0), Position::new(0, 0)))],
             return_type: Some(TypeAnnotation::Simple("void".to_string())),
             body: BlockStatement {
                 statements: vec![],

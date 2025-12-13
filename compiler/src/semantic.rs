@@ -188,7 +188,15 @@ impl SemanticAnalyzer {
                         message: "Parameter type annotation required".to_string(),
                     }));
                 };
-                Ok((p.name.clone(), ty))
+                // Extract parameter name from pattern
+                let param_name = match &p.pattern {
+                    Pattern::Identifier(ident) => ident.name.clone(),
+                    _ => return Err(CompileError::Semantic(SemanticError::TypeInferenceFailed {
+                        location: SourceLocation::new(p.range.start.line, p.range.start.column, 0),
+                        message: "Parameter pattern must be an identifier".to_string(),
+                    })),
+                };
+                Ok((param_name, ty))
             })
             .collect::<CompileResult<Vec<_>>>()?;
 
@@ -375,13 +383,21 @@ impl SemanticAnalyzer {
                     message: "Parameter type annotation required".to_string(),
                 }));
             };
+            // Extract parameter name from pattern
+            let param_name = match &param.pattern {
+                Pattern::Identifier(ident) => ident.name.clone(),
+                _ => return Err(CompileError::Semantic(SemanticError::TypeInferenceFailed {
+                    location: SourceLocation::new(param.range.start.line, param.range.start.column, 0),
+                    message: "Parameter pattern must be an identifier".to_string(),
+                })),
+            };
             let symbol = Symbol::Variable {
-                name: param.name.clone(),
+                name: param_name.clone(),
                 ty: param_ty,
                 mutable: false,
                 location: SourceLocation::new(param.range.start.line, param.range.start.column, 0),
             };
-            self.symbols.declare(param.name.clone(), symbol)?;
+            self.symbols.declare(param_name, symbol)?;
         }
 
         // Type check del body

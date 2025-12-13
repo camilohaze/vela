@@ -204,7 +204,7 @@ mod tests {
     #[test]
     fn test_function_with_parameters() {
         let param_range = create_range(1, 11, 1, 17);
-        let param = Parameter::new(
+        let param = Parameter::from_name(
             "a".to_string(),
             Some(TypeAnnotation::Primitive(PrimitiveType::new(
                 create_range(1, 11, 1, 17),
@@ -241,7 +241,7 @@ mod tests {
     #[test]
     fn test_parameter_creation() {
         let range = create_range(1, 11, 1, 17);
-        let param = Parameter::new(
+        let param = Parameter::from_name(
             "value".to_string(),
             Some(TypeAnnotation::Primitive(PrimitiveType::new(
                 create_range(1, 11, 1, 17),
@@ -565,7 +565,7 @@ mod tests {
     fn test_lambda_expression() {
         let range = create_range(1, 1, 1, 12);
         let parameters = vec![
-            Parameter::new(
+            Parameter::from_name(
                 "x".to_string(),
                 Some(TypeAnnotation::Primitive(PrimitiveType::new(
                     create_range(1, 2, 1, 8),
@@ -826,7 +826,7 @@ mod tests {
         let func_range = create_range(1, 1, 1, 50);
 
         // Parameters
-        let param_a = Parameter::new(
+        let param_a = Parameter::from_name(
             "a".to_string(),
             Some(TypeAnnotation::Primitive(PrimitiveType::new(
                 create_range(1, 11, 1, 17),
@@ -836,7 +836,7 @@ mod tests {
             create_range(1, 9, 1, 17),
         );
 
-        let param_b = Parameter::new(
+        let param_b = Parameter::from_name(
             "b".to_string(),
             Some(TypeAnnotation::Primitive(PrimitiveType::new(
                 create_range(1, 19, 1, 25),
@@ -952,13 +952,13 @@ mod tests {
             true,
             "createUser".to_string(),
             vec![
-                Parameter::new(
+                Parameter::from_name(
                     "id".to_string(),
                     Some(TypeAnnotation::Named(NamedType::new(create_range(10, 18, 10, 23), "UserId".to_string()))),
                     None,
                     create_range(10, 16, 10, 23),
                 ),
-                Parameter::new(
+                Parameter::from_name(
                     "name".to_string(),
                     Some(TypeAnnotation::Primitive(PrimitiveType::new(create_range(10, 30, 10, 36), "String".to_string()))),
                     None,

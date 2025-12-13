@@ -176,7 +176,7 @@ mod tests {
         let body = BlockStatement::new(create_range(4, 1, 5, 2), vec![]);
 
         let param_range = create_range(1, 10, 1, 15);
-        let param = Parameter::new(
+        let param = Parameter::from_name(
             "x".to_string(),
             Some(TypeAnnotation::Primitive(PrimitiveType::new(
                 param_range,
@@ -613,7 +613,7 @@ mod tests {
     fn test_lambda_expression() {
         let range = create_range(1, 1, 1, 15);
         let parameters = vec![
-            Parameter::new(
+            Parameter::from_name(
                 "x".to_string(),
                 Some(TypeAnnotation::Primitive(PrimitiveType::new(
                     create_range(1, 2, 1, 8),

@@ -251,10 +251,10 @@ impl FunctionDeclaration {
     }
 }
 
-/// Parámetro de función
+/// Parámetro de función (ahora soporta patterns)
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Parameter {
-    pub name: String,
+    pub pattern: Pattern,
     pub type_annotation: Option<TypeAnnotation>,
     pub default_value: Option<Expression>,
     pub range: Range,
@@ -262,17 +262,28 @@ pub struct Parameter {
 
 impl Parameter {
     pub fn new(
-        name: String,
+        pattern: Pattern,
         type_annotation: Option<TypeAnnotation>,
         default_value: Option<Expression>,
         range: Range,
     ) -> Self {
         Self {
-            name,
+            pattern,
             type_annotation,
             default_value,
             range,
         }
+    }
+
+    /// Crea un parámetro simple con nombre (para compatibilidad)
+    pub fn from_name(
+        name: String,
+        type_annotation: Option<TypeAnnotation>,
+        default_value: Option<Expression>,
+        range: Range,
+    ) -> Self {
+        let pattern = Pattern::Identifier(IdentifierPattern::new(range.clone(), name));
+        Self::new(pattern, type_annotation, default_value, range)
     }
 }
 
@@ -1998,6 +2009,32 @@ pub enum Expression {
     Dispatch(DispatchExpression),
 }
 
+/// Implementación de métodos para Expression
+impl Expression {
+    /// Get the range of this expression
+    pub fn range(&self) -> &Range {
+        match self {
+            Expression::Literal(expr) => &expr.node.range,
+            Expression::Identifier(expr) => &expr.node.range,
+            Expression::Binary(expr) => &expr.node.range,
+            Expression::Unary(expr) => &expr.node.range,
+            Expression::Call(expr) => &expr.node.range,
+            Expression::MemberAccess(expr) => &expr.node.range,
+            Expression::IndexAccess(expr) => &expr.node.range,
+            Expression::ArrayLiteral(expr) => &expr.node.range,
+            Expression::TupleLiteral(expr) => &expr.node.range,
+            Expression::StructLiteral(expr) => &expr.node.range,
+            Expression::Lambda(expr) => &expr.node.range,
+            Expression::If(expr) => &expr.node.range,
+            Expression::Match(expr) => &expr.node.range,
+            Expression::StringInterpolation(expr) => &expr.node.range,
+            Expression::Await(expr) => &expr.node.range,
+            Expression::Computed(expr) => &expr.node.range,
+            Expression::Dispatch(expr) => &expr.node.range,
+        }
+    }
+}
+
 /// Valor literal.
 /// Ejemplos en Vela:
 /// - Números: 42, 3.14
@@ -3038,7 +3075,7 @@ mod tests {
         let body = BlockStatement::new(create_range(4, 1, 5, 2), vec![]);
 
         let param_range = create_range(1, 10, 1, 15);
-        let param = Parameter::new(
+        let param = Parameter::from_name(
             "x".to_string(),
             Some(TypeAnnotation::Primitive(PrimitiveType::new(
                 param_range.clone(),
@@ -3478,7 +3515,7 @@ mod tests {
     fn test_lambda_expression() {
         let range = create_range(1, 1, 1, 15);
         let parameters = vec![
-            Parameter::new(
+            Parameter::from_name(
                 "x".to_string(),
                 Some(TypeAnnotation::Primitive(PrimitiveType::new(
                     create_range(1, 2, 1, 8),

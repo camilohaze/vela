@@ -153,17 +153,15 @@ fn test_gateway_decorator_with_auth_and_middlewares() {
         is_public: true,
         name: "createUser".to_string(),
         decorators: vec![decorator],
-        parameters: vec![
-            Parameter {
-                name: "userData".to_string(),
-                type_annotation: Some(TypeAnnotation::Named(NamedType::new(
+        parameters: vec![Parameter::from_name(
+                "userData".to_string(),
+                Some(TypeAnnotation::Named(NamedType::new(
                     Range { start: Position { line: 0, column: 110 }, end: Position { line: 0, column: 117 } },
                     "UserDTO".to_string()
                 ))),
-                default_value: None,
-                range: Range { start: Position { line: 0, column: 100 }, end: Position { line: 0, column: 120 } },
-            }
-        ],
+                None,
+                Range { start: Position { line: 0, column: 100 }, end: Position { line: 0, column: 120 } },
+            )],
         return_type: Some(TypeAnnotation::Named(NamedType::new(
             Range { start: Position { line: 0, column: 125 }, end: Position { line: 0, column: 131 } },
             "Result".to_string()

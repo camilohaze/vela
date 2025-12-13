@@ -12,11 +12,11 @@ use std::collections::HashMap;
 use crate::ast::{
     Program, Declaration, FunctionDeclaration, Statement, Expression, Literal, TypeAnnotation, IfStatement,
     BinaryExpression, UnaryExpression, CallExpression, Identifier, AssignmentStatement, VariableDeclaration,
-    ReturnStatement, BlockStatement
+    ReturnStatement, BlockStatement, Pattern
 };
 use crate::types::Type;
 use crate::ir::{IRModule, IRFunction, IRInstruction, IRType, Value as IRValue, BinaryOp, UnaryOp, IRExpr, Label};
-use crate::error::{CompileError, CompileResult, CodegenError};
+use crate::error::{CompileError, CompileResult, CodegenError, SourceLocation};
 use crate::message_broker_decorators::{parse_message_broker_decorators, validate_consumer_function, generate_consumer_registration, MessageBrokerDecorator};
 use crate::observability_decorators::{parse_observability_decorators, generate_observability_code, ObservabilityDecorator};
 use crate::orm_decorators::{parse_orm_decorators, generate_orm_code, OrmDecorator};
@@ -134,8 +134,16 @@ impl ASTToIRConverter {
             } else {
                 IRType::Void // Inferir tipo si no hay anotación
             };
-            ir_function.add_param(param.name.clone(), param_type.clone());
-            self.local_symbols.insert(param.name.clone(), param_type);
+            // Extract parameter name from pattern
+            let param_name = match &param.pattern {
+                Pattern::Identifier(ident) => ident.name.clone(),
+                _ => return Err(CompileError::Codegen(CodegenError {
+                    message: "Non-identifier parameter patterns are not supported yet".to_string(),
+                    location: Some(SourceLocation::new(param.range.start.line, param.range.start.column, 0)),
+                })),
+            };
+            ir_function.add_param(param_name.clone(), param_type.clone());
+            self.local_symbols.insert(param_name, param_type);
         }
 
         // Convertir cuerpo de la función

@@ -35,7 +35,7 @@ fn named_type(name: &str) -> TypeAnnotation {
 
 // Helper function to create a parameter
 fn create_parameter(name: &str, type_name: &str) -> Parameter {
-    Parameter::new(
+    Parameter::from_name(
         name.to_string(),
         Some(named_type(type_name)),
         None,
