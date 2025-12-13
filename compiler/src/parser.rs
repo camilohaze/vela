@@ -1523,6 +1523,33 @@ impl Parser {
     /// Parsea un pattern.
     fn parse_pattern(&mut self) -> CompileResult<Pattern> {
         println!("🔧 parse_pattern called");
+
+        // Parse first pattern
+        let mut patterns = vec![self.parse_pattern_primary()?];
+
+        // Check for or patterns: pattern1 | pattern2 | pattern3
+        while self.check(TokenKind::Pipe) {
+            self.advance(); // consume |
+            patterns.push(self.parse_pattern_primary()?);
+        }
+
+        // If we have multiple patterns, create an OrPattern
+        if patterns.len() > 1 {
+            let start_pos = patterns[0].range().start.clone();
+            let end_pos = patterns.last().unwrap().range().end.clone();
+            Ok(Pattern::Or(OrPattern::new(
+                Range::new(start_pos, end_pos),
+                patterns,
+            )))
+        } else {
+            // Single pattern, return as-is
+            Ok(patterns.into_iter().next().unwrap())
+        }
+    }
+
+    /// Parsea un patrón primario (sin operadores or)
+    fn parse_pattern_primary(&mut self) -> CompileResult<Pattern> {
+        println!("🔧 parse_pattern_primary called");
         let start_pos = self.current_token().range.start.clone();
 
         match &self.current_token().kind {
@@ -1575,8 +1602,49 @@ impl Parser {
                 )))
             }
             _ => {
-                // Intentar literal pattern
-                self.parse_literal_pattern()
+                // Intentar literal pattern, que puede ser seguido de range operator
+                let literal_pattern = self.parse_literal_pattern()?;
+
+                // Check if this is a range pattern: literal .. literal or literal ..= literal
+                if self.check(TokenKind::DoubleDot) || self.check(TokenKind::DotDotEqual) {
+                    let is_inclusive = self.check(TokenKind::DotDotEqual);
+                    self.advance(); // consume .. or ..=
+
+                    // Parse the end expression
+                    let end_expr = self.parse_expression()?;
+
+                    // Get ranges for the pattern
+                    let start_range = literal_pattern.range().clone();
+                    let end_range = match &end_expr {
+                        Expression::Literal(lit) => lit.node.range.clone(),
+                        Expression::Identifier(id) => id.node.range.clone(),
+                        _ => return Err(CompileError::Parse(self.error("Range end must be a simple expression"))),
+                    };
+
+                    let pattern_range = Range::new(start_range.start.clone(), end_range.end.clone());
+
+                    // Extract the start value from the literal pattern
+                    let start_value = match &literal_pattern {
+                        Pattern::Literal(lp) => lp.value.clone(),
+                        _ => return Err(CompileError::Parse(self.error("Range start must be a literal"))),
+                    };
+
+                    // Create start expression from the literal value
+                    let start_expr = Expression::Literal(Literal::new(
+                        start_range.clone(),
+                        start_value,
+                        "number".to_string(), // Assume numbers for ranges
+                    ));
+
+                    Ok(Pattern::Range(RangePattern::new(
+                        pattern_range,
+                        start_expr,
+                        end_expr,
+                        is_inclusive,
+                    )))
+                } else {
+                    Ok(literal_pattern)
+                }
             }
         }
     }

@@ -49,7 +49,7 @@ pub enum TokenKind {
     Assign, PlusAssign, MinusAssign,             // = += -=
     StarAssign, SlashAssign, PercentAssign,      // *= /= %=
     Arrow, DoubleArrow,                          // -> =>
-    Dot, DoubleDot, TripleDot,                   // . .. ...
+    Dot, DoubleDot, DotDotEqual, TripleDot,      // . .. ..= ...
     Question, Colon, DoubleColon,                // ? : ::
     Semicolon, Comma,                            // ; ,
 
@@ -236,7 +236,9 @@ impl Lexer {
     /// Maneja el token punto y secuencias de puntos
     fn dot(&mut self) {
         if self.match_char('.') {
-            if self.match_char('.') {
+            if self.match_char('=') {
+                self.add_token(TokenKind::DotDotEqual);
+            } else if self.match_char('.') {
                 self.add_token(TokenKind::TripleDot);
             } else {
                 self.add_token(TokenKind::DoubleDot);
@@ -368,13 +370,13 @@ impl Lexer {
         }
     }
 
-    /// Maneja || (or lógico)
+    /// Maneja || (or lógico) y | (pipe/or pattern)
     fn or(&mut self) {
         if self.match_char('|') {
             self.add_token(TokenKind::Or);
         } else {
-            // Single | is not valid in Vela
-            self.errors.push(LexError::UnexpectedCharacter('|', self.current_pos()));
+            // Single | is pipe/or pattern operator
+            self.add_token(TokenKind::Pipe);
         }
     }
 
