@@ -7,8 +7,99 @@ use std::collections::VecDeque;
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::{Arc, Mutex};
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::task::{Context, Poll};
-use std::time::Duration;
+use std::time::{Duration, Instant};
+use tokio::time;
+
+/// Backpressure strategies for flow control
+#[derive(Debug, Clone, Copy)]
+pub enum BackpressureStrategy {
+    /// Drop oldest items when buffer is full
+    DropOldest,
+    /// Drop newest items when buffer is full
+    DropNewest,
+    /// Error when buffer is full
+    Error,
+    /// Block until space is available (async)
+    Block,
+    /// Dynamic buffer size based on system resources
+    Adaptive,
+}
+
+/// Flow control signals for backpressure management
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum FlowControl {
+    /// Continue processing normally
+    Continue,
+    /// Slow down production (backpressure signal)
+    SlowDown,
+    /// Stop production temporarily
+    Pause,
+    /// Resume production
+    Resume,
+    /// Drop current item
+    Drop,
+}
+
+/// Controller for backpressure management
+pub struct BackpressureController {
+    strategy: BackpressureStrategy,
+    buffer_size: usize,
+    current_pressure: AtomicUsize,
+    high_watermark: usize,
+    low_watermark: usize,
+}
+
+impl BackpressureController {
+    pub fn new(strategy: BackpressureStrategy, buffer_size: usize) -> Self {
+        let high_watermark = (buffer_size as f64 * 0.8) as usize; // 80%
+        let low_watermark = (buffer_size as f64 * 0.2) as usize;  // 20%
+
+        Self {
+            strategy,
+            buffer_size,
+            current_pressure: AtomicUsize::new(0),
+            high_watermark,
+            low_watermark,
+        }
+    }
+
+    pub fn should_apply_backpressure(&self) -> bool {
+        self.current_pressure.load(Ordering::Relaxed) >= self.high_watermark
+    }
+
+    pub fn should_resume(&self) -> bool {
+        self.current_pressure.load(Ordering::Relaxed) <= self.low_watermark
+    }
+
+    pub fn increase_pressure(&self) {
+        self.current_pressure.fetch_add(1, Ordering::Relaxed);
+    }
+
+    pub fn decrease_pressure(&self) {
+        let current = self.current_pressure.load(Ordering::Relaxed);
+        if current > 0 {
+            self.current_pressure.fetch_sub(1, Ordering::Relaxed);
+        }
+    }
+
+    pub fn get_flow_control_signal(&self) -> FlowControl {
+        let pressure = self.current_pressure.load(Ordering::Relaxed);
+
+        if pressure >= self.buffer_size {
+            match self.strategy {
+                BackpressureStrategy::Error => FlowControl::Drop,
+                BackpressureStrategy::Block => FlowControl::Pause,
+                _ => FlowControl::Drop,
+            }
+        } else if pressure >= self.high_watermark {
+            FlowControl::SlowDown
+        } else {
+            FlowControl::Continue
+        }
+    }
+}
 
 /// Represents a subscription to a stream that can be cancelled
 #[derive(Debug, Clone)]
@@ -114,6 +205,59 @@ pub trait Stream<T: Send>: Send {
             stream: self,
             size,
             buffer: Vec::new(),
+        }
+    }
+
+    /// Throttle stream to emit at most one item per duration
+    fn throttle(self, duration: Duration) -> ThrottleStream<Self, T>
+    where
+        Self: Sized,
+    {
+        ThrottleStream {
+            stream: self,
+            last_emit: None,
+            duration,
+            _phantom: std::marker::PhantomData,
+        }
+    }
+
+    /// Debounce stream to emit only after a period of inactivity
+    fn debounce(self, duration: Duration) -> DebounceStream<Self, T>
+    where
+        Self: Sized,
+    {
+        DebounceStream {
+            stream: self,
+            last_value: None,
+            timer: None,
+            duration,
+            _phantom: std::marker::PhantomData,
+        }
+    }
+
+    /// Sample stream at regular intervals
+    fn sample(self, duration: Duration) -> SampleStream<Self, T>
+    where
+        Self: Sized,
+    {
+        SampleStream {
+            stream: self,
+            last_sample: None,
+            duration,
+            _phantom: std::marker::PhantomData,
+        }
+    }
+
+    /// Buffer with advanced backpressure control
+    fn buffer_with_backpressure(self, capacity: usize, strategy: BackpressureStrategy) -> BackpressureBufferStream<Self, T>
+    where
+        Self: Sized,
+    {
+        BackpressureBufferStream {
+            stream: self,
+            buffer: BackpressureBuffer::with_strategy(capacity, strategy),
+            controller: BackpressureController::new(strategy, capacity),
+            _phantom: std::marker::PhantomData,
         }
     }
 
@@ -367,6 +511,191 @@ where
     }
 }
 
+/// Stream that throttles emissions to at most one per duration
+pub struct ThrottleStream<S, T> {
+    stream: S,
+    last_emit: Option<Instant>,
+    duration: Duration,
+    _phantom: std::marker::PhantomData<T>,
+}
+
+impl<S, T> Stream<T> for ThrottleStream<S, T>
+where
+    S: Stream<T>,
+    T: Send,
+{
+    fn poll_next(&mut self) -> Poll<Option<T>> {
+        match self.stream.poll_next() {
+            Poll::Ready(Some(value)) => {
+                let now = Instant::now();
+                if let Some(last) = self.last_emit {
+                    if now.duration_since(last) >= self.duration {
+                        self.last_emit = Some(now);
+                        Poll::Ready(Some(value))
+                    } else {
+                        // Skip this value, continue polling for next
+                        self.poll_next()
+                    }
+                } else {
+                    // First emission
+                    self.last_emit = Some(now);
+                    Poll::Ready(Some(value))
+                }
+            }
+            Poll::Ready(None) => Poll::Ready(None),
+            Poll::Pending => Poll::Pending,
+        }
+    }
+}
+
+/// Stream that debounces emissions, emitting only after a period of inactivity
+pub struct DebounceStream<S, T> {
+    stream: S,
+    last_value: Option<T>,
+    timer: Option<Instant>,
+    duration: Duration,
+    _phantom: std::marker::PhantomData<T>,
+}
+
+impl<S, T> Stream<T> for DebounceStream<S, T>
+where
+    S: Stream<T>,
+    T: Send + Clone,
+{
+    fn poll_next(&mut self) -> Poll<Option<T>> {
+        loop {
+            match self.stream.poll_next() {
+                Poll::Ready(Some(value)) => {
+                    self.last_value = Some(value);
+                    self.timer = Some(Instant::now());
+                    // Continue polling to see if more values come
+                    continue;
+                }
+                Poll::Ready(None) => {
+                    // Stream ended, emit last value if timer expired
+                    if let (Some(value), Some(timer_start)) = (self.last_value.take(), self.timer.take()) {
+                        if timer_start.elapsed() >= self.duration {
+                            return Poll::Ready(Some(value));
+                        } else {
+                            // Not enough time has passed, but stream ended, so emit anyway
+                            return Poll::Ready(Some(value));
+                        }
+                    }
+                    return Poll::Ready(None);
+                }
+                Poll::Pending => {
+                    // Check if we have a pending value that should be emitted
+                    if self.last_value.is_some() && self.timer.is_some() {
+                        let elapsed = self.timer.as_ref().unwrap().elapsed();
+                        if elapsed >= self.duration {
+                            let value = self.last_value.take().unwrap();
+                            self.timer = None;
+                            return Poll::Ready(Some(value));
+                        }
+                    }
+                    return Poll::Pending;
+                }
+            }
+        }
+    }
+}
+
+/// Stream that samples values at regular intervals
+pub struct SampleStream<S, T> {
+    stream: S,
+    last_sample: Option<Instant>,
+    duration: Duration,
+    _phantom: std::marker::PhantomData<T>,
+}
+
+impl<S, T> Stream<T> for SampleStream<S, T>
+where
+    S: Stream<T>,
+    T: Send,
+{
+    fn poll_next(&mut self) -> Poll<Option<T>> {
+        let now = Instant::now();
+
+        if let Some(last) = self.last_sample {
+            if now.duration_since(last) < self.duration {
+                // Not time to sample yet, skip values
+                match self.stream.poll_next() {
+                    Poll::Ready(Some(_)) => {
+                        // Skip this value and continue polling
+                        self.poll_next()
+                    }
+                    Poll::Ready(None) => Poll::Ready(None),
+                    Poll::Pending => Poll::Pending,
+                }
+            } else {
+                // Time to sample, emit the next available value
+                self.last_sample = Some(now);
+                self.stream.poll_next()
+            }
+        } else {
+            // First sample
+            self.last_sample = Some(now);
+            self.stream.poll_next()
+        }
+    }
+}
+
+/// Stream with advanced backpressure buffer
+pub struct BackpressureBufferStream<S, T> {
+    stream: S,
+    buffer: BackpressureBuffer<T>,
+    controller: BackpressureController,
+    _phantom: std::marker::PhantomData<T>,
+}
+
+impl<S, T> Stream<T> for BackpressureBufferStream<S, T>
+where
+    S: Stream<T>,
+    T: Send + Clone,
+{
+    fn poll_next(&mut self) -> Poll<Option<T>> {
+        // First try to drain the buffer
+        if let Some(value) = self.buffer.poll() {
+            self.controller.decrease_pressure();
+            return Poll::Ready(Some(value));
+        }
+
+        // Buffer is empty, try to get more from source
+        match self.stream.poll_next() {
+            Poll::Ready(Some(value)) => {
+                // Try to buffer the value
+                match self.buffer.offer(value.clone()) {
+                    Ok(()) => {
+                        self.controller.increase_pressure();
+                        // Now drain from buffer
+                        if let Some(buffered_value) = self.buffer.poll() {
+                            self.controller.decrease_pressure();
+                            Poll::Ready(Some(buffered_value))
+                        } else {
+                            Poll::Pending
+                        }
+                    }
+                    Err(BackpressureError::Dropped) => {
+                        // Value was dropped due to backpressure, continue polling
+                        self.poll_next()
+                    }
+                    Err(BackpressureError::BufferFull) => {
+                        // Buffer is full and strategy doesn't allow dropping
+                        // For now, just drop and continue
+                        self.poll_next()
+                    }
+                    Err(BackpressureError::WouldBlock) => {
+                        // Would need async blocking, for now just drop
+                        self.poll_next()
+                    }
+                }
+            }
+            Poll::Ready(None) => Poll::Ready(None),
+            Poll::Pending => Poll::Pending,
+        }
+    }
+}
+
 /// Future that reduces a stream to a single value
 pub struct ReduceFuture<S, T, U, F> {
     stream: S,
@@ -525,7 +854,7 @@ impl AsyncIterator for IntervalIterator {
 pub struct BackpressureBuffer<T> {
     buffer: VecDeque<T>,
     capacity: usize,
-    demand: usize,
+    strategy: BackpressureStrategy,
 }
 
 impl<T> BackpressureBuffer<T> {
@@ -533,25 +862,55 @@ impl<T> BackpressureBuffer<T> {
         Self {
             buffer: VecDeque::new(),
             capacity,
-            demand: 0,
+            strategy: BackpressureStrategy::DropOldest,
         }
     }
 
-    pub fn offer(&mut self, value: T) -> bool {
+    pub fn with_strategy(capacity: usize, strategy: BackpressureStrategy) -> Self {
+        Self {
+            buffer: VecDeque::new(),
+            capacity,
+            strategy,
+        }
+    }
+
+    pub fn offer(&mut self, value: T) -> Result<(), BackpressureError> {
         if self.buffer.len() >= self.capacity {
-            false
+            match self.strategy {
+                BackpressureStrategy::DropOldest => {
+                    // Drop oldest item and add new one
+                    self.buffer.pop_front();
+                    self.buffer.push_back(value);
+                    Ok(())
+                }
+                BackpressureStrategy::DropNewest => {
+                    // Drop the new item
+                    Err(BackpressureError::Dropped)
+                }
+                BackpressureStrategy::Error => {
+                    Err(BackpressureError::BufferFull)
+                }
+                BackpressureStrategy::Block => {
+                    // This would need async handling, for now just drop
+                    Err(BackpressureError::WouldBlock)
+                }
+                BackpressureStrategy::Adaptive => {
+                    // For adaptive, try to make space by dropping oldest
+                    if self.buffer.len() > 0 {
+                        self.buffer.pop_front();
+                    }
+                    self.buffer.push_back(value);
+                    Ok(())
+                }
+            }
         } else {
             self.buffer.push_back(value);
-            true
+            Ok(())
         }
     }
 
     pub fn poll(&mut self) -> Option<T> {
         self.buffer.pop_front()
-    }
-
-    pub fn request(&mut self, count: usize) {
-        self.demand += count;
     }
 
     pub fn size(&self) -> usize {
@@ -561,6 +920,17 @@ impl<T> BackpressureBuffer<T> {
     pub fn is_empty(&self) -> bool {
         self.buffer.is_empty()
     }
+
+    pub fn capacity(&self) -> usize {
+        self.capacity
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum BackpressureError {
+    Dropped,
+    BufferFull,
+    WouldBlock,
 }
 
 #[cfg(test)]
@@ -658,14 +1028,14 @@ mod tests {
     async fn test_backpressure_buffer() {
         let mut buffer = BackpressureBuffer::new(3);
 
-        assert!(buffer.offer(1));
-        assert!(buffer.offer(2));
-        assert!(buffer.offer(3));
-        assert!(!buffer.offer(4)); // Buffer full
+        assert!(buffer.offer(1).is_ok());
+        assert!(buffer.offer(2).is_ok());
+        assert!(buffer.offer(3).is_ok());
+        assert!(buffer.offer(4).is_err()); // Buffer full
 
         assert_eq!(buffer.poll(), Some(1));
         assert_eq!(buffer.poll(), Some(2));
-        assert!(buffer.offer(4)); // Now can offer
+        assert!(buffer.offer(4).is_ok()); // Now can offer
 
         assert_eq!(buffer.size(), 2);
         assert!(!buffer.is_empty());

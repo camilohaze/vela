@@ -262,14 +262,14 @@ mod backpressure_tests {
     fn test_backpressure_buffer_basic() {
         let mut buffer = BackpressureBuffer::new(3);
 
-        assert!(buffer.offer(1));
-        assert!(buffer.offer(2));
-        assert!(buffer.offer(3));
-        assert!(!buffer.offer(4)); // Buffer full
+        assert!(buffer.offer(1).is_ok());
+        assert!(buffer.offer(2).is_ok());
+        assert!(buffer.offer(3).is_ok());
+        assert!(buffer.offer(4).is_err()); // Buffer full
 
         assert_eq!(buffer.poll(), Some(1));
         assert_eq!(buffer.poll(), Some(2));
-        assert!(buffer.offer(4)); // Now can offer
+        assert!(buffer.offer(4).is_ok()); // Now can offer
 
         assert_eq!(buffer.size(), 2);
         assert!(!buffer.is_empty());
@@ -288,7 +288,7 @@ mod backpressure_tests {
     fn test_backpressure_buffer_capacity_zero() {
         let mut buffer = BackpressureBuffer::<i32>::new(0);
 
-        assert!(!buffer.offer(1));
+        assert!(buffer.offer(1).is_err());
         assert_eq!(buffer.poll(), None);
     }
 }
@@ -438,6 +438,363 @@ mod performance_tests {
         // Should have first 10 even numbers, doubled: 0, 4, 8, 12, 16, 20, 24, 28, 32, 36
         let expected: Vec<i32> = (0..10).map(|x| x * 4).collect();
         assert_eq!(values, expected);
+        subscription.unsubscribe();
+    }
+}
+
+/// Tests avanzados de backpressure
+#[cfg(test)]
+mod advanced_backpressure_tests {
+    use super::*;
+    use std::sync::atomic::Ordering;
+
+    #[test]
+    fn test_backpressure_strategy_enum() {
+        // Test enum variants
+        assert_eq!(BackpressureStrategy::DropOldest as u8, 0);
+        assert_eq!(BackpressureStrategy::DropNewest as u8, 1);
+        assert_eq!(BackpressureStrategy::Error as u8, 2);
+        assert_eq!(BackpressureStrategy::Block as u8, 3);
+        assert_eq!(BackpressureStrategy::Adaptive as u8, 4);
+    }
+
+    #[test]
+    fn test_flow_control_enum() {
+        assert_eq!(FlowControl::Continue as u8, 0);
+        assert_eq!(FlowControl::Pause as u8, 1);
+        assert_eq!(FlowControl::Resume as u8, 2);
+        assert_eq!(FlowControl::Cancel as u8, 3);
+    }
+
+    #[test]
+    fn test_backpressure_controller_basic() {
+        let controller = BackpressureController::new(10);
+
+        // Initially no pressure
+        assert_eq!(controller.current_pressure(), 0);
+        assert_eq!(controller.flow_control_signal(), FlowControl::Continue);
+
+        // Add some pressure
+        controller.increase_pressure(5);
+        assert_eq!(controller.current_pressure(), 5);
+        assert_eq!(controller.flow_control_signal(), FlowControl::Continue);
+
+        // Add more pressure to trigger pause
+        controller.increase_pressure(6);
+        assert_eq!(controller.current_pressure(), 11);
+        assert_eq!(controller.flow_control_signal(), FlowControl::Pause);
+
+        // Decrease pressure
+        controller.decrease_pressure(3);
+        assert_eq!(controller.current_pressure(), 8);
+        assert_eq!(controller.flow_control_signal(), FlowControl::Resume);
+
+        // Reset
+        controller.reset();
+        assert_eq!(controller.current_pressure(), 0);
+        assert_eq!(controller.flow_control_signal(), FlowControl::Continue);
+    }
+
+    #[test]
+    fn test_backpressure_controller_atomic() {
+        let controller = Arc::new(BackpressureController::new(10));
+
+        // Test atomic operations
+        controller.increase_pressure(5);
+        assert_eq!(controller.current_pressure(), 5);
+
+        let controller_clone = Arc::clone(&controller);
+        std::thread::spawn(move || {
+            controller_clone.increase_pressure(3);
+        }).join().unwrap();
+
+        assert_eq!(controller.current_pressure(), 8);
+    }
+
+    #[tokio::test]
+    async fn test_throttle_operator() {
+        let stream = StreamBuilder::from_iter(vec![1, 2, 3, 4, 5])
+            .throttle(Duration::from_millis(50));
+
+        let mut values = Vec::new();
+        let subscription = stream.subscribe(
+            |value| values.push(value),
+            |_| {},
+            || {},
+        );
+
+        // Wait enough time for all values to be emitted
+        tokio::time::sleep(Duration::from_millis(300)).await;
+
+        // With throttle, we should get all values but spaced out
+        assert_eq!(values, vec![1, 2, 3, 4, 5]);
+        subscription.unsubscribe();
+    }
+
+    #[tokio::test]
+    async fn test_debounce_operator() {
+        // Create a stream that emits values quickly
+        let (tx, rx) = tokio::sync::mpsc::channel(10);
+
+        tokio::spawn(async move {
+            for i in 1..=5 {
+                tx.send(i).await.unwrap();
+                tokio::time::sleep(Duration::from_millis(10)).await;
+            }
+        });
+
+        let stream = StreamBuilder::from_channel(rx)
+            .debounce(Duration::from_millis(50));
+
+        let mut values = Vec::new();
+        let subscription = stream.subscribe(
+            |value| values.push(value),
+            |_| {},
+            || {},
+        );
+
+        // Wait for debounce timeout
+        tokio::time::sleep(Duration::from_millis(100)).await;
+
+        // With debounce, we should only get the last value (5)
+        assert_eq!(values, vec![5]);
+        subscription.unsubscribe();
+    }
+
+    #[tokio::test]
+    async fn test_sample_operator() {
+        let stream = StreamBuilder::interval(Duration::from_millis(10))
+            .sample(Duration::from_millis(25))
+            .take(3);
+
+        let mut values = Vec::new();
+        let subscription = stream.subscribe(
+            |value| values.push(value),
+            |_| {},
+            || {},
+        );
+
+        // Wait for sampling period
+        tokio::time::sleep(Duration::from_millis(100)).await;
+
+        // Should have sampled approximately every 25ms
+        assert_eq!(values.len(), 3);
+        subscription.unsubscribe();
+    }
+
+    #[tokio::test]
+    async fn test_buffer_with_backpressure_drop_oldest() {
+        let stream = StreamBuilder::from_iter(vec![1, 2, 3, 4, 5, 6, 7])
+            .buffer_with_backpressure(3, BackpressureStrategy::DropOldest);
+
+        let mut values = Vec::new();
+        let subscription = stream.subscribe(
+            |value| values.push(value),
+            |_| {},
+            || {},
+        );
+
+        tokio::time::sleep(Duration::from_millis(50)).await;
+
+        // With buffer size 3 and DropOldest, should get [5, 6, 7]
+        // (1,2,3,4 dropped, 5,6,7 kept)
+        assert_eq!(values, vec![5, 6, 7]);
+        subscription.unsubscribe();
+    }
+
+    #[tokio::test]
+    async fn test_buffer_with_backpressure_drop_newest() {
+        let stream = StreamBuilder::from_iter(vec![1, 2, 3, 4, 5, 6, 7])
+            .buffer_with_backpressure(3, BackpressureStrategy::DropNewest);
+
+        let mut values = Vec::new();
+        let subscription = stream.subscribe(
+            |value| values.push(value),
+            |_| {},
+            || {},
+        );
+
+        tokio::time::sleep(Duration::from_millis(50)).await;
+
+        // With buffer size 3 and DropNewest, should get [1, 2, 3]
+        // (4,5,6,7 dropped, 1,2,3 kept)
+        assert_eq!(values, vec![1, 2, 3]);
+        subscription.unsubscribe();
+    }
+
+    #[tokio::test]
+    async fn test_buffer_with_backpressure_error() {
+        let stream = StreamBuilder::from_iter(vec![1, 2, 3, 4])
+            .buffer_with_backpressure(2, BackpressureStrategy::Error);
+
+        let mut values = Vec::new();
+        let mut errors = Vec::new();
+
+        let subscription = stream.subscribe(
+            |value| values.push(value),
+            |error| errors.push(error),
+            || {},
+        );
+
+        tokio::time::sleep(Duration::from_millis(50)).await;
+
+        // Should get first 2 values, then error
+        assert_eq!(values, vec![1, 2]);
+        assert_eq!(errors.len(), 1);
+
+        if let BackpressureError::BufferOverflow = &errors[0] {
+            // Expected error
+        } else {
+            panic!("Expected BufferOverflow error");
+        }
+
+        subscription.unsubscribe();
+    }
+
+    #[tokio::test]
+    async fn test_buffer_with_backpressure_adaptive() {
+        let stream = StreamBuilder::from_iter(vec![1, 2, 3, 4, 5])
+            .buffer_with_backpressure(3, BackpressureStrategy::Adaptive);
+
+        let mut values = Vec::new();
+        let subscription = stream.subscribe(
+            |value| values.push(value),
+            |_| {},
+            || {},
+        );
+
+        tokio::time::sleep(Duration::from_millis(50)).await;
+
+        // Adaptive strategy should balance between drop oldest and newest
+        // For this test, just verify we get some values
+        assert!(!values.is_empty());
+        subscription.unsubscribe();
+    }
+
+    #[tokio::test]
+    async fn test_throttle_stream_creation() {
+        let base_stream = StreamBuilder::from_iter(vec![1, 2, 3]);
+        let throttle_stream = ThrottleStream::new(base_stream, Duration::from_millis(100));
+
+        let mut values = Vec::new();
+        let subscription = throttle_stream.subscribe(
+            |value| values.push(value),
+            |_| {},
+            || {},
+        );
+
+        tokio::time::sleep(Duration::from_millis(400)).await;
+
+        assert_eq!(values, vec![1, 2, 3]);
+        subscription.unsubscribe();
+    }
+
+    #[tokio::test]
+    async fn test_debounce_stream_creation() {
+        let (tx, rx) = tokio::sync::mpsc::channel(10);
+
+        tokio::spawn(async move {
+            tx.send(1).await.unwrap();
+            tokio::time::sleep(Duration::from_millis(10)).await;
+            tx.send(2).await.unwrap();
+            tokio::time::sleep(Duration::from_millis(10)).await;
+            tx.send(3).await.unwrap();
+        });
+
+        let base_stream = StreamBuilder::from_channel(rx);
+        let debounce_stream = DebounceStream::new(base_stream, Duration::from_millis(50));
+
+        let mut values = Vec::new();
+        let subscription = debounce_stream.subscribe(
+            |value| values.push(value),
+            |_| {},
+            || {},
+        );
+
+        tokio::time::sleep(Duration::from_millis(100)).await;
+
+        // Should only get the last value due to debouncing
+        assert_eq!(values, vec![3]);
+        subscription.unsubscribe();
+    }
+
+    #[tokio::test]
+    async fn test_sample_stream_creation() {
+        let base_stream = StreamBuilder::interval(Duration::from_millis(10));
+        let sample_stream = SampleStream::new(base_stream, Duration::from_millis(30)).take(2);
+
+        let mut values = Vec::new();
+        let subscription = sample_stream.subscribe(
+            |value| values.push(value),
+            |_| {},
+            || {},
+        );
+
+        tokio::time::sleep(Duration::from_millis(100)).await;
+
+        assert_eq!(values.len(), 2);
+        subscription.unsubscribe();
+    }
+
+    #[tokio::test]
+    async fn test_backpressure_buffer_stream_creation() {
+        let base_stream = StreamBuilder::from_iter(vec![1, 2, 3, 4, 5]);
+        let buffer_stream = BackpressureBufferStream::new(
+            base_stream,
+            3,
+            BackpressureStrategy::DropOldest
+        );
+
+        let mut values = Vec::new();
+        let subscription = buffer_stream.subscribe(
+            |value| values.push(value),
+            |_| {},
+            || {},
+        );
+
+        tokio::time::sleep(Duration::from_millis(50)).await;
+
+        // Should get last 3 values due to DropOldest strategy
+        assert_eq!(values, vec![3, 4, 5]);
+        subscription.unsubscribe();
+    }
+
+    #[tokio::test]
+    async fn test_backpressure_error_types() {
+        // Test that BackpressureError enum works correctly
+        let buffer_overflow = BackpressureError::BufferOverflow;
+        let upstream_error = BackpressureError::UpstreamError("test".to_string());
+
+        match buffer_overflow {
+            BackpressureError::BufferOverflow => {},
+            _ => panic!("Expected BufferOverflow"),
+        }
+
+        match upstream_error {
+            BackpressureError::UpstreamError(msg) => assert_eq!(msg, "test"),
+            _ => panic!("Expected UpstreamError"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_combined_backpressure_operators() {
+        // Test combining multiple backpressure operators
+        let stream = StreamBuilder::interval(Duration::from_millis(5))
+            .throttle(Duration::from_millis(20))
+            .buffer_with_backpressure(2, BackpressureStrategy::DropOldest)
+            .take(3);
+
+        let mut values = Vec::new();
+        let subscription = stream.subscribe(
+            |value| values.push(value),
+            |_| {},
+            || {},
+        );
+
+        tokio::time::sleep(Duration::from_millis(200)).await;
+
+        // Should get 3 values after throttling and buffering
+        assert_eq!(values.len(), 3);
         subscription.unsubscribe();
     }
 }
