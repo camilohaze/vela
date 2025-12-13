@@ -307,6 +307,26 @@ impl fmt::Display for IteratorType {
     }
 }
 
+/// Async iterator type for asynchronous sequences
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AsyncIteratorType {
+    pub element_type: Box<Type>,
+}
+
+impl AsyncIteratorType {
+    pub fn new(element_type: Type) -> Self {
+        Self {
+            element_type: Box::new(element_type),
+        }
+    }
+}
+
+impl fmt::Display for AsyncIteratorType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "AsyncIterator<{}>", self.element_type)
+    }
+}
+
 /// Helper functions for creating common special types
 pub mod helpers {
     use super::*;
@@ -410,6 +430,11 @@ pub mod helpers {
     /// Create exclusive range type
     pub fn range_exclusive_type(element: Type) -> Type {
         Type::Range(RangeType::exclusive(element))
+    }
+
+    /// Create AsyncIterator<T> type
+    pub fn async_iterator_type(element: Type) -> Type {
+        Type::AsyncIterator(AsyncIteratorType::new(element))
     }
 }
 

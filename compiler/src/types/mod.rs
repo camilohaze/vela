@@ -86,6 +86,9 @@ pub enum Type {
     /// Iterator types
     Iterator(special::IteratorType),
 
+    /// Async iterator types
+    AsyncIterator(special::AsyncIteratorType),
+
     /// Range types
     Range(special::RangeType),
 
@@ -176,6 +179,9 @@ impl Type {
                 element_type.free_vars()
             }
             Type::Iterator(special::IteratorType { element_type }) => {
+                element_type.free_vars()
+            }
+            Type::AsyncIterator(special::AsyncIteratorType { element_type }) => {
                 element_type.free_vars()
             }
             Type::Range(special::RangeType { element_type, .. }) => {
@@ -344,6 +350,11 @@ impl Type {
                     element_type: Box::new(element_type.apply_substitution(subst)),
                 })
             }
+            Type::AsyncIterator(special::AsyncIteratorType { element_type }) => {
+                Type::AsyncIterator(special::AsyncIteratorType {
+                    element_type: Box::new(element_type.apply_substitution(subst)),
+                })
+            }
             Type::Range(special::RangeType { element_type, inclusive }) => {
                 Type::Range(special::RangeType {
                     element_type: Box::new(element_type.apply_substitution(subst)),
@@ -377,6 +388,7 @@ impl Type {
             Type::Promise(pt) => pt.to_string(),
             Type::Stream(st) => st.to_string(),
             Type::Iterator(it) => it.to_string(),
+            Type::AsyncIterator(ait) => ait.to_string(),
             Type::Range(rt) => rt.to_string(),
             Type::Simple(s) => s.clone(),
         }
