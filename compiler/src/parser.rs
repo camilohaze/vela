@@ -280,7 +280,7 @@ impl Parser {
         let mut parameters = Vec::new();
 
         while !self.check(TokenKind::RightParen) {
-            let name = self.consume_identifier()?;
+            let pattern = self.parse_pattern()?;
             let type_annotation = if self.check(TokenKind::Colon) {
                 self.advance();
                 Some(self.parse_type_annotation()?)
@@ -295,11 +295,11 @@ impl Parser {
             };
 
             let range = Range::new(
-                self.tokens[self.current - name.len() - 1].range.start.clone(),
+                pattern.range().start.clone(),
                 self.previous_token().range.end.clone(),
             );
 
-            parameters.push(Parameter::new(name, type_annotation, default_value, range));
+            parameters.push(Parameter::new(pattern, type_annotation, default_value, range));
 
             if !self.check(TokenKind::RightParen) {
                 self.consume(TokenKind::Comma)?;
@@ -819,9 +819,84 @@ impl Parser {
             }
             TokenKind::LeftParen => {
                 self.advance();
-                let expr = self.parse_expression()?;
-                self.consume(TokenKind::RightParen)?;
-                Ok(expr)
+                // Check if this is a lambda: (params) => body
+                if self.check(TokenKind::RightParen) {
+                    // Empty parentheses, could be lambda with no params
+                    self.advance(); // consume ')'
+                    if self.check(TokenKind::DoubleArrow) {
+                        // Lambda with no parameters: () => body
+                        self.advance(); // consume '=>'
+                        let body = self.parse_lambda_body()?;
+                        let end_pos = self.previous_token().range.end.clone();
+                        let range = Range::new(start_pos, end_pos);
+                        Ok(Expression::Lambda(LambdaExpression::new(range, vec![], body)))
+                    } else {
+                        // Just empty parentheses
+                        Ok(Expression::TupleLiteral(TupleLiteral::new(Range::new(start_pos, self.previous_token().range.end.clone()), vec![])))
+                    }
+                } else {
+                    // Parse first expression/parameter
+                    let first_expr = self.parse_expression()?;
+
+                    if self.check(TokenKind::RightParen) {
+                        // Single expression in parentheses
+                        self.advance(); // consume ')'
+                        if self.check(TokenKind::DoubleArrow) {
+                            // Lambda with single parameter (expression as pattern)
+                            self.advance(); // consume '=>'
+                            let pattern = self.expression_to_pattern(first_expr.clone())?;
+                            let body = self.parse_lambda_body()?;
+                            let end_pos = self.previous_token().range.end.clone();
+                            let range = Range::new(start_pos, end_pos);
+                            let param_range = first_expr.range();
+                            let param = Parameter::new(pattern, None, None, param_range.clone());
+                            Ok(Expression::Lambda(LambdaExpression::new(range, vec![param], body)))
+                        } else {
+                            // Just parentheses around expression
+                            Ok(first_expr)
+                        }
+                    } else if self.check(TokenKind::Comma) {
+                        // Multiple parameters: (param1, param2) => body
+                        self.advance(); // consume ','
+                        let mut parameters = vec![self.expression_to_parameter(first_expr)?];
+
+                        // Parse remaining parameters
+                        while !self.check(TokenKind::RightParen) {
+                            let param_expr = self.parse_expression()?;
+                            parameters.push(self.expression_to_parameter(param_expr)?);
+
+                            if self.check(TokenKind::Comma) {
+                                self.advance(); // consume ','
+                            } else {
+                                break;
+                            }
+                        }
+
+                        self.consume(TokenKind::RightParen)?;
+
+                        if self.check(TokenKind::DoubleArrow) {
+                            // This is a lambda
+                            self.advance(); // consume '=>'
+                            let body = self.parse_lambda_body()?;
+                            let end_pos = self.previous_token().range.end.clone();
+                            let range = Range::new(start_pos, end_pos);
+                            Ok(Expression::Lambda(LambdaExpression::new(range, parameters, body)))
+                        } else {
+                            // This is a tuple
+                            let elements = parameters.into_iter()
+                                .map(|param| self.parameter_to_expression(param))
+                                .collect::<CompileResult<Vec<Expression>>>()?;
+                            let end_pos = self.previous_token().range.end.clone();
+                            let range = Range::new(start_pos, end_pos);
+                            Ok(Expression::TupleLiteral(TupleLiteral::new(range, elements)))
+                        }
+                    } else {
+                        // Single expression in parentheses
+                        let expr = first_expr;
+                        self.consume(TokenKind::RightParen)?;
+                        Ok(expr)
+                    }
+                }
             }
             TokenKind::Dispatch => {
                 self.advance(); // consume 'dispatch'
@@ -1841,6 +1916,60 @@ impl Parser {
             variant_name,
             inner_patterns,
         )))
+    }
+
+    /// Parsea el cuerpo de una lambda expression
+    fn parse_lambda_body(&mut self) -> CompileResult<LambdaBody> {
+        if self.check(TokenKind::LeftBrace) {
+            let block = self.parse_block_statement()?;
+            Ok(LambdaBody::Block(block))
+        } else {
+            let expr = self.parse_expression()?;
+            Ok(LambdaBody::Expression(Box::new(expr)))
+        }
+    }
+
+    /// Convierte una expresión en un pattern (para lambdas con un solo parámetro)
+    fn expression_to_pattern(&mut self, expr: Expression) -> CompileResult<Pattern> {
+        match expr {
+            Expression::Identifier(ident) => {
+                Ok(Pattern::Identifier(IdentifierPattern::new(ident.node.range, ident.name)))
+            }
+            Expression::Literal(lit) => {
+                Ok(Pattern::Literal(LiteralPattern::new(lit.node.range, lit.value)))
+            }
+            Expression::TupleLiteral(tuple_lit) => {
+                // Convertir TupleLiteral a TuplePattern
+                let elements = tuple_lit.elements.into_iter()
+                    .map(|elem| self.expression_to_pattern(elem))
+                    .collect::<Result<Vec<_>, _>>()?;
+                Ok(Pattern::Tuple(TuplePattern::new(
+                    tuple_lit.node.range,
+                    elements,
+                )))
+            }
+            _ => Err(CompileError::Parse(self.error("Invalid pattern in lambda parameter"))),
+        }
+    }
+
+    /// Convierte una expresión en un parámetro (para parsing de lambdas)
+    fn expression_to_parameter(&mut self, expr: Expression) -> CompileResult<Parameter> {
+        let pattern = self.expression_to_pattern(expr.clone())?;
+        let range = expr.range().clone();
+        Ok(Parameter::new(pattern, None, None, range.clone()))
+    }
+
+    /// Convierte un parámetro de vuelta a expresión (para tuples)
+    fn parameter_to_expression(&mut self, param: Parameter) -> CompileResult<Expression> {
+        match &param.pattern {
+            Pattern::Identifier(ident) => {
+                Ok(Expression::Identifier(Identifier::new(ident.node.range.clone(), ident.name.clone())))
+            }
+            Pattern::Literal(lit) => {
+                Ok(Expression::Literal(Literal::new(lit.node.range.clone(), lit.value.clone(), "unknown".to_string())))
+            }
+            _ => Err(CompileError::Parse(self.error("Cannot convert complex pattern to expression"))),
+        }
     }
 }
 
