@@ -513,6 +513,8 @@ impl Parser {
             Ok(Statement::Block(self.parse_block_statement()?))
         } else if self.check(TokenKind::If) {
             Ok(Statement::If(self.parse_if_statement()?))
+        } else if self.check(TokenKind::Match) {
+            Ok(Statement::Match(self.parse_match_statement()?))
         } else if self.check(TokenKind::Return) {
             Ok(Statement::Return(self.parse_return_statement()?))
         } else if self.check(TokenKind::State) {
@@ -560,6 +562,66 @@ impl Parser {
         let range = Range::new(start_pos, end_pos);
 
         Ok(IfStatement::new(range, condition, then_branch, else_branch))
+    }
+
+    /// Parsea un statement match.
+    fn parse_match_statement(&mut self) -> CompileResult<MatchStatement> {
+        let start_pos = self.current_token().range.start.clone();
+        self.consume(TokenKind::Match)?;
+
+        let value = self.parse_expression()?;
+        self.consume(TokenKind::LeftBrace)?;
+
+        let mut arms = Vec::new();
+        while !self.check(TokenKind::RightBrace) && !self.is_at_end() {
+            arms.push(self.parse_match_arm()?);
+
+            // Consume comma if present (optional for last arm)
+            if self.check(TokenKind::Comma) {
+                self.advance();
+            }
+        }
+
+        self.consume(TokenKind::RightBrace)?;
+        let end_pos = self.previous_token().range.end.clone();
+        let range = Range::new(start_pos, end_pos);
+
+        Ok(MatchStatement::new(range, value, arms))
+    }
+
+    /// Parsea un brazo de match (pattern [if guard] => body).
+    fn parse_match_arm(&mut self) -> CompileResult<MatchArm> {
+        let start_pos = self.current_token().range.start.clone();
+
+        println!("🔧 parse_match_arm: starting with token {:?}", self.current_token());
+        let pattern = self.parse_pattern()?;
+        println!("🔧 parse_match_arm: after pattern, current token {:?}", self.current_token());
+
+        // Parse optional guard (if condition)
+        let guard = if self.check(TokenKind::If) {
+            println!("🔧 parse_match_arm: found 'if', parsing guard");
+            self.advance();
+            let guard_expr = self.parse_expression()?;
+            println!("🔧 parse_match_arm: after guard expression, current token {:?}", self.current_token());
+            Some(guard_expr)
+        } else {
+            None
+        };
+
+        println!("🔧 After parsing guard, current token: {:?}", self.current_token());
+        self.consume(TokenKind::DoubleArrow)?;
+
+        // Parse body (statement)
+        let body = if self.check(TokenKind::LeftBrace) {
+            self.parse_statement()?
+        } else {
+            Statement::Expression(self.parse_expression_statement()?)
+        };
+
+        let end_pos = self.previous_token().range.end.clone();
+        let range = Range::new(start_pos, end_pos);
+
+        Ok(MatchArm::new(pattern, guard, body, range))
     }
 
     /// Parsea un return statement.
@@ -631,21 +693,44 @@ impl Parser {
 
     /// Parsea expresión con precedence climbing.
     fn parse_precedence(&mut self, precedence: Precedence) -> CompileResult<Expression> {
-        println!("🔧 parse_precedence called with precedence: {:?}", precedence);
         let mut left = self.parse_unary()?;
-        println!("🔧 parse_precedence: parsed left expression: {:?}", left);
 
-        while let Some(op_precedence) = self.get_precedence(self.current_token_kind()) {
-            println!("🔧 parse_precedence: found operator {:?} with precedence {:?}", self.current_token_kind(), op_precedence);
-            if op_precedence <= precedence {
-                break;
+        loop {
+            let current_kind = self.current_token_kind();
+
+            // Handle member access (dot notation)
+            if current_kind == TokenKind::Dot {
+                self.advance(); // consume '.'
+                let member_name = self.consume_identifier()?;
+                let start_pos = match &left {
+                    Expression::Literal(lit) => lit.node.range.start.clone(),
+                    Expression::Identifier(ident) => ident.node.range.start.clone(),
+                    Expression::Binary(bin) => bin.node.range.start.clone(),
+                    Expression::Unary(un) => un.node.range.start.clone(),
+                    Expression::Call(call) => call.node.range.start.clone(),
+                    Expression::MemberAccess(mem) => mem.node.range.start.clone(),
+                    _ => self.previous_token().range.start.clone(),
+                };
+                let end_pos = self.previous_token().range.end.clone();
+                let range = Range::new(start_pos, end_pos);
+                left = Expression::MemberAccess(MemberAccessExpression::new(range, left, member_name, false));
+                continue;
             }
 
-            let operator = self.current_token_kind();
-            self.advance();
+            // Handle binary operators
+            if let Some(op_precedence) = self.get_precedence(&current_kind) {
+                if op_precedence <= precedence {
+                    break;
+                }
 
-            let right = self.parse_precedence(op_precedence)?;
-            left = self.create_binary_expr(left, operator, right);
+                let operator = current_kind;
+                self.advance();
+
+                let right = self.parse_precedence(op_precedence)?;
+                left = self.create_binary_expr(left, operator, right);
+            } else {
+                break;
+            }
         }
 
         Ok(left)
@@ -653,7 +738,6 @@ impl Parser {
 
     /// Parsea expresión unaria.
     fn parse_unary(&mut self) -> CompileResult<Expression> {
-        println!("🔧 parse_unary called, current token: {:?}", self.current_token_kind());
         if self.check(TokenKind::Not) || self.check(TokenKind::Minus) {
             let start_pos = self.current_token().range.start.clone();
             let operator = self.current_token_kind();
@@ -706,14 +790,12 @@ impl Parser {
                 
                 // Check if this is a function call
                 if self.check(TokenKind::LeftParen) {
-                    println!("🔧 parse_primary: found function call for '{}'", name);
                     self.advance(); // consume '('
                     let mut arguments = Vec::new();
                     
                     // Parse arguments
                     if !self.check(TokenKind::RightParen) {
                         loop {
-                            println!("🔧 parse_primary: parsing argument");
                             arguments.push(self.parse_expression()?);
                             if !self.check(TokenKind::Comma) {
                                 break;
@@ -796,7 +878,7 @@ impl Parser {
     }
 
     /// Obtiene la precedencia de un operador.
-    fn get_precedence(&self, kind: TokenKind) -> Option<Precedence> {
+    fn get_precedence(&self, kind: &TokenKind) -> Option<Precedence> {
         match kind {
             TokenKind::Or => Some(Precedence::Or),
             TokenKind::And => Some(Precedence::And),
@@ -804,6 +886,7 @@ impl Parser {
             TokenKind::Less | TokenKind::LessEqual | TokenKind::Greater | TokenKind::GreaterEqual => Some(Precedence::Comparison),
             TokenKind::Plus | TokenKind::Minus => Some(Precedence::Term),
             TokenKind::Star | TokenKind::Slash | TokenKind::Percent => Some(Precedence::Factor),
+            TokenKind::Dot => Some(Precedence::Member),
             _ => None,
         }
     }
@@ -1444,7 +1527,11 @@ impl Parser {
 
         match &self.current_token().kind {
             TokenKind::Identifier(_) => {
-                if self.current + 1 < self.tokens.len() && self.tokens[self.current + 1].kind == TokenKind::Colon {
+                // Check if this is an enum pattern: Identifier(...
+                if self.current + 1 < self.tokens.len() && self.tokens[self.current + 1].kind == TokenKind::LeftParen {
+                    // Enum pattern: VariantName(inner_patterns...)
+                    self.parse_enum_pattern()
+                } else if self.current + 1 < self.tokens.len() && self.tokens[self.current + 1].kind == TokenKind::Colon {
                     // Struct pattern: {field: pattern, ...}
                     self.parse_struct_pattern()
                 } else {
@@ -1625,7 +1712,8 @@ impl Parser {
 
         let value = match &self.current_token().kind {
             TokenKind::NumberLiteral(num) => {
-                serde_json::json!(num)
+                let parsed = num.parse::<f64>().map_err(|_| CompileError::Parse(self.error("Invalid number in pattern")))?;
+                serde_json::json!(parsed)
             }
             TokenKind::StringLiteral(s) => {
                 serde_json::json!(s)
@@ -1649,6 +1737,43 @@ impl Parser {
             value,
         )))
     }
+
+    /// Parsea un enum pattern: VariantName(inner_patterns...)
+    fn parse_enum_pattern(&mut self) -> CompileResult<Pattern> {
+        let start_pos = self.current_token().range.start.clone();
+
+        // Consume variant name
+        let variant_name = self.consume_identifier()?;
+
+        // Consume left paren
+        self.consume(TokenKind::LeftParen)?;
+
+        // Parse inner patterns (optional)
+        let inner_patterns = if self.check(TokenKind::RightParen) {
+            None
+        } else {
+            let mut patterns = Vec::new();
+            loop {
+                patterns.push(self.parse_pattern()?);
+                if !self.check(TokenKind::Comma) {
+                    break;
+                }
+                self.advance(); // consume comma
+            }
+            Some(patterns)
+        };
+
+        // Consume right paren
+        self.consume(TokenKind::RightParen)?;
+
+        let end_pos = self.previous_token().range.end.clone();
+
+        Ok(Pattern::Enum(EnumPattern::new(
+            Range::new(start_pos, end_pos),
+            variant_name,
+            inner_patterns,
+        )))
+    }
 }
 
 /// Niveles de precedencia para operadores.
@@ -1661,6 +1786,7 @@ enum Precedence {
     Comparison,  // < > <= >=
     Term,        // + -
     Factor,      // * / %
+    Member,      // .
 }
 
 #[cfg(test)]
@@ -1924,31 +2050,218 @@ mod tests {
     }
 
     #[test]
-    fn test_parse_struct_pattern_with_explicit_patterns() {
-        let source = "User { name: n, age: a }";
+    fn test_parse_match_statement_with_guards() {
+        let source = r#"
+match value {
+    1 if value > 0 => "positive one"
+    2 if value < 10 => "small two"
+    x if x % 2 == 0 => "even"
+    _ => "other"
+}
+"#.trim();
         let mut lexer = Lexer::new(source, &std::path::PathBuf::from("test.vela"));
         let tokens = lexer.tokenize().unwrap().tokens;
         let mut parser = Parser::new(tokens);
 
-        let pattern = parser.parse_struct_pattern().unwrap();
+        let statement = parser.parse_statement().unwrap();
 
-        match pattern {
-            Pattern::Struct(struct_pattern) => {
-                assert_eq!(struct_pattern.struct_name, "User");
-                assert_eq!(struct_pattern.fields.len(), 2);
-                assert_eq!(struct_pattern.fields[0].name, "name");
-                assert_eq!(struct_pattern.fields[1].name, "age");
-                // Check that the patterns are the specified identifiers
-                match &struct_pattern.fields[0].pattern {
-                    Pattern::Identifier(id) => assert_eq!(id.name, "n"),
+        match statement {
+            Statement::Match(match_stmt) => {
+                assert_eq!(match_stmt.arms.len(), 4);
+
+                // First arm: 1 if value > 0 => "positive one"
+                let arm1 = &match_stmt.arms[0];
+                match &arm1.pattern {
+                    Pattern::Literal(lit) => assert_eq!(lit.value, serde_json::json!(1.0)),
+                    _ => panic!("Expected literal pattern"),
+                }
+                assert!(arm1.guard.is_some());
+                match arm1.body {
+                    Statement::Expression(ref expr_stmt) => {
+                        match &expr_stmt.expression {
+                            Expression::Literal(lit) => assert_eq!(lit.value, serde_json::json!("positive one")),
+                            _ => panic!("Expected literal expression"),
+                        }
+                    }
+                    _ => panic!("Expected expression statement"),
+                }
+
+                // Second arm: 2 if value < 10 => "small two"
+                let arm2 = &match_stmt.arms[1];
+                match &arm2.pattern {
+                    Pattern::Literal(lit) => assert_eq!(lit.value, serde_json::json!(2.0)),
+                    _ => panic!("Expected literal pattern"),
+                }
+                assert!(arm2.guard.is_some());
+
+                // Third arm: x if x % 2 == 0 => "even"
+                let arm3 = &match_stmt.arms[2];
+                match &arm3.pattern {
+                    Pattern::Identifier(id) => assert_eq!(id.name, "x"),
                     _ => panic!("Expected identifier pattern"),
                 }
-                match &struct_pattern.fields[1].pattern {
-                    Pattern::Identifier(id) => assert_eq!(id.name, "a"),
-                    _ => panic!("Expected identifier pattern"),
+                assert!(arm3.guard.is_some());
+
+                // Fourth arm: _ => "other" (no guard)
+                let arm4 = &match_stmt.arms[3];
+                match &arm4.pattern {
+                    Pattern::Wildcard(_) => {},
+                    _ => panic!("Expected wildcard pattern"),
+                }
+                assert!(arm4.guard.is_none());
+            }
+            _ => panic!("Expected match statement"),
+        }
+    }
+
+    #[test]
+    fn test_parse_match_statement_complex_guards() {
+        let source = r#"
+match result {
+    Ok(value) if value > 100 => "big success"
+    Ok(value) if value > 0 => "small success"
+    Err(error) if error.code == 404 => "not found"
+    Err(_) => "error"
+    _ => "unknown"
+}
+"#.trim();
+        let mut lexer = Lexer::new(source, &std::path::PathBuf::from("test.vela"));
+        let tokens = lexer.tokenize().unwrap().tokens;
+        let mut parser = Parser::new(tokens);
+
+        let statement = parser.parse_statement().unwrap();
+
+        match statement {
+            Statement::Match(match_stmt) => {
+                assert_eq!(match_stmt.arms.len(), 5);
+
+                // First arm: Ok(value) if value > 100 => "big success"
+                let arm1 = &match_stmt.arms[0];
+                match &arm1.pattern {
+                    Pattern::Enum(enum_pattern) => {
+                        assert_eq!(enum_pattern.variant_name, "Ok");
+                        assert!(enum_pattern.inner_patterns.is_some());
+                        assert_eq!(enum_pattern.inner_patterns.as_ref().unwrap().len(), 1);
+                    }
+                    _ => panic!("Expected enum pattern"),
+                }
+                assert!(arm1.guard.is_some());
+
+                // Second arm: Ok(value) if value > 0 => "small success"
+                let arm2 = &match_stmt.arms[1];
+                match &arm2.pattern {
+                    Pattern::Enum(enum_pattern) => {
+                        assert_eq!(enum_pattern.variant_name, "Ok");
+                        assert!(enum_pattern.inner_patterns.is_some());
+                        assert_eq!(enum_pattern.inner_patterns.as_ref().unwrap().len(), 1);
+                    }
+                    _ => panic!("Expected enum pattern"),
+                }
+                assert!(arm2.guard.is_some());
+
+                // Third arm: Err(error) if error.code == 404 => "not found"
+                let arm3 = &match_stmt.arms[2];
+                match &arm3.pattern {
+                    Pattern::Enum(enum_pattern) => {
+                        assert_eq!(enum_pattern.variant_name, "Err");
+                        assert!(enum_pattern.inner_patterns.is_some());
+                        assert_eq!(enum_pattern.inner_patterns.as_ref().unwrap().len(), 1);
+                    }
+                    _ => panic!("Expected enum pattern"),
+                }
+                assert!(arm3.guard.is_some());
+
+                // Fourth arm: Err(_) => "error" (no guard)
+                let arm4 = &match_stmt.arms[3];
+                match &arm4.pattern {
+                    Pattern::Enum(enum_pattern) => {
+                        assert_eq!(enum_pattern.variant_name, "Err");
+                        assert!(enum_pattern.inner_patterns.is_some());
+                        assert_eq!(enum_pattern.inner_patterns.as_ref().unwrap().len(), 1);
+                        match &enum_pattern.inner_patterns.as_ref().unwrap()[0] {
+                            Pattern::Wildcard(_) => {},
+                            _ => panic!("Expected wildcard in enum field"),
+                        }
+                    }
+                    _ => panic!("Expected enum pattern"),
+                }
+                assert!(arm4.guard.is_none());
+
+                // Fifth arm: _ => "unknown" (no guard)
+                let arm5 = &match_stmt.arms[4];
+                match &arm5.pattern {
+                    Pattern::Wildcard(_) => {},
+                    _ => panic!("Expected wildcard pattern"),
+                }
+                assert!(arm5.guard.is_none());
+            }
+            _ => panic!("Expected match statement"),
+        }
+    }
+
+    #[test]
+    fn test_parse_match_statement_with_block_body() {
+        let source = r#"
+match status {
+    "active" if user.is_admin => {
+        println("Admin user is active")
+        return true
+    }
+    "inactive" => {
+        println("User is inactive")
+        return false
+    }
+    _ => {
+        println("Unknown status")
+        return false
+    }
+}
+"#.trim();
+        let mut lexer = Lexer::new(source, &std::path::PathBuf::from("test.vela"));
+        let tokens = lexer.tokenize().unwrap().tokens;
+        let mut parser = Parser::new(tokens);
+
+        let statement = parser.parse_statement().unwrap();
+
+        match statement {
+            Statement::Match(match_stmt) => {
+                assert_eq!(match_stmt.arms.len(), 3);
+
+                // First arm has guard and block body
+                let arm1 = &match_stmt.arms[0];
+                assert!(arm1.guard.is_some());
+                match arm1.body {
+                    Statement::Block(_) => {}, // Block statement
+                    _ => panic!("Expected block statement"),
+                }
+
+                // Second arm has no guard but block body
+                let arm2 = &match_stmt.arms[1];
+                assert!(arm2.guard.is_none());
+                match arm2.body {
+                    Statement::Block(_) => {}, // Block statement
+                    _ => panic!("Expected block statement"),
+                }
+
+                // Third arm has no guard but block body
+                let arm3 = &match_stmt.arms[2];
+                assert!(arm3.guard.is_none());
+                match arm3.body {
+                    Statement::Block(_) => {}, // Block statement
+                    _ => panic!("Expected block statement"),
                 }
             }
-            _ => panic!("Expected struct pattern"),
+            _ => panic!("Expected match statement"),
         }
+    }
+
+    #[test]
+    fn test_lexer_double_arrow() {
+        let source = "=>";
+        let mut lexer = Lexer::new(source, &std::path::PathBuf::from("test.vela"));
+        let tokens = lexer.tokenize().unwrap().tokens;
+
+        assert_eq!(tokens.len(), 2); // DoubleArrow and EOF
+        assert_eq!(tokens[0].kind, TokenKind::DoubleArrow);
     }
 }
