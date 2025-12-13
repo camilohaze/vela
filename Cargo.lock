@@ -6358,11 +6358,13 @@ dependencies = [
  "rand 0.8.5",
  "reactive",
  "regex",
+ "reqwest 0.11.27",
  "serde",
  "serde_json",
  "tempfile",
  "thiserror 1.0.69",
  "tokio",
+ "tokio-postgres",
  "vela-runtime",
 ]
 

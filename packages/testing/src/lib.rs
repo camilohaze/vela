@@ -48,6 +48,8 @@ mod widget_testing_tests;
 mod mocking_tests;
 #[cfg(test)]
 mod property_tests;
+#[cfg(test)]
+mod integration_tests;
 
 // Note: widget_testing module is UI-agnostic and provides the core testing infrastructure
 // UI-specific integrations should be implemented in the vela-ui package
