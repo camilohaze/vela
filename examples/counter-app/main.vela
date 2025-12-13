@@ -1,0 +1,97 @@
+// Ejemplo de aplicación Vela - Contador Reactivo
+// Demuestra las funcionalidades implementadas en VELA-25
+
+// Componente contador con estado reactivo
+@component({
+  selector: 'app-counter',
+  template: `
+    <div class="counter">
+      <h2>Contador: {{count}}</h2>
+      <button @click="increment">+</button>
+      <button @click="decrement">-</button>
+      <button @click="reset">Reset</button>
+    </div>
+  `
+})
+class CounterComponent {
+  // Estado reactivo
+  state count: Number = 0
+
+  // Métodos del componente
+  fn increment() -> void {
+    this.count = this.count + 1
+  }
+
+  fn decrement() -> void {
+    this.count = this.count - 1
+  }
+
+  fn reset() -> void {
+    this.count = 0
+  }
+
+  // Ciclo de vida
+  mount() {
+    print("Counter component mounted!")
+  }
+
+  update() {
+    print("Counter updated: ${this.count}")
+  }
+}
+
+// Servicio para gestión de datos
+@injectable
+service CounterService {
+  repository: CounterRepository = inject(CounterRepository)
+
+  fn saveCount(count: Number) -> Result<void, Error> {
+    // Guardar en repositorio
+    return this.repository.save(count)
+  }
+
+  fn getSavedCount() -> Result<Number, Error> {
+    return this.repository.get()
+  }
+}
+
+// Repositorio para persistencia
+@injectable
+repository CounterRepository {
+  fn save(count: Number) -> Result<void, Error> {
+    // Simular guardado en localStorage
+    localStorage.setItem("counter", count.toString())
+    return Ok(void)
+  }
+
+  fn get() -> Result<Number, Error> {
+    let saved = localStorage.getItem("counter")
+    if saved != null {
+      return Ok(Number.parse(saved))
+    }
+    return Ok(0)
+  }
+}
+
+// Módulo principal de la aplicación
+@module({
+  declarations: [CounterComponent, CounterService, CounterRepository],
+  bootstrap: [CounterComponent]
+})
+module AppModule { }
+
+// Función main - punto de entrada
+fn main() -> void {
+  print("🚀 Iniciando aplicación Vela")
+
+  // Crear instancia del módulo
+  let app = AppModule()
+
+  // El framework se encarga del resto:
+  // - Crear componentes
+  // - Configurar inyección de dependencias
+  // - Renderizar en DOM
+  // - Configurar bindings reactivos
+
+  print("✅ Aplicación lista!")
+}
