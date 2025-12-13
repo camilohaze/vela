@@ -31,6 +31,8 @@ pub mod parser;
 pub mod semantic;
 pub mod types;
 pub mod codegen;
+#[path = "../js_codegen/lib.rs"]
+pub mod js_codegen;
 pub mod json_decorators;
 pub mod message_broker_decorators;
 pub mod resilience_decorators;

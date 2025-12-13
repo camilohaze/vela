@@ -6,20 +6,25 @@
 //! - Code generation from IR modules and functions
 //! - Type mapping from Vela types to JavaScript types
 //! - Runtime support for Vela constructs (signals, Option, Result)
+//! - DOM rendering for UI widgets
 //! - Expression and statement generation
 //!
 //! The generated JavaScript code requires the vela-runtime.js file for
 //! runtime support of Vela-specific features.
 
 pub mod codegen;
+pub mod dom_renderer;
+pub mod dom_renderer_tests;
 pub mod expressions;
+pub mod generator;
 pub mod runtime;
 pub mod statements;
 pub mod types;
 
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod reactive_tests;
 
-pub use codegen::JSGenerator;
-pub use runtime::generate_runtime;
-pub use types::JSTypeMapper;
+pub use self::generator::JSGenerator;
+pub use self::runtime::generate_runtime_file as generate_runtime;
