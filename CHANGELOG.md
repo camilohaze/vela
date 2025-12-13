@@ -8,6 +8,7 @@ y este proyecto adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 ## [Unreleased]
 
 ### Added
+- [VELA-1099] Pattern Matching Avanzado - Sistema completo de pattern matching con destructuring, or patterns y range patterns
 - [VELA-103] Implementar `vela install` - Comando para instalar dependencias del proyecto desde `vela.yaml`
 - [ADR-XXX] Foreign Language Bindings - Sistema para integrar librerías de otros lenguajes (JS, WASM, Native) manteniendo pureza funcional
 - [DOC] Análisis detallado de por qué Vela necesita bindings - `docs/architecture/why-bindings-needed.md`
