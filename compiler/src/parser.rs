@@ -1432,6 +1432,223 @@ impl Parser {
             }));
         }
     }
+
+    // ===================================================================
+    // PATTERN PARSING (TASK-117A: Destructuring avanzado)
+    // ===================================================================
+
+    /// Parsea un pattern.
+    fn parse_pattern(&mut self) -> CompileResult<Pattern> {
+        println!("🔧 parse_pattern called");
+        let start_pos = self.current_token().range.start.clone();
+
+        match &self.current_token().kind {
+            TokenKind::Identifier(_) => {
+                if self.current + 1 < self.tokens.len() && self.tokens[self.current + 1].kind == TokenKind::Colon {
+                    // Struct pattern: {field: pattern, ...}
+                    self.parse_struct_pattern()
+                } else {
+                    // Identifier pattern: variable
+                    let name = self.consume_identifier()?;
+                    let end_pos = self.previous_token().range.end.clone();
+                    Ok(Pattern::Identifier(IdentifierPattern::new(
+                        Range::new(start_pos, end_pos),
+                        name,
+                    )))
+                }
+            }
+            TokenKind::LeftBracket => {
+                // Array pattern: [elem1, elem2, ...rest]
+                self.parse_array_pattern()
+            }
+            TokenKind::LeftParen => {
+                // Tuple pattern: (elem1, elem2, elem3)
+                self.parse_tuple_pattern()
+            }
+            TokenKind::LeftBrace => {
+                // Struct pattern: {field1, field2, ...rest}
+                self.parse_struct_pattern()
+            }
+            TokenKind::TripleDot => {
+                // Rest pattern: ...variable (solo en contextos específicos)
+                self.advance(); // consume ...
+                let name = self.consume_identifier()?;
+                let end_pos = self.previous_token().range.end.clone();
+                Ok(Pattern::Identifier(IdentifierPattern::new(
+                    Range::new(start_pos, end_pos),
+                    format!("...{}", name),
+                )))
+            }
+            TokenKind::Underscore => {
+                // Wildcard pattern: _
+                self.advance();
+                let end_pos = self.previous_token().range.end.clone();
+                Ok(Pattern::Wildcard(WildcardPattern::new(
+                    Range::new(start_pos, end_pos),
+                )))
+            }
+            _ => {
+                // Intentar literal pattern
+                self.parse_literal_pattern()
+            }
+        }
+    }
+
+    /// Parsea un array pattern: [elem1, elem2, ...rest]
+    fn parse_array_pattern(&mut self) -> CompileResult<Pattern> {
+        println!("🔧 parse_array_pattern called");
+        let start_pos = self.current_token().range.start.clone();
+
+        self.consume(TokenKind::LeftBracket)?;
+        let mut elements = Vec::new();
+
+        while !self.check(TokenKind::RightBracket) && !self.is_at_end() {
+            if self.check(TokenKind::TripleDot) {
+                // Spread operator: ...rest
+                self.advance(); // consume ...
+                let pattern = self.parse_pattern()?;
+                elements.push(ArrayPatternElement::Rest(pattern));
+            } else {
+                // Normal element
+                let pattern = self.parse_pattern()?;
+                elements.push(ArrayPatternElement::Pattern(pattern));
+            }
+
+            if !self.check(TokenKind::RightBracket) {
+                self.consume(TokenKind::Comma)?;
+            }
+        }
+
+        self.consume(TokenKind::RightBracket)?;
+        let end_pos = self.previous_token().range.end.clone();
+
+        Ok(Pattern::Array(ArrayPattern::new(
+            Range::new(start_pos, end_pos),
+            elements,
+        )))
+    }
+
+    /// Parsea un tuple pattern: (elem1, elem2, elem3)
+    fn parse_tuple_pattern(&mut self) -> CompileResult<Pattern> {
+        println!("🔧 parse_tuple_pattern called");
+        let start_pos = self.current_token().range.start.clone();
+
+        self.consume(TokenKind::LeftParen)?;
+        let mut elements = Vec::new();
+
+        while !self.check(TokenKind::RightParen) && !self.is_at_end() {
+            elements.push(self.parse_pattern()?);
+
+            if !self.check(TokenKind::RightParen) {
+                self.consume(TokenKind::Comma)?;
+            }
+        }
+
+        self.consume(TokenKind::RightParen)?;
+        let end_pos = self.previous_token().range.end.clone();
+
+        Ok(Pattern::Tuple(TuplePattern::new(
+            Range::new(start_pos, end_pos),
+            elements,
+        )))
+    }
+
+    /// Parsea un struct pattern: StructName { field1, field2: pattern, ...rest }
+    fn parse_struct_pattern(&mut self) -> CompileResult<Pattern> {
+        println!("🔧 parse_struct_pattern called");
+        let start_pos = self.current_token().range.start.clone();
+
+        // Parse struct name
+        let struct_name = if let TokenKind::Identifier(name) = &self.current_token().kind {
+            let name = name.clone();
+            self.advance();
+            name
+        } else {
+            return Err(CompileError::Parse(self.error("Expected struct name")));
+        };
+
+        self.consume(TokenKind::LeftBrace)?;
+        let mut fields = Vec::new();
+        let mut has_rest = false;
+
+        while !self.check(TokenKind::RightBrace) && !self.is_at_end() {
+            if self.check(TokenKind::TripleDot) {
+                // Spread operator: ...rest
+                self.advance(); // consume ...
+                // Consume the identifier after ...
+                let _rest_name = self.consume_identifier()?;
+                has_rest = true;
+                break; // ... debe ser el último elemento
+            }
+
+            // Parse field name
+            let field_name = self.consume_identifier()?;
+
+            let pattern = if self.check(TokenKind::Colon) {
+                // field: pattern
+                self.advance(); // consume :
+                self.parse_pattern()?
+            } else {
+                // field (shorthand)
+                Pattern::Identifier(IdentifierPattern::new(
+                    self.previous_token().range.clone(),
+                    field_name.clone(),
+                ))
+            };
+
+            let field_range = Range::new(
+                self.previous_token().range.start.clone(),
+                pattern.range().end.clone(),
+            );
+
+            fields.push(StructPatternField::new(field_name, pattern, field_range));
+
+            if !self.check(TokenKind::RightBrace) {
+                self.consume(TokenKind::Comma)?;
+            }
+        }
+
+        self.consume(TokenKind::RightBrace)?;
+        let end_pos = self.previous_token().range.end.clone();
+
+        Ok(Pattern::Struct(StructPattern::new(
+            Range::new(start_pos, end_pos),
+            struct_name,
+            fields,
+            has_rest,
+        )))
+    }
+
+    /// Parsea un literal pattern (números, strings, booleanos)
+    fn parse_literal_pattern(&mut self) -> CompileResult<Pattern> {
+        let start_pos = self.current_token().range.start.clone();
+
+        let value = match &self.current_token().kind {
+            TokenKind::NumberLiteral(num) => {
+                serde_json::json!(num)
+            }
+            TokenKind::StringLiteral(s) => {
+                serde_json::json!(s)
+            }
+            TokenKind::True => {
+                serde_json::json!(true)
+            }
+            TokenKind::False => {
+                serde_json::json!(false)
+            }
+            _ => {
+                return Err(CompileError::Parse(self.error("Expected literal")));
+            }
+        };
+
+        self.advance();
+        let end_pos = self.previous_token().range.end.clone();
+
+        Ok(Pattern::Literal(LiteralPattern::new(
+            Range::new(start_pos, end_pos),
+            value,
+        )))
+    }
 }
 
 /// Niveles de precedencia para operadores.
@@ -1587,5 +1804,151 @@ mod tests {
         let result = parser.parse();
         // Should fail gracefully
         assert!(result.is_err());
+    }
+
+    // ===================================================================
+    // TESTS PARA PATTERN DESTRUCTURING (TASK-117A)
+    // ===================================================================
+
+    #[test]
+    fn test_parse_array_pattern_simple() {
+        let source = "[x, y, z]";
+        let mut lexer = Lexer::new(source, &std::path::PathBuf::from("test.vela"));
+        let tokens = lexer.tokenize().unwrap().tokens;
+        let mut parser = Parser::new(tokens);
+
+        // Parse manually since we don't have match expressions yet
+        let pattern = parser.parse_array_pattern().unwrap();
+
+        match pattern {
+            Pattern::Array(array_pattern) => {
+                assert_eq!(array_pattern.elements.len(), 3);
+                // Check that elements are identifier patterns
+                for element in &array_pattern.elements {
+                    match element {
+                        ArrayPatternElement::Pattern(Pattern::Identifier(_)) => {}
+                        _ => panic!("Expected identifier pattern"),
+                    }
+                }
+            }
+            _ => panic!("Expected array pattern"),
+        }
+    }
+
+    #[test]
+    fn test_parse_array_pattern_with_spread() {
+        let source = "[first, ...rest]";
+        let mut lexer = Lexer::new(source, &std::path::PathBuf::from("test.vela"));
+        let tokens = lexer.tokenize().unwrap().tokens;
+        let mut parser = Parser::new(tokens);
+
+        let pattern = parser.parse_array_pattern().unwrap();
+
+        match pattern {
+            Pattern::Array(array_pattern) => {
+                assert_eq!(array_pattern.elements.len(), 2);
+                // First element should be normal pattern
+                match &array_pattern.elements[0] {
+                    ArrayPatternElement::Pattern(Pattern::Identifier(id)) => {
+                        assert_eq!(id.name, "first");
+                    }
+                    _ => panic!("Expected identifier pattern for first element"),
+                }
+                // Second element should be rest pattern
+                match &array_pattern.elements[1] {
+                    ArrayPatternElement::Rest(Pattern::Identifier(id)) => {
+                        assert_eq!(id.name, "rest");
+                    }
+                    _ => panic!("Expected rest pattern for second element"),
+                }
+            }
+            _ => panic!("Expected array pattern"),
+        }
+    }
+
+    #[test]
+    fn test_parse_tuple_pattern() {
+        let source = "(x, y, z)";
+        let mut lexer = Lexer::new(source, &std::path::PathBuf::from("test.vela"));
+        let tokens = lexer.tokenize().unwrap().tokens;
+        let mut parser = Parser::new(tokens);
+
+        let pattern = parser.parse_tuple_pattern().unwrap();
+
+        match pattern {
+            Pattern::Tuple(tuple_pattern) => {
+                assert_eq!(tuple_pattern.elements.len(), 3);
+            }
+            _ => panic!("Expected tuple pattern"),
+        }
+    }
+
+    #[test]
+    fn test_parse_struct_pattern_simple() {
+        let source = "User { name, age }";
+        let mut lexer = Lexer::new(source, &std::path::PathBuf::from("test.vela"));
+        let tokens = lexer.tokenize().unwrap().tokens;
+        let mut parser = Parser::new(tokens);
+
+        let pattern = parser.parse_struct_pattern().unwrap();
+
+        match pattern {
+            Pattern::Struct(struct_pattern) => {
+                assert_eq!(struct_pattern.struct_name, "User");
+                assert_eq!(struct_pattern.fields.len(), 2);
+                assert_eq!(struct_pattern.has_rest, false);
+                assert_eq!(struct_pattern.fields[0].name, "name");
+                assert_eq!(struct_pattern.fields[1].name, "age");
+            }
+            _ => panic!("Expected struct pattern"),
+        }
+    }
+
+    #[test]
+    fn test_parse_struct_pattern_with_rest() {
+        let source = "User { name, age, ...others }";
+        let mut lexer = Lexer::new(source, &std::path::PathBuf::from("test.vela"));
+        let tokens = lexer.tokenize().unwrap().tokens;
+        let mut parser = Parser::new(tokens);
+
+        let pattern = parser.parse_struct_pattern().unwrap();
+
+        match pattern {
+            Pattern::Struct(struct_pattern) => {
+                assert_eq!(struct_pattern.struct_name, "User");
+                assert_eq!(struct_pattern.fields.len(), 2);
+                assert_eq!(struct_pattern.has_rest, true);
+            }
+            _ => panic!("Expected struct pattern"),
+        }
+    }
+
+    #[test]
+    fn test_parse_struct_pattern_with_explicit_patterns() {
+        let source = "User { name: n, age: a }";
+        let mut lexer = Lexer::new(source, &std::path::PathBuf::from("test.vela"));
+        let tokens = lexer.tokenize().unwrap().tokens;
+        let mut parser = Parser::new(tokens);
+
+        let pattern = parser.parse_struct_pattern().unwrap();
+
+        match pattern {
+            Pattern::Struct(struct_pattern) => {
+                assert_eq!(struct_pattern.struct_name, "User");
+                assert_eq!(struct_pattern.fields.len(), 2);
+                assert_eq!(struct_pattern.fields[0].name, "name");
+                assert_eq!(struct_pattern.fields[1].name, "age");
+                // Check that the patterns are the specified identifiers
+                match &struct_pattern.fields[0].pattern {
+                    Pattern::Identifier(id) => assert_eq!(id.name, "n"),
+                    _ => panic!("Expected identifier pattern"),
+                }
+                match &struct_pattern.fields[1].pattern {
+                    Pattern::Identifier(id) => assert_eq!(id.name, "a"),
+                    _ => panic!("Expected identifier pattern"),
+                }
+            }
+            _ => panic!("Expected struct pattern"),
+        }
     }
 }

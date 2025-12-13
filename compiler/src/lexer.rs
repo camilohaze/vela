@@ -60,7 +60,7 @@ pub enum TokenKind {
     LeftAngle, RightAngle,                       // < >
 
     // Special
-    At, Hash, Dollar, Backtick,                  // @ # $ `
+    At, Hash, Dollar, Backtick, Underscore,     // @ # $ ` _
     EOF,
 }
 
@@ -216,7 +216,16 @@ impl Lexer {
             '"' => self.string()?,
             '\'' => self.raw_string()?,
             '0'..='9' => self.number()?,
-            'a'..='z' | 'A'..='Z' | '_' => self.identifier()?,
+            'a'..='z' | 'A'..='Z' => self.identifier()?,
+            '_' => {
+                // Check if this is a standalone underscore or start of identifier
+                let next_char = self.peek();
+                if !self.is_at_end() && (next_char.is_alphanumeric() || next_char == '_') {
+                    self.identifier()?;
+                } else {
+                    self.add_token(TokenKind::Underscore);
+                }
+            },
             ' ' | '\r' | '\t' => {}, // ignore whitespace
             '\n' => self.newline(),
             _ => return Err(LexError::UnexpectedCharacter(c, self.current_pos())),

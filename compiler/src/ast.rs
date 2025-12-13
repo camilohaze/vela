@@ -2432,6 +2432,7 @@ pub enum Pattern {
     Literal(LiteralPattern),
     Identifier(IdentifierPattern),
     Tuple(TuplePattern),
+    Array(ArrayPattern),
     Struct(StructPattern),
     Enum(EnumPattern),
     Or(OrPattern),
@@ -2487,21 +2488,46 @@ impl TuplePattern {
     }
 }
 
+/// Pattern array: [x, y, ...rest]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ArrayPattern {
+    pub node: ASTNode,
+    pub elements: Vec<ArrayPatternElement>,
+}
+
+impl ArrayPattern {
+    pub fn new(range: Range, elements: Vec<ArrayPatternElement>) -> Self {
+        Self {
+            node: ASTNode::new(range),
+            elements,
+        }
+    }
+}
+
+/// Elemento de array pattern (soporta spread)
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub enum ArrayPatternElement {
+    Pattern(Pattern),           // Elemento normal: x
+    Rest(Pattern),              // Spread operator: ...rest
+}
+
 /// Pattern struct.
-/// Ejemplo: User { id, name }
+/// Ejemplo: User { id, name, ...others }
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct StructPattern {
     pub node: ASTNode,
     pub struct_name: String,
     pub fields: Vec<StructPatternField>,
+    pub has_rest: bool,  // True si termina con ...others
 }
 
 impl StructPattern {
-    pub fn new(range: Range, struct_name: String, fields: Vec<StructPatternField>) -> Self {
+    pub fn new(range: Range, struct_name: String, fields: Vec<StructPatternField>, has_rest: bool) -> Self {
         Self {
             node: ASTNode::new(range),
             struct_name,
             fields,
+            has_rest,
         }
     }
 }
@@ -2589,6 +2615,27 @@ impl WildcardPattern {
     pub fn new(range: Range) -> Self {
         Self {
             node: ASTNode::new(range),
+        }
+    }
+}
+
+// ===================================================================
+// PATTERN METHODS
+// ===================================================================
+
+impl Pattern {
+    /// Get the range of this pattern
+    pub fn range(&self) -> &Range {
+        match self {
+            Pattern::Literal(p) => &p.node.range,
+            Pattern::Identifier(p) => &p.node.range,
+            Pattern::Tuple(p) => &p.node.range,
+            Pattern::Array(p) => &p.node.range,
+            Pattern::Struct(p) => &p.node.range,
+            Pattern::Enum(p) => &p.node.range,
+            Pattern::Or(p) => &p.node.range,
+            Pattern::Range(p) => &p.node.range,
+            Pattern::Wildcard(p) => &p.node.range,
         }
     }
 }
@@ -3522,7 +3569,7 @@ mod tests {
             ),
         ];
 
-        let struct_pattern = StructPattern::new(range, "User".to_string(), fields);
+        let struct_pattern = StructPattern::new(range, "User".to_string(), fields, false);
         assert_eq!(struct_pattern.struct_name, "User");
         assert_eq!(struct_pattern.fields.len(), 2);
     }
