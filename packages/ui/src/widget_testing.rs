@@ -29,6 +29,19 @@ pub use vela_testing::finders::{Finder as AdvancedFinder, ByType as AdvancedByTy
 #[cfg(feature = "testing")]
 pub use vela_testing::interactions::{Interaction as AdvancedInteraction, TapInteraction as AdvancedTapInteraction};
 
+/// Tipo stub para cuando la feature testing no está disponible
+#[cfg(not(feature = "testing"))]
+#[derive(Debug, Clone)]
+pub struct TestApp;
+
+/// Implementación stub para TestApp
+#[cfg(not(feature = "testing"))]
+impl TestApp {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
 /// Tipos de eventos de interacción con widgets (compatibilidad hacia atrás)
 #[derive(Debug, Clone, PartialEq)]
 pub enum WidgetEvent {
@@ -182,7 +195,10 @@ impl WidgetSimulator {
 /// Combina capacidades básicas y avanzadas
 pub struct WidgetTestRunner {
     simulator: WidgetSimulator,
+    #[cfg(feature = "testing")]
     advanced_app: Option<TestApp>,
+    #[cfg(not(feature = "testing"))]
+    advanced_app: Option<()>, // Placeholder when testing feature is disabled
     assertions: Vec<Box<dyn Fn() -> Result<(), String> + Send + Sync>>,
 }
 
@@ -190,16 +206,30 @@ impl WidgetTestRunner {
     pub fn new() -> Self {
         Self {
             simulator: WidgetSimulator::new(),
+            #[cfg(feature = "testing")]
+            advanced_app: None,
+            #[cfg(not(feature = "testing"))]
             advanced_app: None,
             assertions: Vec::new(),
         }
     }
 
     /// Crear un test runner con capacidades avanzadas
+    #[cfg(feature = "testing")]
     pub fn with_advanced_testing() -> Self {
         Self {
             simulator: WidgetSimulator::new(),
             advanced_app: Some(TestApp::new()),
+            assertions: Vec::new(),
+        }
+    }
+
+    /// Crear un test runner básico (sin capacidades avanzadas)
+    #[cfg(not(feature = "testing"))]
+    pub fn with_advanced_testing() -> Self {
+        Self {
+            simulator: WidgetSimulator::new(),
+            advanced_app: None,
             assertions: Vec::new(),
         }
     }
@@ -210,8 +240,15 @@ impl WidgetTestRunner {
     }
 
     /// Obtener acceso al framework avanzado
+    #[cfg(feature = "testing")]
     pub fn advanced_app(&mut self) -> Option<&mut TestApp> {
         self.advanced_app.as_mut()
+    }
+
+    /// Obtener acceso al framework avanzado (retorna None cuando testing no está disponible)
+    #[cfg(not(feature = "testing"))]
+    pub fn advanced_app(&mut self) -> Option<&mut TestApp> {
+        None
     }
 
     /// Agregar una aserción personalizada
