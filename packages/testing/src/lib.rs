@@ -41,6 +41,8 @@ pub mod snapshot;
 pub mod mock;
 pub mod property;
 pub mod integration;
+#[cfg(test)]
+mod widget_testing_tests;
 
 // Note: widget_testing module is UI-agnostic and provides the core testing infrastructure
 // UI-specific integrations should be implemented in the vela-ui package

@@ -46,7 +46,7 @@ impl ByKey {
 impl Finder for ByKey {
     async fn find(&self, widgets: &std::collections::HashMap<String, Box<dyn TestableWidget>>) -> Result<Vec<Box<dyn TestableWidget>>, String> {
         if let Some(widget) = widgets.get(&self.key) {
-            Ok(vec![widget.clone_box()])
+            Ok(vec![widget.clone_box().await])
         } else {
             Ok(vec![])
         }
@@ -72,10 +72,11 @@ impl Finder for ByText {
         let mut results = Vec::new();
 
         for widget in widgets.values() {
-            if let Some(text) = widget.get_properties().get("text") {
+            let properties = widget.get_properties().await;
+            if let Some(text) = properties.get("text") {
                 if let Some(text_str) = text.as_str() {
                     if text_str.contains(&self.text) {
-                        results.push(widget.clone_box());
+                        results.push(widget.clone_box().await);
                     }
                 }
             }
@@ -105,11 +106,12 @@ impl Finder for ByType {
 
         for widget in widgets.values() {
             // Simplified type checking - in real implementation would use TypeId
-            if widget.get_properties().get("type")
+            let properties = widget.get_properties().await;
+            if properties.get("type")
                 .and_then(|t| t.as_str())
                 .map(|t| t == self.type_name)
                 .unwrap_or(false) {
-                results.push(widget.clone_box());
+                results.push(widget.clone_box().await);
             }
         }
 
@@ -140,9 +142,10 @@ impl Finder for Descendant {
 
         for ancestor in ancestors {
             let descendant_results = self.descendant.find(widgets).await?;
+            let ancestor_children = ancestor.get_children().await;
             for descendant in descendant_results {
                 // Check if descendant is actually a child of ancestor
-                if ancestor.get_children().contains(&descendant.get_id()) {
+                if ancestor_children.iter().any(|child| child.get_id() == descendant.get_id()) {
                     results.push(descendant);
                 }
             }

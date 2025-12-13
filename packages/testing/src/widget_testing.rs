@@ -14,16 +14,20 @@ by UI frameworks to provide widget-specific testing capabilities.
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
+use async_trait::async_trait;
 
 /// Abstract widget trait for testing
+#[async_trait::async_trait]
 pub trait TestableWidget: Send + Sync {
     fn get_id(&self) -> String;
-    fn get_properties(&self) -> HashMap<String, serde_json::Value>;
-    fn get_children(&self) -> Vec<String>;
+    fn get_type(&self) -> String;
+    async fn get_properties(&self) -> HashMap<String, serde_json::Value>;
+    async fn get_children(&self) -> Vec<Box<dyn TestableWidget>>;
     fn is_visible(&self) -> bool;
-    fn is_enabled(&self) -> bool;
-    fn is_focused(&self) -> bool;
-    fn clone_box(&self) -> Box<dyn TestableWidget>;
+    async fn is_enabled(&self) -> bool;
+    async fn is_focused(&self) -> bool;
+    async fn get_bounds(&self) -> Option<crate::snapshot::WidgetBounds>;
+    async fn clone_box(&self) -> Box<dyn TestableWidget>;
 }
 
 /// Test application that manages widget tree and interactions
@@ -54,7 +58,11 @@ impl TestApp {
     /// Get a widget by ID
     pub async fn get_widget(&self, id: &str) -> Option<Box<dyn TestableWidget>> {
         let widgets = self.widgets.read().await;
-        widgets.get(id).map(|w| w.clone_box())
+        if let Some(w) = widgets.get(id) {
+            Some(w.clone_box().await)
+        } else {
+            None
+        }
     }
 
     /// Simulate an event on a widget
@@ -170,7 +178,7 @@ pub mod test_utils {
     /// Create a test widget with common setup
     pub fn create_test_widget() -> Box<dyn TestableWidget> {
         // Implementation for creating test widgets
-        Box::new(MockWidget::new("test-widget"))
+        Box::new(MockWidget::new("test-widget", "TestWidget"))
     }
 
     /// Setup test environment
@@ -189,22 +197,26 @@ pub mod test_utils {
 /// Mock widget for testing
 pub struct MockWidget {
     id: String,
+    widget_type: String,
     properties: HashMap<String, serde_json::Value>,
-    children: Vec<String>,
+    children: Vec<Box<dyn TestableWidget>>,
     visible: bool,
     enabled: bool,
     focused: bool,
+    bounds: Option<crate::snapshot::WidgetBounds>,
 }
 
 impl MockWidget {
-    pub fn new(id: &str) -> Self {
+    pub fn new(id: &str, widget_type: &str) -> Self {
         Self {
             id: id.to_string(),
+            widget_type: widget_type.to_string(),
             properties: HashMap::new(),
             children: Vec::new(),
             visible: true,
             enabled: true,
             focused: false,
+            bounds: None,
         }
     }
 
@@ -213,7 +225,7 @@ impl MockWidget {
         self
     }
 
-    pub fn with_children(mut self, children: Vec<String>) -> Self {
+    pub fn with_children(mut self, children: Vec<Box<dyn TestableWidget>>) -> Self {
         self.children = children;
         self
     }
@@ -232,41 +244,72 @@ impl MockWidget {
         self.focused = focused;
         self
     }
+
+    pub fn with_bounds(mut self, bounds: crate::snapshot::WidgetBounds) -> Self {
+        self.bounds = Some(bounds);
+        self
+    }
+
+    pub fn with_widget_type(mut self, widget_type: &str) -> Self {
+        self.widget_type = widget_type.to_string();
+        self
+    }
 }
 
+#[async_trait::async_trait]
 impl TestableWidget for MockWidget {
     fn get_id(&self) -> String {
         self.id.clone()
     }
 
-    fn get_properties(&self) -> HashMap<String, serde_json::Value> {
+    fn get_type(&self) -> String {
+        self.widget_type.clone()
+    }
+
+    async fn get_properties(&self) -> HashMap<String, serde_json::Value> {
         self.properties.clone()
     }
 
-    fn get_children(&self) -> Vec<String> {
-        self.children.clone()
+    async fn get_children(&self) -> Vec<Box<dyn TestableWidget>> {
+        let mut children = Vec::new();
+        for child in &self.children {
+            children.push(child.clone_box().await);
+        }
+        children
     }
 
     fn is_visible(&self) -> bool {
         self.visible
     }
 
-    fn is_enabled(&self) -> bool {
+    async fn is_enabled(&self) -> bool {
         self.enabled
     }
 
-    fn is_focused(&self) -> bool {
+    async fn is_focused(&self) -> bool {
         self.focused
     }
 
-    fn clone_box(&self) -> Box<dyn TestableWidget> {
+    async fn get_bounds(&self) -> Option<crate::snapshot::WidgetBounds> {
+        self.bounds.clone()
+    }
+
+    async fn clone_box(&self) -> Box<dyn TestableWidget> {
         Box::new(MockWidget {
             id: self.id.clone(),
+            widget_type: self.widget_type.clone(),
             properties: self.properties.clone(),
-            children: self.children.clone(),
+            children: {
+                let mut cloned_children = Vec::new();
+                for child in &self.children {
+                    cloned_children.push(child.clone_box().await);
+                }
+                cloned_children
+            },
             visible: self.visible,
             enabled: self.enabled,
             focused: self.focused,
+            bounds: self.bounds.clone(),
         })
     }
 }

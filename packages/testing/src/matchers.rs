@@ -51,7 +51,8 @@ impl Matcher for TextMatcher {
         let found_widgets = self.finder.find(&*widgets).await?;
 
         for widget in found_widgets {
-            if let Some(text) = widget.get_properties().get("text") {
+            let properties = widget.get_properties().await;
+            if let Some(text) = properties.get("text") {
                 if let Some(text_str) = text.as_str() {
                     if text_str != self.expected_text {
                         return Err(format!(
@@ -131,7 +132,8 @@ impl Matcher for StyleMatcher {
         let found_widgets = self.finder.find(&*widgets).await?;
 
         for widget in found_widgets {
-            if let Some(style) = widget.get_properties().get("style") {
+            let properties = widget.get_properties().await;
+            if let Some(style) = properties.get("style") {
                 if style != &self.expected_style {
                     return Err(format!(
                         "Expected style {:?} but found {:?}",
@@ -164,7 +166,8 @@ impl StateMatcher {
 impl Matcher for StateMatcher {
     async fn matches(&self, app: &TestApp) -> Result<(), String> {
         if let Some(widget) = app.get_widget(&self.widget_id).await {
-            if let Some(state) = widget.get_properties().get("state") {
+            let properties = widget.get_properties().await;
+            if let Some(state) = properties.get("state") {
                 if state != &self.expected_state {
                     return Err(format!(
                         "Expected state {:?} but found {:?}",
