@@ -102,10 +102,10 @@ pub struct TestEnvironment {
 }
 
 #[derive(Debug, Clone)]
-struct ServiceHealth {
-    url: String,
-    healthy: bool,
-    last_check: std::time::Instant,
+pub struct ServiceHealth {
+    pub url: String,
+    pub healthy: bool,
+    pub last_check: std::time::Instant,
 }
 
 impl ServiceHealth {
