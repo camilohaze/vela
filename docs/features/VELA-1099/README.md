@@ -28,6 +28,12 @@ Implementar pattern matching avanzado con destructuring, spread operators y rang
    - AST nodes para RangePattern con bounds
    - Tests unitarios completos (5/5 pasan)
 
+4. **TASK-117E**: Implementar pattern en lambdas ✅
+   - Destructuring directo en parámetros de lambdas
+   - Soporte para patterns identifier y tuple
+   - Extensión de expression_to_pattern en parser
+   - Tests unitarios completos
+
 ## 🔨 Implementación
 Ver archivos en:
 - `compiler/src/ast.rs` - Nuevos nodos AST para patterns
@@ -36,10 +42,10 @@ Ver archivos en:
 - `docs/features/VELA-1099/` - Documentación completa
 
 ## 📊 Métricas
-- **Subtasks completadas:** 3/3
-- **Archivos creados/modificados:** 6
-- **Tests agregados:** 21 nuevos tests de pattern matching
-- **Tests pasando:** 21/21 (100%)
+- **Subtasks completadas:** 4/4
+- **Archivos creados/modificados:** 7
+- **Tests agregados:** 24 nuevos tests de pattern matching
+- **Tests pasando:** 24/24 (100%)
 
 ## ✅ Definición de Hecho
 - [x] Todas las Subtasks completadas
