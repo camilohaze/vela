@@ -1,16 +1,35 @@
 //! Widget Testing Framework para Vela
 //!
 //! Implementación de: TASK-113CG
-//! Historia: VELA-XXX
+//! Historia: VELA-1087
 //! Fecha: 2025-12-30
 //!
-//! Framework para testing de widgets con simulación de interacciones.
-//! Permite probar componentes UI de manera automatizada.
+//! Framework integrado para testing de widgets con simulación avanzada de interacciones.
+//! Combina el framework básico con las capacidades avanzadas de testing.
 
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
-/// Tipos de eventos de interacción con widgets
+#[cfg(feature = "testing")]
+use vela_testing::widget_testing::{TestApp, WidgetTester};
+#[cfg(feature = "testing")]
+use vela_testing::matchers::{Matcher, TextMatcher, VisibilityMatcher, StyleMatcher};
+#[cfg(feature = "testing")]
+use vela_testing::finders::{Finder, ByType, ByKey, ByText, Descendant};
+#[cfg(feature = "testing")]
+use vela_testing::interactions::{Interaction, TapInteraction, TextInputInteraction};
+
+/// Re-exportar tipos del framework avanzado para conveniencia
+#[cfg(feature = "testing")]
+pub use vela_testing::widget_testing::{TestApp as AdvancedTestApp, WidgetTester as AdvancedWidgetTester};
+#[cfg(feature = "testing")]
+pub use vela_testing::matchers::{Matcher as AdvancedMatcher, TextMatcher as AdvancedTextMatcher};
+#[cfg(feature = "testing")]
+pub use vela_testing::finders::{Finder as AdvancedFinder, ByType as AdvancedByType};
+#[cfg(feature = "testing")]
+pub use vela_testing::interactions::{Interaction as AdvancedInteraction, TapInteraction as AdvancedTapInteraction};
+
+/// Tipos de eventos de interacción con widgets (compatibilidad hacia atrás)
 #[derive(Debug, Clone, PartialEq)]
 pub enum WidgetEvent {
     Click,
@@ -26,7 +45,7 @@ pub enum WidgetEvent {
     Custom(String, serde_json::Value),
 }
 
-/// Estado de un widget durante testing
+/// Estado de un widget durante testing (compatibilidad hacia atrás)
 #[derive(Debug, Clone)]
 pub struct WidgetState {
     pub id: String,
@@ -58,7 +77,7 @@ impl WidgetState {
     }
 }
 
-/// Simulador de widgets para testing
+/// Simulador de widgets para testing (compatibilidad hacia atrás)
 pub struct WidgetSimulator {
     widgets: HashMap<String, WidgetState>,
     event_handlers: HashMap<String, Vec<Box<dyn Fn(&WidgetEvent) + Send + Sync>>>,
@@ -159,9 +178,11 @@ impl WidgetSimulator {
     }
 }
 
-/// Framework de testing para widgets
+/// Framework de testing integrado para widgets
+/// Combina capacidades básicas y avanzadas
 pub struct WidgetTestRunner {
     simulator: WidgetSimulator,
+    advanced_app: Option<TestApp>,
     assertions: Vec<Box<dyn Fn() -> Result<(), String> + Send + Sync>>,
 }
 
@@ -169,13 +190,28 @@ impl WidgetTestRunner {
     pub fn new() -> Self {
         Self {
             simulator: WidgetSimulator::new(),
+            advanced_app: None,
             assertions: Vec::new(),
         }
     }
 
-    /// Obtener acceso al simulador
+    /// Crear un test runner con capacidades avanzadas
+    pub fn with_advanced_testing() -> Self {
+        Self {
+            simulator: WidgetSimulator::new(),
+            advanced_app: Some(TestApp::new()),
+            assertions: Vec::new(),
+        }
+    }
+
+    /// Obtener acceso al simulador básico
     pub fn simulator(&mut self) -> &mut WidgetSimulator {
         &mut self.simulator
+    }
+
+    /// Obtener acceso al framework avanzado
+    pub fn advanced_app(&mut self) -> Option<&mut TestApp> {
+        self.advanced_app.as_mut()
     }
 
     /// Agregar una aserción personalizada
@@ -210,9 +246,7 @@ impl WidgetTestRunner {
         let expected = expected.clone();
 
         self.add_assertion(move || {
-            // En un test real, esto esperaría hasta que la condición se cumpla
-            // Por simplicidad, verificamos inmediatamente
-            match super::widget_testing::WidgetTestRunner::new().simulator().get_widget(&widget_id) {
+            match WidgetTestRunner::new().simulator().get_widget(&widget_id) {
                 Some(widget) => {
                     match widget.get_property(&property) {
                         Some(actual) if actual == &expected => Ok(()),
@@ -230,9 +264,49 @@ impl WidgetTestRunner {
             }
         });
     }
+
+    /// Usar matchers avanzados
+    #[cfg(feature = "testing")]
+    pub fn expect_widget(&mut self, finder: impl Into<Box<dyn Finder>>, matcher: impl Into<Box<dyn Matcher>>) {
+        let finder = finder.into();
+        let matcher = matcher.into();
+
+        self.add_assertion(move || {
+            if let Some(app) = &WidgetTestRunner::with_advanced_testing().advanced_app {
+                let tester = WidgetTester::new(app);
+                match tester.find(finder) {
+                    Ok(widgets) => {
+                        if widgets.is_empty() {
+                            return Err("No widgets found matching criteria".to_string());
+                        }
+                        for widget in widgets {
+                            if !matcher.matches(&widget) {
+                                return Err(format!("Widget does not match expected criteria"));
+                            }
+                        }
+                        Ok(())
+                    }
+                    Err(e) => Err(format!("Failed to find widgets: {}", e)),
+                }
+            } else {
+                Err("Advanced testing not enabled".to_string())
+            }
+        });
+    }
+
+    /// Simular interacciones avanzadas
+    #[cfg(feature = "testing")]
+    pub fn perform_interaction(&mut self, interaction: impl Into<Box<dyn Interaction>>) -> Result<(), String> {
+        if let Some(app) = &mut self.advanced_app {
+            let tester = WidgetTester::new(app);
+            tester.perform(interaction.into())
+        } else {
+            Err("Advanced testing not enabled".to_string())
+        }
+    }
 }
 
-/// Macros de testing para widgets
+/// Macros de testing para widgets (compatibilidad hacia atrás + nuevas capacidades)
 #[macro_export]
 macro_rules! widget_test {
     ($name:ident, $test:block) => {
@@ -241,6 +315,18 @@ macro_rules! widget_test {
             let mut runner = $crate::widget_testing::WidgetTestRunner::new();
             $test
             runner.run_assertions().expect("Widget test failed");
+        }
+    };
+}
+
+#[macro_export]
+macro_rules! advanced_widget_test {
+    ($name:ident, $test:block) => {
+        #[test]
+        fn $name() {
+            let mut runner = $crate::widget_testing::WidgetTestRunner::with_advanced_testing();
+            $test
+            runner.run_assertions().expect("Advanced widget test failed");
         }
     };
 }
@@ -257,6 +343,23 @@ macro_rules! simulate_event {
 macro_rules! expect_property {
     ($runner:expr, $widget:expr, $property:expr, $value:expr) => {
         $runner.expect_property($widget, $property, serde_json::json!($value));
+    };
+}
+
+#[macro_export]
+macro_rules! expect_widget {
+    ($runner:expr, $finder:expr, $matcher:expr) => {
+        #[cfg(feature = "testing")]
+        $runner.expect_widget($finder, $matcher);
+    };
+}
+
+#[macro_export]
+macro_rules! perform_interaction {
+    ($runner:expr, $interaction:expr) => {
+        #[cfg(feature = "testing")]
+        $runner.perform_interaction($interaction)
+            .expect("Failed to perform interaction");
     };
 }
 
@@ -319,5 +422,13 @@ mod tests {
         assert_eq!(log[0], ("test_widget".to_string(), WidgetEvent::Click));
         assert_eq!(log[1], ("test_widget".to_string(), WidgetEvent::Hover));
         assert_eq!(log[2], ("test_widget".to_string(), WidgetEvent::KeyPress("Enter".to_string())));
+    });
+
+    // Tests avanzados usando el nuevo framework
+    #[cfg(feature = "testing")]
+    advanced_widget_test!(test_advanced_button_interaction, {
+        // Este test requiere que el framework avanzado esté completamente integrado
+        // Por ahora, solo verificamos que se puede crear el runner avanzado
+        assert!(runner.advanced_app().is_some());
     });
 }

@@ -6348,6 +6348,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "vela-testing"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "futures 0.3.31",
+ "lazy_static",
+ "rand 0.8.5",
+ "reactive",
+ "regex",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 1.0.69",
+ "tokio",
+ "vela-runtime",
+]
+
+[[package]]
 name = "vela-tooling"
 version = "0.1.0"
 dependencies = [
@@ -6384,6 +6403,7 @@ dependencies = [
  "tokio-test",
  "uuid",
  "vela-state-management",
+ "vela-testing",
  "wasm-bindgen",
  "web-sys",
 ]

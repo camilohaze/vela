@@ -24,6 +24,7 @@ pub mod style;
 pub mod navigation;
 pub mod connect;
 pub mod select;
+pub mod widget_testing;
 
 // Reactive modules (enabled with "reactive" feature)
 #[cfg(feature = "reactive")]
@@ -74,6 +75,12 @@ pub use connect::{
 };
 pub use select::{
     SelectableWidget
+};
+#[cfg(feature = "testing")]
+pub use widget_testing::{
+    WidgetTestRunner, WidgetSimulator, WidgetState, WidgetEvent,
+    AdvancedTestApp, AdvancedWidgetTester, AdvancedMatcher, AdvancedTextMatcher,
+    AdvancedFinder, AdvancedByType, AdvancedInteraction, AdvancedTapInteraction
 };
 
 /// Initialize the UI framework

@@ -8,6 +8,7 @@ members = [
     "packages/devtools",
     "runtime",
     "packages/ui",
+    "packages/testing",
     "tooling",
     "packages/package",
     "packages/logging",
