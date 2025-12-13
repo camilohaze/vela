@@ -222,6 +222,7 @@ pub struct FunctionDeclaration {
     pub return_type: Option<TypeAnnotation>,
     pub body: BlockStatement,
     pub is_async: bool,
+    pub is_generator: bool, // true para async function* y function*
     pub generic_params: Vec<GenericParameter>,
 }
 
@@ -235,6 +236,7 @@ impl FunctionDeclaration {
         return_type: Option<TypeAnnotation>,
         body: BlockStatement,
         is_async: bool,
+        is_generator: bool,
         generic_params: Vec<GenericParameter>,
     ) -> Self {
         Self {
@@ -246,6 +248,7 @@ impl FunctionDeclaration {
             return_type,
             body,
             is_async,
+            is_generator,
             generic_params,
         }
     }
@@ -2007,6 +2010,7 @@ pub enum Expression {
     Await(AwaitExpression),
     Computed(ComputedExpression),
     Dispatch(DispatchExpression),
+    Yield(YieldExpression),
 }
 
 /// Implementación de métodos para Expression
@@ -2031,6 +2035,7 @@ impl Expression {
             Expression::Await(expr) => &expr.node.range,
             Expression::Computed(expr) => &expr.node.range,
             Expression::Dispatch(expr) => &expr.node.range,
+            Expression::Yield(expr) => &expr.node.range,
         }
     }
 }
@@ -2416,6 +2421,27 @@ impl AwaitExpression {
         Self {
             node: ASTNode::new(range),
             expression: Box::new(expression),
+        }
+    }
+}
+
+/// Yield expression para async generators.
+/// Ejemplos en Vela:
+/// - yield value
+/// - yield* iterable
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct YieldExpression {
+    pub node: ASTNode,
+    pub expression: Option<Box<Expression>>, // None para yield sin valor
+    pub is_delegate: bool, // true para yield*, false para yield
+}
+
+impl YieldExpression {
+    pub fn new(range: Range, expression: Option<Expression>, is_delegate: bool) -> Self {
+        Self {
+            node: ASTNode::new(range),
+            expression: expression.map(Box::new),
+            is_delegate,
         }
     }
 }
@@ -3011,7 +3037,8 @@ mod tests {
                 "void".to_string(),
             ))),
             body,
-            false,
+            false, // is_async
+            false, // is_generator
             vec![],
         );
 
@@ -3096,7 +3123,8 @@ mod tests {
                 "Number".to_string(),
             ))),
             body,
-            false,
+            false, // is_async
+            false, // is_generator
             vec![],
         );
 
@@ -3128,7 +3156,8 @@ mod tests {
                 ))],
             ))),
             body,
-            true, // async
+            true, // is_async
+            false, // is_generator
             vec![],
         );
 
@@ -3882,7 +3911,8 @@ mod tests {
                 "Number".to_string(),
             ))),
             body,
-            false,
+            false, // is_async
+            false, // is_generator
             vec![],
         );
 

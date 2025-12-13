@@ -60,6 +60,7 @@ fn create_function_declaration(
         return_type,
         empty_block(),
         is_async,
+        false, // is_generator
         vec![],
     )
 }

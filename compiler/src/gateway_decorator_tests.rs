@@ -56,6 +56,7 @@ fn test_basic_gateway_decorator() {
             vec![]
         ),
         is_async: true,
+        is_generator: false,
         generic_params: vec![],
     };
 
@@ -171,6 +172,7 @@ fn test_gateway_decorator_with_auth_and_middlewares() {
             vec![]
         ),
         is_async: true,
+        is_generator: false,
         generic_params: vec![],
     };
 
@@ -241,6 +243,7 @@ fn test_multiple_endpoints() {
             vec![]
         ),
         is_async: true,
+        is_generator: false,
         generic_params: vec![],
     };
 
@@ -291,6 +294,7 @@ fn test_multiple_endpoints() {
             vec![]
         ),
         is_async: true,
+        is_generator: false,
         generic_params: vec![],
     };
 
@@ -366,6 +370,7 @@ fn test_default_values() {
             vec![]
         ),
         is_async: false,
+        is_generator: false,
         generic_params: vec![],
     };
 

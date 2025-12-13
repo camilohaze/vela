@@ -217,6 +217,7 @@ impl Parser {
             return_type,
             body,
             is_async,
+            false, // is_generator - TODO: implementar parsing de async function*
             generic_params,
         );
 

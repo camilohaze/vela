@@ -256,6 +256,7 @@ mod tests {
                 vec![]
             ),
             is_async: false,
+            is_generator: false,
             generic_params: vec![],
         };
 
