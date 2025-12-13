@@ -28,6 +28,9 @@ pub mod resilience;
 // Observability
 pub mod observability;
 
+// Stream API for asynchronous data processing
+pub mod streams;
+
 // Modules
 // pub mod store;  // Movido a packages/state-management
 // pub mod action; // Movido a packages/state-management
