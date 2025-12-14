@@ -7,7 +7,7 @@
 //! Task: TASK-118
 //! Date: 2025-12-14
 
-use crate::ir::{IRModule, IRFunction, IRInstruction, IRType, IRExpression};
+use crate::ir::{IRModule, IRFunction, IRInstruction, IRType, IRExpr};
 use std::collections::HashMap;
 
 /// WebAssembly code generator
@@ -67,16 +67,16 @@ impl WasmGenerator {
             section.push(0x60); // func type
 
             // Parameter types
-            let param_count = function.parameters.len() as u32;
+            let param_count = function.params.len() as u32;
             section.extend_from_slice(&leb128_encode(param_count));
-            for param in &function.parameters {
-                section.push(self.map_type_to_wasm(&param.param_type));
+            for param in &function.params {
+                section.push(self.map_type_to_wasm(&param.ty));
             }
 
             // Return types
-            if let Some(return_type) = &function.return_type {
+            if function.return_type != IRType::Void {
                 section.push(0x01); // one return type
-                section.push(self.map_type_to_wasm(return_type));
+                section.push(self.map_type_to_wasm(&function.return_type));
             } else {
                 section.push(0x00); // no return type
             }
@@ -131,7 +131,7 @@ impl WasmGenerator {
 
         for global in &self.module.globals {
             // Global type
-            section.push(self.map_type_to_wasm(&global.global_type));
+            section.push(self.map_type_to_wasm(&global.ty));
             section.push(0x00); // mutable = false (for now)
 
             // Initialize with zero
@@ -153,26 +153,22 @@ impl WasmGenerator {
     fn generate_export_section(&mut self, wasm: &mut Vec<u8>) -> Result<(), WasmError> {
         let mut section = Vec::new();
 
-        // Export all public functions
-        let export_count = self.module.functions.iter()
-            .filter(|f| f.is_public)
-            .count() as u32;
+        // Export all functions
+        let export_count = self.module.functions.len() as u32;
         section.extend_from_slice(&leb128_encode(export_count));
 
         for function in &self.module.functions {
-            if function.is_public {
-                // Export name
-                let name_bytes = function.name.as_bytes();
-                section.extend_from_slice(&leb128_encode(name_bytes.len() as u32));
-                section.extend_from_slice(name_bytes);
+            // Export name
+            let name_bytes = function.name.as_bytes();
+            section.extend_from_slice(&leb128_encode(name_bytes.len() as u32));
+            section.extend_from_slice(name_bytes);
 
-                // Export type (function)
-                section.push(0x00); // function export
+            // Export type (function)
+            section.push(0x00); // function export
 
-                // Function index
-                let func_index = self.function_indices[&function.name];
-                section.extend_from_slice(&leb128_encode(func_index));
-            }
+            // Function index
+            let func_index = self.function_indices[&function.name];
+            section.extend_from_slice(&leb128_encode(func_index));
         }
 
         self.add_section(wasm, 0x07, &section); // Export section
@@ -219,63 +215,56 @@ impl WasmGenerator {
     /// Generate single instruction
     fn generate_instruction(&self, instruction: &IRInstruction, body: &mut Vec<u8>) -> Result<(), WasmError> {
         match instruction {
-            IRInstruction::Const(value) => {
+            IRInstruction::LoadConst(value) => {
                 match value {
-                    IRExpression::Int32(val) => {
+                    crate::ir::Value::Int(val) => {
                         body.push(0x41); // i32.const
                         body.extend_from_slice(&leb128_encode(*val as u32));
                     }
-                    IRExpression::Int64(val) => {
-                        body.push(0x42); // i64.const
-                        body.extend_from_slice(&leb128_encode(*val));
-                    }
-                    IRExpression::Float32(val) => {
-                        body.push(0x43); // f32.const
-                        body.extend_from_slice(&val.to_le_bytes());
-                    }
-                    IRExpression::Float64(val) => {
+                    crate::ir::Value::Float(val) => {
                         body.push(0x44); // f64.const
                         body.extend_from_slice(&val.to_le_bytes());
                     }
+                    crate::ir::Value::Bool(val) => {
+                        body.push(0x41); // i32.const
+                        body.push(if *val { 1 } else { 0 });
+                    }
+                    _ => {} // Other constants not supported yet
                 }
             }
-            IRInstruction::Add => body.push(0x6A), // i32.add
-            IRInstruction::Sub => body.push(0x6B), // i32.sub
-            IRInstruction::Mul => body.push(0x6C), // i32.mul
-            IRInstruction::Div => body.push(0x6D), // i32.div_s
+            IRInstruction::BinaryOp(op) => {
+                match op {
+                    crate::ir::BinaryOp::Add => body.push(0x6A), // i32.add
+                    crate::ir::BinaryOp::Sub => body.push(0x6B), // i32.sub
+                    crate::ir::BinaryOp::Mul => body.push(0x6C), // i32.mul
+                    crate::ir::BinaryOp::Div => body.push(0x6D), // i32.div_s
+                    _ => {} // Other ops not supported yet
+                }
+            }
             IRInstruction::Return => body.push(0x0F), // return
-            IRInstruction::Call(function_name) => {
+            IRInstruction::Call { function, arg_count: _ } => {
                 body.push(0x10); // call
-                if let Some(&func_index) = self.function_indices.get(function_name) {
+                if let Some(&func_index) = self.function_indices.get(function) {
                     body.extend_from_slice(&leb128_encode(func_index));
                 } else {
-                    return Err(WasmError::UndefinedFunction(function_name.clone()));
+                    return Err(WasmError::UndefinedFunction(function.clone()));
                 }
             }
-            IRInstruction::LocalGet(index) => {
-                body.push(0x20); // local.get
-                body.extend_from_slice(&leb128_encode(*index));
-            }
-            IRInstruction::LocalSet(index) => {
-                body.push(0x21); // local.set
-                body.extend_from_slice(&leb128_encode(*index));
-            }
-            IRInstruction::GlobalGet(name) => {
-                body.push(0x23); // global.get
-                if let Some(&global_index) = self.global_indices.get(name) {
-                    body.extend_from_slice(&leb128_encode(global_index));
-                } else {
-                    return Err(WasmError::UndefinedGlobal(name.clone()));
+            IRInstruction::LoadVar(name) => {
+                // For now, assume local variables
+                if let Some(&local_index) = self.function_indices.get(name) {
+                    body.push(0x20); // local.get
+                    body.extend_from_slice(&leb128_encode(local_index));
                 }
             }
-            IRInstruction::GlobalSet(name) => {
-                body.push(0x24); // global.set
-                if let Some(&global_index) = self.global_indices.get(name) {
-                    body.extend_from_slice(&leb128_encode(global_index));
-                } else {
-                    return Err(WasmError::UndefinedGlobal(name.clone()));
+            IRInstruction::StoreVar(name) => {
+                // For now, assume local variables
+                if let Some(&local_index) = self.function_indices.get(name) {
+                    body.push(0x21); // local.set
+                    body.extend_from_slice(&leb128_encode(local_index));
                 }
             }
+            _ => {} // Other instructions not supported yet
         }
         Ok(())
     }
@@ -283,11 +272,13 @@ impl WasmGenerator {
     /// Map Vela IR type to WASM type
     fn map_type_to_wasm(&self, ir_type: &IRType) -> u8 {
         match ir_type {
-            IRType::I32 => 0x7F, // i32
-            IRType::I64 => 0x7E, // i64
-            IRType::F32 => 0x7D, // f32
-            IRType::F64 => 0x7C, // f64
+            IRType::Int => 0x7F, // i32
+            IRType::Float => 0x7C, // f64
+            IRType::Bool => 0x7F, // i32 (boolean as i32)
+            IRType::String => panic!("String type needs special handling in WASM"),
             IRType::Void => panic!("Void type in WASM mapping"),
+            IRType::Array(_) => panic!("Array type not yet supported in WASM"),
+            IRType::Object(_) => panic!("Object type not yet supported in WASM"),
         }
     }
 
@@ -339,7 +330,7 @@ impl std::error::Error for WasmError {}
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ir::{IRModule, IRFunction, IRParameter, IRInstruction, IRType, IRExpression};
+    use crate::ir::{IRModule, IRFunction, IRInstruction, IRType};
 
     #[test]
     fn test_wasm_generator_creation() {
@@ -347,6 +338,7 @@ mod tests {
             name: "test".to_string(),
             functions: vec![],
             globals: vec![],
+            position: None,
         };
         let generator = WasmGenerator::new(module);
         assert_eq!(generator.next_function_index, 0);
@@ -354,27 +346,16 @@ mod tests {
 
     #[test]
     fn test_simple_function_generation() {
-        let function = IRFunction {
-            name: "add".to_string(),
-            parameters: vec![
-                IRParameter { name: "a".to_string(), param_type: IRType::I32 },
-                IRParameter { name: "b".to_string(), param_type: IRType::I32 },
-            ],
-            return_type: Some(IRType::I32),
-            body: vec![
-                IRInstruction::LocalGet(0), // a
-                IRInstruction::LocalGet(1), // b
-                IRInstruction::Add,
-                IRInstruction::Return,
-            ],
-            is_public: true,
-        };
+        let mut function = IRFunction::new("add".to_string(), IRType::Int);
+        function.add_param("a".to_string(), IRType::Int);
+        function.add_param("b".to_string(), IRType::Int);
+        function.add_instruction(IRInstruction::LoadVar("a".to_string()));
+        function.add_instruction(IRInstruction::LoadVar("b".to_string()));
+        function.add_instruction(IRInstruction::BinaryOp(crate::ir::BinaryOp::Add));
+        function.add_instruction(IRInstruction::Return);
 
-        let module = IRModule {
-            name: "test".to_string(),
-            functions: vec![function],
-            globals: vec![],
-        };
+        let mut module = IRModule::new("test".to_string());
+        module.add_function(function);
 
         let mut generator = WasmGenerator::new(module);
         let result = generator.generate();
