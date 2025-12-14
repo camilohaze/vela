@@ -206,4 +206,4 @@ Results: 5 passed, 1 failed (15ms)
 ## 🔗 Referencias
 - **Jira:** [TASK-113B](https://velalang.atlassian.net/browse/TASK-113B)
 - **Historia:** [VELA-1130](https://velalang.atlassian.net/browse/VELA-1130)
-- **Código:** `src/testing/runner.vela`
+- **Código:** `stdlib/src/testing/runner.vela`

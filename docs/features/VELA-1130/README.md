@@ -61,7 +61,7 @@ Implementar un framework de testing completo para Vela con compatibilidad total 
 ### Arquitectura del Framework
 
 ```
-src/testing/
+stdlib/src/testing/
 ├── api.vela           # API de testing (describe/it/expect)
 ├── runner.vela        # Test runner automático
 ├── assertions.vela    # Librería de assertions (25+ matchers)
@@ -238,10 +238,10 @@ results = await runner.runPattern("Calculator.*add")
 - [Configuración del Runner](docs/guides/test-runner-config.md)
 
 ### Código Fuente
-- `src/testing/api.vela` - API principal
-- `src/testing/runner.vela` - Test runner
-- `src/testing/assertions.vela` - Librería de assertions
-- `src/testing/coverage.vela` - Sistema de cobertura
+- `stdlib/src/testing/api.vela` - API principal
+- `stdlib/src/testing/runner.vela` - Test runner
+- `stdlib/src/testing/assertions.vela` - Librería de assertions
+- `stdlib/src/testing/coverage.vela` - Sistema de cobertura
 
 ### Ejemplos
 - `examples/testing/basic-tests.vela` - Tests básicos
@@ -283,5 +283,5 @@ results = await runner.runPattern("Calculator.*add")
 
 ## 🔗 Referencias
 - **Jira:** [VELA-1130](https://velalang.atlassian.net/browse/VELA-1130)
-- **Código principal:** `src/testing/`
+- **Código principal:** `stdlib/src/testing/`
 - **Ejemplos:** `examples/testing/`

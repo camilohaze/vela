@@ -68,8 +68,8 @@ cov.generateReports("output")
 
 #### Ejemplo de Uso Básico
 ```vela
-import 'testing:api'
-import 'testing:coverage'
+import 'system:testing:api'
+import 'system:testing:coverage'
 
 describe("Mi Suite de Tests", () => {
     beforeAll(() => {
@@ -258,7 +258,7 @@ fn classify(n: Number) -> String {
 - **Jira:** [VELA-1130](https://velalang.atlassian.net/browse/VELA-1130)
 - **Historia:** [VELA-1130](https://velalang.atlassian.net/browse/VELA-1130)
 - **Archivos generados:**
-  - `src/testing/coverage.vela` - Implementación principal
+  - `stdlib/src/testing/coverage.vela` - Implementación principal
   - `examples/testing/coverage_example.vela` - Ejemplos completos
   - `tests/unit/test_coverage.vela` - Tests unitarios
   - `docs/features/VELA-1130/TASK-113D.md` - Esta documentación

@@ -173,10 +173,10 @@ describe("New Feature Validation", () => {
 ### Dependencias y Requisitos
 
 #### Dependencias del Framework
-- `src/testing/api.vela` - API de testing
-- `src/testing/assertions.vela` - Librería de assertions
-- `src/testing/coverage.vela` - Sistema de cobertura
-- `src/testing/runner.vela` - Test runner
+- `stdlib/src/testing/api.vela` - API de testing
+- `stdlib/src/testing/assertions.vela` - Librería de assertions
+- `stdlib/src/testing/coverage.vela` - Sistema de cobertura
+- `stdlib/src/testing/runner.vela` - Test runner
 
 #### Requisitos de Ejecución
 - Entorno Vela configurado
@@ -219,10 +219,10 @@ describe("New Feature Validation", () => {
 - [Sistema de Cobertura](docs/features/coverage-system.md)
 
 #### 🔗 Referencias de Código
-- `src/testing/api.vela` - Implementación de API
-- `src/testing/runner.vela` - Implementación del runner
-- `src/testing/assertions.vela` - Librería de assertions
-- `src/testing/coverage.vela` - Sistema de cobertura
+- `stdlib/src/testing/api.vela` - Implementación de API
+- `stdlib/src/testing/runner.vela` - Implementación del runner
+- `stdlib/src/testing/assertions.vela` - Librería de assertions
+- `stdlib/src/testing/coverage.vela` - Sistema de cobertura
 
 #### 📋 Jira Links
 - **TASK-113E:** [VELA-1130 - TASK-113E](https://velalang.atlassian.net/browse/VELA-1130)

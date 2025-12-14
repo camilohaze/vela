@@ -12,9 +12,9 @@ Tests que validan el funcionamiento del sistema de cobertura:
 - Reportes (JSON, HTML, LCOV)
 """
 
-import 'testing:api'
-import 'testing:assertions'
-import 'testing:coverage'
+import 'system:testing:api'
+import 'system:testing:assertions'
+import 'system:testing:coverage'
 
 # =============================================================================
 # TESTS PARA CODEINSTRUMENTER

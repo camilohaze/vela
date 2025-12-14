@@ -9,10 +9,10 @@ Estos tests validan que el propio framework de testing funciona correctamente.
 Son tests que se ejecutan usando el framework que están testeando.
 """
 
-import 'testing:api'
-import 'testing:runner'
-import 'testing:assertions'
-import 'testing:coverage'
+import 'system:testing:api'
+import 'system:testing:runner'
+import 'system:testing:assertions'
+import 'system:testing:coverage'
 
 # =============================================================================
 # META-TESTS PARA EL API DE TESTING

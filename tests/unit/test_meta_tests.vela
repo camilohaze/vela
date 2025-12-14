@@ -9,8 +9,8 @@ Tests que validan que los meta-tests funcionan correctamente.
 Estos tests verifican que el sistema de meta-tests puede validar el framework.
 """
 
-import 'testing:api'
-import 'testing:assertions'
+import 'system:testing:api'
+import 'system:testing:assertions'
 import 'examples:testing:meta_tests'
 
 # =============================================================================

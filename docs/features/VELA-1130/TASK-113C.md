@@ -201,4 +201,4 @@ expect(operation).toCompleteFasterThan(50)  // ms
 ## 🔗 Referencias
 - **Jira:** [TASK-113C](https://velalang.atlassian.net/browse/TASK-113C)
 - **Historia:** [VELA-1130](https://velalang.atlassian.net/browse/VELA-1130)
-- **Código:** `src/testing/assertions.vela`
+- **Código:** `stdlib/src/testing/assertions.vela`

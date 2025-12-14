@@ -9,10 +9,10 @@ Este archivo demuestra cómo usar el sistema de cobertura de código
 para medir la calidad de los tests en Vela.
 """
 
-import 'testing:api'
-import 'testing:runner'
-import 'testing:assertions'
-import 'testing:coverage'
+import 'system:testing:api'
+import 'system:testing:runner'
+import 'system:testing:assertions'
+import 'system:testing:coverage'
 
 # =============================================================================
 # EJEMPLO 1: COBERTURA BÁSICA DE FUNCIONES

@@ -120,4 +120,4 @@ describe("Calculator", () => {
 ## 🔗 Referencias
 - **Jira:** [TASK-113A](https://velalang.atlassian.net/browse/TASK-113A)
 - **Historia:** [VELA-1130](https://velalang.atlassian.net/browse/VELA-1130)
-- **Código:** `src/testing/api.vela`
+- **Código:** `stdlib/src/testing/api.vela`
