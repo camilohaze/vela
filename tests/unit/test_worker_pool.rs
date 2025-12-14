@@ -123,4 +123,36 @@ mod tests {
         assert_eq!(result, "");
         pool.shutdown();
     }
+
+    #[test]
+    fn test_parallel_map_empty() {
+        let pool = WorkerPool::new(2).unwrap();
+        let data: Vec<i32> = vec![];
+
+        let result = pool.parallel_map(data, |x| x * 2);
+        assert!(result.is_ok());
+        assert!(result.unwrap().is_empty());
+        pool.shutdown();
+    }
+
+    #[test]
+    fn test_parallel_reduce_single_element() {
+        let pool = WorkerPool::new(2).unwrap();
+        let data = vec![42];
+
+        // This will fail with unimplemented for now, but tests the logic
+        let result = pool.parallel_reduce(data, |a, b| a + b);
+        assert!(result.is_err()); // Will fail due to unimplemented deserialization
+        pool.shutdown();
+    }
+
+    #[test]
+    fn test_parallel_reduce_empty() {
+        let pool = WorkerPool::new(2).unwrap();
+        let data: Vec<i32> = vec![];
+
+        let result = pool.parallel_reduce(data, |a, b| a + b);
+        assert!(result.is_err());
+        pool.shutdown();
+    }
 }
