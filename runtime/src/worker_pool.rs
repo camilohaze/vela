@@ -317,9 +317,124 @@ impl Default for WorkerPool {
     }
 }
 
-impl Drop for WorkerPool {
-    fn drop(&mut self) {
-        self.shutdown();
+/// Task priority levels
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum Priority {
+    Low = 0,
+    Normal = 1,
+    High = 2,
+    Critical = 3,
+}
+
+/// A scheduled task with priority
+pub struct ScheduledTask {
+    priority: Priority,
+    task: Task,
+}
+
+/// Task scheduler for distributing work among workers with priority support
+pub struct TaskScheduler {
+    worker_pool: WorkerPool,
+    task_queue: Arc<std::sync::Mutex<std::collections::BinaryHeap<ScheduledTask>>>,
+    scheduler_handle: Option<std::thread::JoinHandle<()>>,
+    is_running: Arc<std::sync::atomic::AtomicBool>,
+}
+
+impl ScheduledTask {
+    fn new(priority: Priority, task: Task) -> Self {
+        ScheduledTask { priority, task }
+    }
+}
+
+// Implement Ord for BinaryHeap (max-heap by priority)
+impl PartialOrd for ScheduledTask {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for ScheduledTask {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.priority.cmp(&other.priority)
+    }
+}
+
+impl TaskScheduler {
+    /// Create a new task scheduler with the specified worker pool
+    pub fn new(worker_pool: WorkerPool) -> Self {
+        let task_queue = Arc::new(std::sync::Mutex::new(std::collections::BinaryHeap::new()));
+        let is_running = Arc::new(std::sync::atomic::AtomicBool::new(true));
+
+        let task_queue_clone = Arc::clone(&task_queue);
+        let is_running_clone = Arc::clone(&is_running);
+        let worker_pool_clone = worker_pool.task_sender.clone();
+
+        let scheduler_handle = Some(std::thread::spawn(move || {
+            while is_running_clone.load(Ordering::SeqCst) {
+                let task = {
+                    let mut queue = task_queue_clone.lock().unwrap();
+                    queue.pop()
+                };
+
+                if let Some(scheduled_task) = task {
+                    // Send task to worker pool
+                    let _ = worker_pool_clone.send(scheduled_task.task);
+                } else {
+                    // No tasks, sleep briefly
+                    std::thread::sleep(std::time::Duration::from_millis(10));
+                }
+            }
+        }));
+
+        TaskScheduler {
+            worker_pool,
+            task_queue,
+            scheduler_handle,
+            is_running,
+        }
+    }
+
+    /// Schedule a task with the specified priority
+    pub fn schedule_task(&self, priority: Priority, task: Task) -> Result<()> {
+        if !self.is_running.load(Ordering::SeqCst) {
+            return Err(WorkerPoolError::PoolFull);
+        }
+
+        let scheduled_task = ScheduledTask::new(priority, task);
+        let mut queue = self.task_queue.lock().unwrap();
+        queue.push(scheduled_task);
+
+        Ok(())
+    }
+
+    /// Schedule a custom task with priority
+    pub fn schedule_custom<F>(&self, priority: Priority, function: F) -> Result<()>
+    where
+        F: FnOnce() -> Result<()> + Send + 'static,
+    {
+        let task = Task::Custom {
+            function: Box::new(function),
+        };
+        self.schedule_task(priority, task)
+    }
+
+    /// Get the number of queued tasks
+    pub fn queued_tasks(&self) -> usize {
+        self.task_queue.lock().unwrap().len()
+    }
+
+    /// Shutdown the scheduler
+    pub fn shutdown(&self) {
+        self.is_running.store(false, Ordering::SeqCst);
+        self.worker_pool.shutdown();
+    }
+
+    /// Wait for scheduler to finish
+    pub fn wait(self) {
+        if let Some(handle) = self.scheduler_handle {
+            handle.join().unwrap();
+        }
+        self.worker_pool.wait();
     }
 }
 
