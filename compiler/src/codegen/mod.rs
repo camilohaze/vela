@@ -17,10 +17,14 @@ pub mod ast_to_ir;
 pub mod ir_to_bytecode;
 pub mod ir_to_wasm;
 pub mod js_wasm_glue;
+#[cfg(feature = "llvm_backend")]
+pub mod ir_to_llvm;
 pub mod main;
 
 pub use ast_to_ir::ASTToIRConverter;
 pub use ir_to_bytecode::{IRToBytecodeGenerator, IROptimizer};
 pub use ir_to_wasm::{WasmGenerator, WasmError};
 pub use js_wasm_glue::{JSGlueGenerator, TypeScriptGenerator};
+#[cfg(feature = "llvm_backend")]
+pub use ir_to_llvm::LLVMGenerator;
 pub use main::CodeGenerator;
