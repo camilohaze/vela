@@ -1,0 +1,70 @@
+name: Deploy Marketing Site
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'website/**'
+      - '.github/workflows/deploy-website.yml'
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'website/**'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+        cache-dependency-path: website/package-lock.json
+
+    - name: Install dependencies
+      working-directory: website
+      run: npm ci
+
+    - name: Build website
+      working-directory: website
+      run: npm run build
+
+    - name: Deploy to GitHub Pages
+      if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+      uses: peaceiris/actions-gh-pages@v3
+      with:
+        github_token: ${{ secrets.GITHUB_TOKEN }}
+        publish_dir: ./website/build
+        cname: velalang.org
+
+    - name: Comment PR with preview link
+      if: github.event_name == 'pull_request'
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const { exec } = require('child_process');
+          const { promisify } = require('util');
+          const execAsync = promisify(exec);
+
+          try {
+            // Get the PR number
+            const prNumber = context.issue.number;
+
+            // Build preview URL
+            const previewUrl = `https://velalang.github.io/vela/website-pr-preview/${prNumber}/`;
+
+            // Comment on PR
+            await github.rest.issues.createComment({
+              issue_number: prNumber,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `🌐 **Marketing Site Preview**\n\nYour website changes are available for preview at: ${previewUrl}`
+            });
+          } catch (error) {
+            console.log('Could not create PR comment:', error.message);
+          }
