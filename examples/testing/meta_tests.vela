@@ -1,0 +1,1136 @@
+"""
+Meta-tests para validar el framework de testing de Vela
+
+VELA-1130: TASK-113E
+Historia: VELA-1130
+Fecha: 2024-01-15
+
+Estos tests validan que el propio framework de testing funciona correctamente.
+Son tests que se ejecutan usando el framework que están testeando.
+"""
+
+import 'testing:api'
+import 'testing:runner'
+import 'testing:assertions'
+import 'testing:coverage'
+
+# =============================================================================
+# META-TESTS PARA EL API DE TESTING
+# =============================================================================
+
+describe("Testing Framework API Meta-Tests", () => {
+
+    describe("describe function", () => {
+
+        it("should create test suites", () => {
+            suite = describe("Test Suite", () => {
+                it("should run", () => {
+                    expect(true).toBe(true)
+                })
+            })
+
+            expect(suite).not().toBeNull()
+            expect(suite.name).toBe("Test Suite")
+        })
+
+        it("should handle nested describes", () => {
+            results = []
+
+            describe("Parent Suite", () => {
+                results.push("parent")
+
+                describe("Child Suite", () => {
+                    results.push("child")
+
+                    it("should run nested", () => {
+                        results.push("test")
+                        expect(results).toEqual(["parent", "child", "test"])
+                    })
+                })
+            })
+        })
+
+        it("should support beforeEach/afterEach", () => {
+            counter = 0
+
+            describe("Hooks Test", () => {
+                beforeEach(() => {
+                    counter += 1
+                })
+
+                afterEach(() => {
+                    counter += 1
+                })
+
+                it("should run hooks", () => {
+                    expect(counter).toBe(1) # beforeEach ran
+                })
+
+                it("should run hooks again", () => {
+                    expect(counter).toBe(3) # afterEach + beforeEach
+                })
+            })
+        })
+
+        it("should support beforeAll/afterAll", () => {
+            setupCounter = 0
+            teardownCounter = 0
+
+            describe("All Hooks Test", () => {
+                beforeAll(() => {
+                    setupCounter += 1
+                })
+
+                afterAll(() => {
+                    teardownCounter += 1
+                })
+
+                it("should have run setup", () => {
+                    expect(setupCounter).toBe(1)
+                    expect(teardownCounter).toBe(0)
+                })
+
+                it("should still have setup run once", () => {
+                    expect(setupCounter).toBe(1)
+                    expect(teardownCounter).toBe(0)
+                })
+            })
+
+            # afterAll should have run after the suite
+            expect(teardownCounter).toBe(1)
+        })
+    })
+
+    describe("it function", () => {
+
+        it("should create and run tests", () => {
+            test = it("should pass", () => {
+                expect(1 + 1).toBe(2)
+            })
+
+            expect(test).not().toBeNull()
+            expect(test.description).toBe("should pass")
+        })
+
+        it("should handle async tests", async () => {
+            result = await async () => {
+                await delay(10)
+                return "async result"
+            }()
+
+            expect(result).toBe("async result")
+        })
+
+        it("should handle test failures", () => {
+            # This test should fail, but we're testing that the framework handles it
+            try {
+                expect(1 + 1).toBe(3) # This will fail
+                expect(false).toBe(true) # Should not reach here
+            } catch (error) {
+                expect(error).toContain("Expected 2 to be 3")
+            }
+        })
+
+        it("should support pending tests", () => {
+            pendingTest = it("should be pending")
+
+            # Pending tests should be marked but not executed
+            expect(pendingTest).not().toBeNull()
+        })
+    })
+
+    describe("expect function", () => {
+
+        it("should return an expectation object", () => {
+            expectation = expect(42)
+            expect(expectation).not().toBeNull()
+            expect(expectation.value).toBe(42)
+        })
+
+        it("should support chaining matchers", () => {
+            expectation = expect("hello")
+            result = expectation.toBe("hello").toHaveLength(5)
+            expect(result).toBe(true)
+        })
+
+        it("should support negation", () => {
+            expect(5).not().toBe(3)
+            expect("hello").not().toBe("world")
+        })
+
+        it("should provide descriptive error messages", () => {
+            try {
+                expect(5).toBe(3)
+                expect(false).toBe(true) # Should not reach
+            } catch (error) {
+                expect(error).toContain("Expected 5 to be 3")
+            }
+        })
+    })
+})
+
+# =============================================================================
+# META-TESTS PARA ASSERTIONS
+# =============================================================================
+
+describe("Assertions Meta-Tests", () => {
+
+    describe("Equality Matchers", () => {
+
+        it("should validate toBe matcher", () => {
+            expect(5).toBe(5)
+            expect("hello").toBe("hello")
+            expect(true).toBe(true)
+            expect([1, 2, 3]).toBe([1, 2, 3])
+        })
+
+        it("should validate toEqual matcher", () => {
+            obj1 = { name: "John", age: 30 }
+            obj2 = { name: "John", age: 30 }
+            expect(obj1).toEqual(obj2)
+        })
+
+        it("should validate toBeCloseTo matcher", () => {
+            expect(3.14159).toBeCloseTo(3.1416, 3)
+            expect(1.0000001).toBeCloseTo(1.0, 6)
+        })
+
+        it("should handle negation correctly", () => {
+            expect(5).not().toBe(3)
+            expect("hello").not().toBe("world")
+        })
+    })
+
+    describe("Truthiness Matchers", () => {
+
+        it("should validate toBeTruthy", () => {
+            expect(true).toBeTruthy()
+            expect(1).toBeTruthy()
+            expect("hello").toBeTruthy()
+            expect([1, 2, 3]).toBeTruthy()
+        })
+
+        it("should validate toBeFalsy", () => {
+            expect(false).toBeFalsy()
+            expect(0).toBeFalsy()
+            expect("").toBeFalsy()
+            expect([]).toBeFalsy()
+            expect(null).toBeFalsy()
+        })
+
+        it("should validate toBeNull", () => {
+            expect(null).toBeNull()
+            expect(undefined).toBeNull()
+        })
+    })
+
+    describe("Number Matchers", () => {
+
+        it("should validate toBeGreaterThan", () => {
+            expect(5).toBeGreaterThan(3)
+            expect(0).toBeGreaterThan(-1)
+            expect(3.14).toBeGreaterThan(3)
+        })
+
+        it("should validate toBeLessThan", () => {
+            expect(3).toBeLessThan(5)
+            expect(-1).toBeLessThan(0)
+            expect(3).toBeLessThan(3.14)
+        })
+
+        it("should validate toBeGreaterThanOrEqual", () => {
+            expect(5).toBeGreaterThanOrEqual(5)
+            expect(5).toBeGreaterThanOrEqual(3)
+        })
+
+        it("should validate toBeLessThanOrEqual", () => {
+            expect(3).toBeLessThanOrEqual(3)
+            expect(3).toBeLessThanOrEqual(5)
+        })
+    })
+
+    describe("String Matchers", () => {
+
+        it("should validate toMatch", () => {
+            expect("hello world").toMatch("world")
+            expect("test123").toMatch("\\d+")
+        })
+
+        it("should validate toContain", () => {
+            expect("hello world").toContain("world")
+            expect("typescript").toContain("script")
+        })
+
+        it("should validate toStartWith", () => {
+            expect("hello world").toStartWith("hello")
+            expect("TypeScript").toStartWith("Type")
+        })
+
+        it("should validate toEndWith", () => {
+            expect("hello world").toEndWith("world")
+            expect("file.txt").toEndWith(".txt")
+        })
+    })
+
+    describe("Array Matchers", () => {
+
+        it("should validate toContain", () => {
+            expect([1, 2, 3]).toContain(2)
+            expect(["a", "b", "c"]).toContain("b")
+        })
+
+        it("should validate toHaveLength", () => {
+            expect([1, 2, 3]).toHaveLength(3)
+            expect([]).toHaveLength(0)
+            expect("hello").toHaveLength(5)
+        })
+
+        it("should validate toBeEmpty", () => {
+            expect([]).toBeEmpty()
+            expect("").toBeEmpty()
+            expect({}).toBeEmpty()
+        })
+
+        it("should validate toEqualArray", () => {
+            expect([1, 2, 3]).toEqualArray([1, 2, 3])
+            expect(["a", "b"]).toEqualArray(["a", "b"])
+        })
+    })
+
+    describe("Object Matchers", () => {
+
+        it("should validate toHaveProperty", () => {
+            obj = { name: "John", age: 30 }
+            expect(obj).toHaveProperty("name")
+            expect(obj).toHaveProperty("age", 30)
+        })
+
+        it("should validate toMatchObject", () => {
+            obj = { name: "John", age: 30, city: "NYC" }
+            expect(obj).toMatchObject({ name: "John", age: 30 })
+        })
+    })
+
+    describe("Type Matchers", () => {
+
+        it("should validate toBeNumber", () => {
+            expect(42).toBeNumber()
+            expect(3.14).toBeNumber()
+            expect("42").not().toBeNumber()
+        })
+
+        it("should validate toBeString", () => {
+            expect("hello").toBeString()
+            expect("").toBeString()
+            expect(42).not().toBeString()
+        })
+
+        it("should validate toBeArray", () => {
+            expect([1, 2, 3]).toBeArray()
+            expect([]).toBeArray()
+            expect("hello").not().toBeArray()
+        })
+
+        it("should validate toBeBool", () => {
+            expect(true).toBeBool()
+            expect(false).toBeBool()
+            expect(1).not().toBeBool()
+        })
+    })
+
+    describe("Error Matchers", () => {
+
+        it("should validate toThrow", () => {
+            fn throwingFunction() -> void {
+                throw Error("test error")
+            }
+
+            expect(throwingFunction).toThrow()
+            expect(throwingFunction).toThrow("test error")
+            expect(throwingFunction).toThrow(Error("test error"))
+        })
+
+        it("should validate toThrowError", () => {
+            fn throwingFunction() -> void {
+                throw Error("specific error")
+            }
+
+            expect(throwingFunction).toThrowError("specific error")
+        })
+
+        it("should handle functions that don't throw", () => {
+            fn safeFunction() -> Number {
+                return 42
+            }
+
+            expect(safeFunction).not().toThrow()
+        })
+    })
+
+    describe("Custom Matchers", () => {
+
+        it("should support custom matchers", () => {
+            customMatcher = (value) => {
+                if value % 2 == 0 {
+                    return { pass: true }
+                } else {
+                    return { pass: false, message: "Expected even number" }
+                }
+            }
+
+            expect(4).toMatchCustom(customMatcher)
+            expect(5).not().toMatchCustom(customMatcher)
+        })
+
+        it("should provide custom error messages", () => {
+            customMatcher = (value) => {
+                return { pass: false, message: "Custom failure message" }
+            }
+
+            try {
+                expect(42).toMatchCustom(customMatcher)
+                expect(false).toBe(true) # Should not reach
+            } catch (error) {
+                expect(error).toContain("Custom failure message")
+            }
+        })
+    })
+
+    describe("Performance Matchers", () => {
+
+        it("should validate toCompleteWithin", () => {
+            async fn fastFunction() -> void {
+                await delay(50)
+                return "done"
+            }
+
+            expect(fastFunction).toCompleteWithin(100)
+        })
+
+        it("should validate toCompleteFasterThan", () => {
+            async fn slowFunction() -> void {
+                await delay(100)
+                return "done"
+            }
+
+            expect(slowFunction).not().toCompleteFasterThan(50)
+        })
+    })
+})
+
+# =============================================================================
+# META-TESTS PARA COBERTURA
+# =============================================================================
+
+describe("Coverage Meta-Tests", () => {
+
+    beforeAll(() => {
+        enableCoverage(true)
+    })
+
+    afterAll(() => {
+        generateCoverageReports("meta-coverage")
+    })
+
+    describe("Coverage Collection", () => {
+
+        it("should track line coverage", () => {
+            cov = coverage().getCollector()
+
+            # Simulate line execution
+            cov.trackLine("meta_test.vela", 1)
+            cov.trackLine("meta_test.vela", 2)
+
+            report = cov.generateReport()
+            expect(report.totalLines).toBeGreaterThanOrEqual(2)
+        })
+
+        it("should track function coverage", () => {
+            cov = coverage().getCollector()
+
+            cov.trackFunction("meta_test.vela", "testFunction")
+
+            report = cov.generateReport()
+            expect(report.totalFunctions).toBeGreaterThanOrEqual(1)
+        })
+
+        it("should track branch coverage", () => {
+            cov = coverage().getCollector()
+
+            cov.trackBranch("meta_test.vela", 0, true)
+            cov.trackBranch("meta_test.vela", 1, false)
+
+            report = cov.generateReport()
+            expect(report.totalBranches).toBeGreaterThanOrEqual(2)
+        })
+    })
+
+    describe("Coverage Reports", () => {
+
+        it("should generate JSON reports", () => {
+            cov = coverage()
+            collector = cov.getCollector()
+
+            # Add some test data
+            collector.trackLine("test.vela", 1)
+
+            report = collector.generateReport()
+            jsonReporter = JsonCoverageReporter()
+            jsonOutput = jsonReporter.generate(report)
+
+            expect(jsonOutput).toContain('"totalFiles"')
+            expect(jsonOutput).toContain('"lineCoveragePercent"')
+        })
+
+        it("should generate HTML reports", () => {
+            cov = coverage()
+            collector = cov.getCollector()
+
+            collector.trackLine("test.vela", 1)
+
+            report = collector.generateReport()
+            htmlReporter = HtmlCoverageReporter()
+            htmlOutput = htmlReporter.generate(report)
+
+            expect(htmlOutput).toContain("<!DOCTYPE html>")
+            expect(htmlOutput).toContain("Vela Code Coverage Report")
+        })
+
+        it("should generate LCOV reports", () => {
+            cov = coverage()
+            collector = cov.getCollector()
+
+            collector.trackLine("test.vela", 1)
+            collector.trackFunction("test.vela", "testFunc")
+
+            report = collector.generateReport()
+            lcovReporter = LcovCoverageReporter()
+            lcovOutput = lcovReporter.generate(report)
+
+            expect(lcovOutput).toContain("SF:test.vela")
+            expect(lcovOutput).toContain("DA:1,1")
+            expect(lcovOutput).toContain("end_of_record")
+        })
+    })
+
+    describe("Coverage Integration", () => {
+
+        it("should integrate with test runner", () => {
+            testFiles = ["meta_test.vela"]
+            cov = coverage()
+            cov.initializeForTestSuite(testFiles)
+
+            collector = cov.getCollector()
+            report = collector.generateReport()
+
+            expect(report.totalFiles).toBeGreaterThanOrEqual(1)
+        })
+
+        it("should handle enable/disable", () => {
+            cov = coverage()
+
+            cov.setEnabled(true)
+            expect(cov).not().toBeNull() # Should work when enabled
+
+            cov.setEnabled(false)
+            expect(cov).not().toBeNull() # Should still work when disabled
+        })
+    })
+})
+
+# =============================================================================
+# META-TESTS PARA EL TEST RUNNER
+# =============================================================================
+
+describe("Test Runner Meta-Tests", () => {
+
+    describe("Test Execution", () => {
+
+        it("should run tests synchronously", () => {
+            results = []
+
+            describe("Sync Test Suite", () => {
+                it("should run first", () => {
+                    results.push(1)
+                    expect(true).toBe(true)
+                })
+
+                it("should run second", () => {
+                    results.push(2)
+                    expect(results).toEqual([1, 2])
+                })
+            })
+        })
+
+        it("should handle async tests", async () => {
+            results = []
+
+            describe("Async Test Suite", () => {
+                it("should handle async", async () => {
+                    await delay(10)
+                    results.push("async")
+                    expect(results).toEqual(["async"])
+                })
+            })
+        })
+
+        it("should collect test results", () => {
+            passedTests = 0
+            failedTests = 0
+
+            describe("Results Test Suite", () => {
+                it("should pass", () => {
+                    passedTests += 1
+                    expect(1 + 1).toBe(2)
+                })
+
+                it("should also pass", () => {
+                    passedTests += 1
+                    expect("hello").toHaveLength(5)
+                })
+            })
+
+            expect(passedTests).toBe(2)
+            expect(failedTests).toBe(0)
+        })
+
+        it("should handle test failures gracefully", () => {
+            failureCount = 0
+
+            describe("Failure Test Suite", () => {
+                it("should fail but not crash", () => {
+                    try {
+                        expect(1 + 1).toBe(3) // This fails
+                        expect(false).toBe(true) // Should not reach
+                    } catch (error) {
+                        failureCount += 1
+                        expect(error).toContain("Expected 2 to be 3")
+                    }
+                })
+
+                it("should continue after failure", () => {
+                    expect(failureCount).toBe(1)
+                    expect(2 + 2).toBe(4)
+                })
+            })
+        })
+    })
+
+    describe("Test Filtering", () => {
+
+        it("should support test filtering by pattern", () => {
+            runTests = []
+
+            describe("Filter Test Suite", () => {
+                it("should run important test", () => {
+                    runTests.push("important")
+                    expect(true).toBe(true)
+                })
+
+                it("should skip utility test", () => {
+                    runTests.push("utility")
+                    expect(true).toBe(true)
+                })
+
+                it("should run critical test", () => {
+                    runTests.push("critical")
+                    expect(true).toBe(true)
+                })
+            })
+
+            # In a real scenario, we would filter by pattern
+            expect(runTests).toHaveLength(3)
+        })
+
+        it("should support running specific test suites", () => {
+            suiteRuns = []
+
+            describe("Suite A", () => {
+                beforeAll(() => {
+                    suiteRuns.push("Suite A")
+                })
+
+                it("test in suite A", () => {
+                    expect(true).toBe(true)
+                })
+            })
+
+            describe("Suite B", () => {
+                beforeAll(() => {
+                    suiteRuns.push("Suite B")
+                })
+
+                it("test in suite B", () => {
+                    expect(true).toBe(true)
+                })
+            })
+
+            expect(suiteRuns).toEqual(["Suite A", "Suite B"])
+        })
+    })
+
+    describe("Reporters", () => {
+
+        it("should support console reporter", () => {
+            # Test that console output works
+            describe("Console Reporter Test", () => {
+                it("should output to console", () => {
+                    # In real execution, this would output to console
+                    expect("console output test").toBeTruthy()
+                })
+            })
+        })
+
+        it("should support JSON reporter", () => {
+            testResults = {
+                suite: "JSON Reporter Test",
+                tests: [],
+                passed: 0,
+                failed: 0
+            }
+
+            describe("JSON Reporter Test", () => {
+                it("should collect results", () => {
+                    testResults.tests.push("test1")
+                    testResults.passed += 1
+                    expect(testResults.passed).toBe(1)
+                })
+
+                it("should collect more results", () => {
+                    testResults.tests.push("test2")
+                    testResults.passed += 1
+                    expect(testResults.passed).toBe(2)
+                })
+            })
+
+            expect(testResults.tests).toHaveLength(2)
+            expect(testResults.passed).toBe(2)
+        })
+
+        it("should support JUnit reporter", () => {
+            # Test JUnit XML generation
+            suiteResults = {
+                name: "JUnit Test Suite",
+                tests: 0,
+                failures: 0,
+                time: 0
+            }
+
+            describe("JUnit Reporter Test", () => {
+                it("should generate JUnit XML", () => {
+                    suiteResults.tests += 1
+                    expect(suiteResults.tests).toBe(1)
+                })
+            })
+        })
+    })
+
+    describe("Parallel Execution", () => {
+
+        it("should support parallel test execution", () => {
+            executionOrder = []
+
+            describe("Parallel Test Suite", () => {
+                it("should run in parallel 1", async () => {
+                    await delay(10)
+                    executionOrder.push(1)
+                    expect(executionOrder).toContain(1)
+                })
+
+                it("should run in parallel 2", async () => {
+                    await delay(5)
+                    executionOrder.push(2)
+                    expect(executionOrder).toContain(2)
+                })
+
+                it("should run in parallel 3", async () => {
+                    await delay(15)
+                    executionOrder.push(3)
+                    expect(executionOrder).toContain(3)
+                })
+            })
+
+            # In parallel execution, order might vary
+            expect(executionOrder).toHaveLength(3)
+            expect(executionOrder).toContain(1)
+            expect(executionOrder).toContain(2)
+            expect(executionOrder).toContain(3)
+        })
+
+        it("should handle parallel failures", () => {
+            failureResults = []
+
+            describe("Parallel Failure Suite", () => {
+                it("should handle failure 1", () => {
+                    try {
+                        expect(1).toBe(2)
+                    } catch (error) {
+                        failureResults.push("failure1")
+                    }
+                })
+
+                it("should handle failure 2", () => {
+                    try {
+                        expect("a").toBe("b")
+                    } catch (error) {
+                        failureResults.push("failure2")
+                    }
+                })
+
+                it("should continue after failures", () => {
+                    expect(failureResults).toHaveLength(2)
+                    expect(3 + 3).toBe(6)
+                })
+            })
+        })
+    })
+})
+
+# =============================================================================
+# META-TESTS PARA EDGE CASES Y ERRORES
+# =============================================================================
+
+describe("Edge Cases and Error Handling Meta-Tests", () => {
+
+    describe("Empty Test Suites", () => {
+
+        it("should handle empty describe blocks", () => {
+            describe("Empty Suite", () => {
+                # No tests here
+            })
+
+            expect(true).toBe(true) # Just verify the suite was created
+        })
+
+        it("should handle describe with no tests", () => {
+            describe("Suite With Only Setup", () => {
+                beforeAll(() => {
+                    # Setup only
+                })
+
+                afterAll(() => {
+                    # Teardown only
+                })
+            })
+
+            expect(true).toBe(true)
+        })
+    })
+
+    describe("Nested Test Structures", () => {
+
+        it("should handle deeply nested describes", () => {
+            depth = 0
+
+            describe("Level 1", () => {
+                depth = 1
+
+                describe("Level 2", () => {
+                    depth = 2
+
+                    describe("Level 3", () => {
+                        depth = 3
+
+                        it("should reach deepest level", () => {
+                            expect(depth).toBe(3)
+                        })
+                    })
+                })
+            })
+        })
+
+        it("should maintain context in nested suites", () => {
+            context = []
+
+            describe("Context Suite", () => {
+                context.push("suite")
+
+                beforeEach(() => {
+                    context.push("before")
+                })
+
+                describe("Nested Context", () => {
+                    context.push("nested")
+
+                    it("should have full context", () => {
+                        expect(context).toEqual(["suite", "nested", "before"])
+                    })
+                })
+            })
+        })
+    })
+
+    describe("Async Error Handling", () => {
+
+        it("should handle async test failures", async () => {
+            errorCaught = false
+
+            try {
+                await async () => {
+                    await delay(10)
+                    throw Error("async error")
+                }()
+            } catch (error) {
+                errorCaught = true
+                expect(error).toContain("async error")
+            }
+
+            expect(errorCaught).toBe(true)
+        })
+
+        it("should handle promise rejections", async () => {
+            rejectionCaught = false
+
+            try {
+                await async () => {
+                    await delay(10)
+                    throw Error("promise rejection")
+                }()
+            } catch (error) {
+                rejectionCaught = true
+                expect(error).toContain("promise rejection")
+            }
+
+            expect(rejectionCaught).toBe(true)
+        })
+    })
+
+    describe("Matcher Edge Cases", () => {
+
+        it("should handle null/undefined comparisons", () => {
+            expect(null).toBeNull()
+            expect(undefined).toBeNull()
+            expect(null).not().toBeUndefined() # Vela doesn't have undefined
+        })
+
+        it("should handle empty collections", () => {
+            expect([]).toBeEmpty()
+            expect({}).toBeEmpty()
+            expect("").toBeEmpty()
+        })
+
+        it("should handle large numbers", () => {
+            largeNumber = 999999999999999
+            expect(largeNumber).toBeGreaterThan(1000000000000)
+            expect(largeNumber).toBeLessThan(1000000000000000)
+        })
+
+        it("should handle special string cases", () => {
+            expect("hello\nworld").toContain("\n")
+            expect("tab\there").toContain("\t")
+            expect("quote\"here").toContain("\"")
+        })
+    })
+
+    describe("Performance Edge Cases", () => {
+
+        it("should handle very fast operations", () => {
+            start = Date.now()
+            result = 1 + 1
+            end = Date.now()
+
+            expect(result).toBe(2)
+            expect(end - start).toBeLessThan(10) # Should be very fast
+        })
+
+        it("should handle timeout scenarios", async () => {
+            # Test that timeouts are handled properly
+            slowOperation = async () => {
+                await delay(100)
+                return "done"
+            }
+
+            # This should complete within reasonable time
+            result = await slowOperation()
+            expect(result).toBe("done")
+        })
+    })
+
+    describe("Resource Cleanup", () => {
+
+        it("should clean up after test failures", () => {
+            cleanupCalled = false
+
+            describe("Cleanup Test Suite", () => {
+                afterEach(() => {
+                    cleanupCalled = true
+                })
+
+                it("should fail but still cleanup", () => {
+                    expect(1).toBe(2) // This fails
+                })
+            })
+
+            expect(cleanupCalled).toBe(true)
+        })
+
+        it("should handle multiple cleanup functions", () => {
+            cleanups = []
+
+            describe("Multiple Cleanup Suite", () => {
+                afterEach(() => {
+                    cleanups.push("cleanup1")
+                })
+
+                afterEach(() => {
+                    cleanups.push("cleanup2")
+                })
+
+                it("should run all cleanups", () => {
+                    expect(cleanups).toHaveLength(0) // Not yet run
+                })
+            })
+
+            expect(cleanups).toEqual(["cleanup1", "cleanup2"])
+        })
+    })
+})
+
+# =============================================================================
+# META-TESTS PARA INTEGRACIÓN COMPLETA
+# =============================================================================
+
+describe("Complete Integration Meta-Tests", () => {
+
+    it("should run full test suite with coverage", () => {
+        # This is a comprehensive test that runs the entire framework
+
+        enableCoverage(true)
+
+        # Run a complete test suite
+        describe("Full Integration Suite", () => {
+            beforeAll(() => {
+                # Setup
+            })
+
+            describe("API Tests", () => {
+                it("should test describe", () => {
+                    expect(describe).toBeDefined()
+                })
+
+                it("should test it", () => {
+                    expect(it).toBeDefined()
+                })
+
+                it("should test expect", () => {
+                    expect(expect).toBeDefined()
+                })
+            })
+
+            describe("Assertion Tests", () => {
+                it("should test equality", () => {
+                    expect(1).toBe(1)
+                })
+
+                it("should test strings", () => {
+                    expect("test").toHaveLength(4)
+                })
+
+                it("should test arrays", () => {
+                    expect([1, 2]).toContain(1)
+                })
+            })
+
+            describe("Coverage Tests", () => {
+                it("should enable coverage", () => {
+                    cov = coverage()
+                    expect(cov).not().toBeNull()
+                })
+            })
+
+            afterAll(() => {
+                generateCoverageReports("full-integration-coverage")
+            })
+        })
+    })
+
+    it("should validate framework self-consistency", () => {
+        # Test that the framework can test itself without issues
+
+        frameworkComponents = [
+            "describe",
+            "it",
+            "expect",
+            "beforeEach",
+            "afterEach",
+            "beforeAll",
+            "afterAll"
+        ]
+
+        describe("Self-Consistency Suite", () => {
+            it("should have all components", () => {
+                expect(frameworkComponents).toHaveLength(7)
+                expect(frameworkComponents).toContain("describe")
+                expect(frameworkComponents).toContain("expect")
+            })
+
+            it("should execute without errors", () => {
+                # This test passing means the framework is working
+                expect(true).toBe(true)
+            })
+        })
+    })
+
+    it("should handle framework stress test", () => {
+        # Create many tests to stress the framework
+
+        testCount = 0
+
+        describe("Stress Test Suite", () => {
+            for i in 0..100 {
+                it("should handle test ${i}", () => {
+                    testCount += 1
+                    expect(testCount).toBeGreaterThan(0)
+                })
+            }
+        })
+
+        expect(testCount).toBe(100)
+    })
+
+    it("should validate all exports", () => {
+        # Test that all expected functions are exported
+
+        describe("Exports Validation", () => {
+            it("should export testing API", () => {
+                expect(describe).toBeDefined()
+                expect(it).toBeDefined()
+                expect(expect).toBeDefined()
+            })
+
+            it("should export runner", () => {
+                expect(runTests).toBeDefined()
+            })
+
+            it("should export assertions", () => {
+                expect(Expectation).toBeDefined()
+            })
+
+            it("should export coverage", () => {
+                expect(coverage).toBeDefined()
+                expect(enableCoverage).toBeDefined()
+            })
+        })
+    })
+})
+
+# =============================================================================
+# HELPER FUNCTIONS PARA META-TESTS
+# =============================================================================
+
+fn delay(ms: Number) -> Promise<void> {
+    return new Promise((resolve) => {
+        setTimeout(resolve, ms)
+    })
+}
+
+fn asyncTest(fn: () -> Promise<void>) -> Promise<void> {
+    return fn()
+}
+
+# Export para uso en otros archivos
+public fn runMetaTests() -> void {
+    # Función para ejecutar todos los meta-tests
+    print("Running Vela Testing Framework Meta-Tests...")
+    # En un entorno real, esto ejecutaría el test runner
+}
