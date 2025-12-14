@@ -1,0 +1,535 @@
+"""
+Comprehensive Assertions Library for Vela Testing Framework
+
+This module provides extensive matcher capabilities with descriptive error messages
+and support for complex data types.
+
+Jira: VELA-1130
+Historia: US-28
+Fecha: 2025-12-14
+"""
+
+// Matcher interface for custom matchers
+interface Matcher {
+  fn matches(actual: any) -> Bool
+  fn describe() -> String
+  fn describeMismatch(actual: any) -> String
+}
+
+// Custom matcher for advanced assertions
+class CustomMatcher implements Matcher {
+  matcherFn: (any) -> Bool
+  description: String
+  mismatchDescription: (any) -> String
+
+  constructor(matcher: (any) -> Bool, desc: String, mismatch: (any) -> String) {
+    this.matcherFn = matcher
+    this.description = desc
+    this.mismatchDescription = mismatch
+  }
+
+  fn matches(actual: any) -> Bool {
+    this.matcherFn(actual)
+  }
+
+  fn describe() -> String {
+    this.description
+  }
+
+  fn describeMismatch(actual: any) -> String {
+    this.mismatchDescription(actual)
+  }
+}
+
+// Enhanced Expectation class with comprehensive matchers
+class Expectation {
+  actual: any
+  negated: Bool = false
+
+  constructor(actual: any) {
+    this.actual = actual
+  }
+
+  // Negation
+  fn not() -> Expectation {
+    this.negated = true
+    return this
+  }
+
+  // Equality matchers
+  fn toBe(expected: any) -> void {
+    let matches = this.actual == expected
+    this.assert(matches, "Expected ${expected}, but got ${this.actual}")
+  }
+
+  fn toEqual(expected: any) -> void {
+    let matches = deepEqual(this.actual, expected)
+    this.assert(matches, "Expected ${expected}, but got ${this.actual}")
+  }
+
+  fn toBeCloseTo(expected: Float, precision: Number = 2) -> void {
+    match this.actual {
+      Float(actual) => {
+        let diff = Math.abs(actual - expected)
+        let tolerance = Math.pow(10, -precision)
+        let matches = diff <= tolerance
+        this.assert(matches, "Expected ${expected} ± ${tolerance}, but got ${actual}")
+      }
+      _ => {
+        this.fail("toBeCloseTo can only be used with Float values")
+      }
+    }
+  }
+
+  // Truthiness matchers
+  fn toBeTruthy() -> void {
+    let matches = this.actual != false && this.actual != None && this.actual != 0 && this.actual != ""
+    this.assert(matches, "Expected truthy value, but got ${this.actual}")
+  }
+
+  fn toBeFalsy() -> void {
+    let matches = this.actual == false || this.actual == None || this.actual == 0 || this.actual == ""
+    this.assert(matches, "Expected falsy value, but got ${this.actual}")
+  }
+
+  fn toBeNull() -> void {
+    let matches = this.actual == None
+    this.assert(matches, "Expected null, but got ${this.actual}")
+  }
+
+  fn toBeDefined() -> void {
+    let matches = this.actual != None
+    this.assert(matches, "Expected defined value, but got ${this.actual}")
+  }
+
+  // Number comparison matchers
+  fn toBeGreaterThan(expected: Number) -> void {
+    match this.actual {
+      Number(actual) => {
+        let matches = actual > expected
+        this.assert(matches, "Expected ${actual} to be greater than ${expected}")
+      }
+      _ => {
+        this.fail("toBeGreaterThan can only be used with Number values")
+      }
+    }
+  }
+
+  fn toBeGreaterThanOrEqual(expected: Number) -> void {
+    match this.actual {
+      Number(actual) => {
+        let matches = actual >= expected
+        this.assert(matches, "Expected ${actual} to be greater than or equal to ${expected}")
+      }
+      _ => {
+        this.fail("toBeGreaterThanOrEqual can only be used with Number values")
+      }
+    }
+  }
+
+  fn toBeLessThan(expected: Number) -> void {
+    match this.actual {
+      Number(actual) => {
+        let matches = actual < expected
+        this.assert(matches, "Expected ${actual} to be less than ${expected}")
+      }
+      _ => {
+        this.fail("toBeLessThan can only be used with Number values")
+      }
+    }
+  }
+
+  fn toBeLessThanOrEqual(expected: Number) -> void {
+    match this.actual {
+      Number(actual) => {
+        let matches = actual <= expected
+        this.assert(matches, "Expected ${actual} to be less than or equal to ${expected}")
+      }
+      _ => {
+        this.fail("toBeLessThanOrEqual can only be used with Number values")
+      }
+    }
+  }
+
+  // String matchers
+  fn toMatch(pattern: String) -> void {
+    match this.actual {
+      String(actual) => {
+        let matches = actual.contains(pattern)
+        this.assert(matches, "Expected '${actual}' to match pattern '${pattern}'")
+      }
+      _ => {
+        this.fail("toMatch can only be used with String values")
+      }
+    }
+  }
+
+  fn toContain(substring: String) -> void {
+    match this.actual {
+      String(actual) => {
+        let matches = actual.contains(substring)
+        this.assert(matches, "Expected '${actual}' to contain '${substring}'")
+      }
+      _ => {
+        this.fail("toContain can only be used with String values")
+      }
+    }
+  }
+
+  fn toStartWith(prefix: String) -> void {
+    match this.actual {
+      String(actual) => {
+        let matches = actual.startsWith(prefix)
+        this.assert(matches, "Expected '${actual}' to start with '${prefix}'")
+      }
+      _ => {
+        this.fail("toStartWith can only be used with String values")
+      }
+    }
+  }
+
+  fn toEndWith(suffix: String) -> void {
+    match this.actual {
+      String(actual) => {
+        let matches = actual.endsWith(suffix)
+        this.assert(matches, "Expected '${actual}' to end with '${suffix}'")
+      }
+      _ => {
+        this.fail("toEndWith can only be used with String values")
+      }
+    }
+  }
+
+  // Array matchers
+  fn toContain(item: any) -> void {
+    match this.actual {
+      List(items) => {
+        let found = false
+        for i in items {
+          if i == item {
+            found = true
+            break
+          }
+        }
+        this.assert(found, "Expected array to contain ${item}")
+      }
+      _ => {
+        this.fail("toContain can only be used with List values")
+      }
+    }
+  }
+
+  fn toContainEqual(item: any) -> void {
+    match this.actual {
+      List(items) => {
+        let found = false
+        for i in items {
+          if deepEqual(i, item) {
+            found = true
+            break
+          }
+        }
+        this.assert(found, "Expected array to contain equal item ${item}")
+      }
+      _ => {
+        this.fail("toContainEqual can only be used with List values")
+      }
+    }
+  }
+
+  fn toInclude(...items: any[]) -> void {
+    match this.actual {
+      List(actualItems) => {
+        for item in items {
+          let found = false
+          for actualItem in actualItems {
+            if actualItem == item {
+              found = true
+              break
+            }
+          }
+          if !found {
+            this.assert(false, "Expected array to include ${item}")
+          }
+        }
+      }
+      _ => {
+        this.fail("toInclude can only be used with List values")
+      }
+    }
+  }
+
+  fn toBeEmpty() -> void {
+    match this.actual {
+      List(items) => {
+        let matches = items.length() == 0
+        this.assert(matches, "Expected array to be empty, but got ${items.length()} items")
+      }
+      String(s) => {
+        let matches = s.length() == 0
+        this.assert(matches, "Expected string to be empty, but got length ${s.length()}")
+      }
+      _ => {
+        this.fail("toBeEmpty can only be used with List or String values")
+      }
+    }
+  }
+
+  fn toEqualArray(expected: List<any>) -> void {
+    match this.actual {
+      List(actual) => {
+        if actual.length() != expected.length() {
+          this.assert(false, "Expected array of length ${expected.length()}, but got ${actual.length()}")
+        }
+        for i in 0..actual.length() {
+          if !deepEqual(actual[i], expected[i]) {
+            this.assert(false, "Expected ${expected[i]} at index ${i}, but got ${actual[i]}")
+          }
+        }
+      }
+      _ => {
+        this.fail("toEqualArray can only be used with List values")
+      }
+    }
+  }
+
+  // Length matchers
+  fn toHaveLength(expected: Number) -> void {
+    match this.actual {
+      List(items) => {
+        let matches = items.length() == expected
+        this.assert(matches, "Expected array to have length ${expected}, but got ${items.length()}")
+      }
+      String(s) => {
+        let matches = s.length() == expected
+        this.assert(matches, "Expected string to have length ${expected}, but got ${s.length()}")
+      }
+      _ => {
+        this.fail("toHaveLength can only be used with List or String values")
+      }
+    }
+  }
+
+  // Object matchers
+  fn toHaveProperty(path: String, value: any = None) -> void {
+    let objValue = getProperty(this.actual, path)
+    match value {
+      Some(expected) => {
+        let matches = deepEqual(objValue, expected)
+        this.assert(matches, "Expected property '${path}' to be ${expected}, but got ${objValue}")
+      }
+      None => {
+        let matches = objValue != None
+        this.assert(matches, "Expected object to have property '${path}'")
+      }
+    }
+  }
+
+  fn toMatchObject(expected: any) -> void {
+    let matches = matchObject(this.actual, expected)
+    this.assert(matches, "Expected object to match ${expected}")
+  }
+
+  fn toHavePropertyCount(expected: Number) -> void {
+    // This would need reflection capabilities
+    this.fail("toHavePropertyCount not yet implemented")
+  }
+
+  fn toEqualObject(expected: any) -> void {
+    let matches = deepEqual(this.actual, expected)
+    this.assert(matches, "Expected object to equal ${expected}")
+  }
+
+  // Type matchers
+  fn toBeType(typeName: String) -> void {
+    let actualType = getTypeName(this.actual)
+    let matches = actualType == typeName
+    this.assert(matches, "Expected type ${typeName}, but got ${actualType}")
+  }
+
+  fn toBeInstanceOf(className: String) -> void {
+    // This would need reflection
+    this.fail("toBeInstanceOf not yet implemented")
+  }
+
+  fn toBeArray() -> void {
+    match this.actual {
+      List(_) => this.assert(true, "")
+      _ => this.assert(false, "Expected array, but got ${getTypeName(this.actual)}")
+    }
+  }
+
+  fn toBeObject() -> void {
+    match this.actual {
+      Map(_) => this.assert(true, "")
+      _ => this.assert(false, "Expected object, but got ${getTypeName(this.actual)}")
+    }
+  }
+
+  fn toBeString() -> void {
+    match this.actual {
+      String(_) => this.assert(true, "")
+      _ => this.assert(false, "Expected string, but got ${getTypeName(this.actual)}")
+    }
+  }
+
+  fn toBeNumber() -> void {
+    match this.actual {
+      Number(_) => this.assert(true, "")
+      _ => this.assert(false, "Expected number, but got ${getTypeName(this.actual)}")
+    }
+  }
+
+  fn toBeBool() -> void {
+    match this.actual {
+      Bool(_) => this.assert(true, "")
+      _ => this.assert(false, "Expected boolean, but got ${getTypeName(this.actual)}")
+    }
+  }
+
+  // Error matchers
+  fn toThrow(expectedError: String = "") -> void {
+    let threw = false
+    let thrownError = ""
+
+    try {
+      match this.actual {
+        () -> void(fn) => fn()
+        _ => this.fail("toThrow can only be used with functions")
+      }
+    } catch (e) {
+      threw = true
+      thrownError = e.message
+    }
+
+    if !threw {
+      this.assert(false, "Expected function to throw, but it didn't")
+    }
+
+    if expectedError != "" && !thrownError.contains(expectedError) {
+      this.assert(false, "Expected error to contain '${expectedError}', but got '${thrownError}'")
+    }
+  }
+
+  fn toThrowError(expectedError: any) -> void {
+    // Similar to toThrow but with error object comparison
+    this.toThrow(expectedError.toString())
+  }
+
+  fn toThrowMessage(message: String) -> void {
+    this.toThrow(message)
+  }
+
+  // Custom matcher support
+  fn toMatchCustom(matcher: Matcher) -> void {
+    let matches = matcher.matches(this.actual)
+    if !matches {
+      let description = matcher.describeMismatch(this.actual)
+      this.assert(false, description)
+    }
+  }
+
+  // Performance matchers
+  fn toCompleteWithin(timeoutMs: Number) -> void {
+    match this.actual {
+      () -> any(fn) => {
+        let start = Date.now()
+        fn()
+        let duration = Date.now() - start
+        let matches = duration <= timeoutMs
+        this.assert(matches, "Expected operation to complete within ${timeoutMs}ms, but took ${duration}ms")
+      }
+      _ => {
+        this.fail("toCompleteWithin can only be used with functions")
+      }
+    }
+  }
+
+  fn toCompleteFasterThan(maxMs: Number) -> void {
+    this.toCompleteWithin(maxMs)
+  }
+
+  // Private helper methods
+  private fn assert(condition: Bool, message: String) -> void {
+    let shouldPass = if this.negated { !condition } else { condition }
+    if !shouldPass {
+      let prefix = if this.negated { "Expected not: " } else { "" }
+      throw AssertionError("${prefix}${message}")
+    }
+  }
+
+  private fn fail(message: String) -> void {
+    throw AssertionError(message)
+  }
+}
+
+// Utility functions
+fn deepEqual(a: any, b: any) -> Bool {
+  // Enhanced deep equality check
+  match (a, b) {
+    (List(aItems), List(bItems)) => {
+      if aItems.length() != bItems.length() {
+        return false
+      }
+      for i in 0..aItems.length() {
+        if !deepEqual(aItems[i], bItems[i]) {
+          return false
+        }
+      }
+      return true
+    }
+    (Map(aProps), Map(bProps)) => {
+      // Simple map comparison
+      return a == b
+    }
+    _ => {
+      return a == b
+    }
+  }
+}
+
+fn getProperty(obj: any, path: String) -> any {
+  // Simple property access - would need enhancement for nested paths
+  match obj {
+    Map(props) => {
+      return props.get(path)
+    }
+    _ => {
+      return None
+    }
+  }
+}
+
+fn matchObject(actual: any, expected: any) -> Bool {
+  // Simple object matching - check if actual contains all properties of expected
+  match (actual, expected) {
+    (Map(actualProps), Map(expectedProps)) => {
+      for key in expectedProps.keys() {
+        let expectedValue = expectedProps.get(key)
+        let actualValue = actualProps.get(key)
+        if !deepEqual(actualValue, expectedValue) {
+          return false
+        }
+      }
+      return true
+    }
+    _ => {
+      return deepEqual(actual, expected)
+    }
+  }
+}
+
+fn getTypeName(value: any) -> String {
+  // Type name extraction - would need runtime support
+  match value {
+    Number(_) => "Number"
+    String(_) => "String"
+    Bool(_) => "Bool"
+    List(_) => "List"
+    Map(_) => "Map"
+    _ => "Unknown"
+  }
+}
+
+// Export enhanced expectation class
+export { Expectation, Matcher, CustomMatcher }
