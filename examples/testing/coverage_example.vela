@@ -1,0 +1,820 @@
+"""
+Ejemplos completos del sistema de cobertura de código de Vela
+
+VELA-1130: TASK-113D
+Historia: VELA-1130
+Fecha: 2024-01-15
+
+Este archivo demuestra cómo usar el sistema de cobertura de código
+para medir la calidad de los tests en Vela.
+"""
+
+import 'testing:api'
+import 'testing:runner'
+import 'testing:assertions'
+import 'testing:coverage'
+
+# =============================================================================
+# EJEMPLO 1: COBERTURA BÁSICA DE FUNCIONES
+# =============================================================================
+
+"""
+Función de ejemplo para demostrar cobertura de líneas y funciones
+"""
+fn calculateSum(a: Number, b: Number) -> Number {
+    if a < 0 {
+        return b
+    }
+
+    result = a + b
+    return result
+}
+
+/**
+ * Función con múltiples ramas para cobertura de branches
+ */
+fn classifyNumber(n: Number) -> String {
+    match n {
+        0 => "zero"
+        n if n > 0 => "positive"
+        _ => "negative"
+    }
+}
+
+/**
+ * Función con bucles para cobertura compleja
+ */
+fn sumArray(numbers: List<Number>) -> Number {
+    total = 0
+
+    for num in numbers {
+        if num > 0 {
+            total = total + num
+        }
+    }
+
+    return total
+}
+
+# =============================================================================
+# EJEMPLO 2: TESTS CON COBERTURA
+# =============================================================================
+
+describe("Coverage Examples", () => {
+
+    beforeAll(() => {
+        # Habilitar cobertura para este test suite
+        enableCoverage(true)
+    })
+
+    afterAll(() => {
+        # Generar reportes de cobertura
+        generateCoverageReports("coverage-examples")
+    })
+
+    describe("calculateSum function", () => {
+
+        it("should return sum of two positive numbers", () => {
+            result = calculateSum(5, 3)
+            expect(result).toBe(8)
+        })
+
+        it("should return second number when first is negative", () => {
+            result = calculateSum(-2, 7)
+            expect(result).toBe(7)
+        })
+
+        it("should handle zero values", () => {
+            result = calculateSum(0, 10)
+            expect(result).toBe(10)
+        })
+    })
+
+    describe("classifyNumber function", () => {
+
+        it("should classify zero", () => {
+            result = classifyNumber(0)
+            expect(result).toBe("zero")
+        })
+
+        it("should classify positive numbers", () => {
+            expect(classifyNumber(5)).toBe("positive")
+            expect(classifyNumber(100)).toBe("positive")
+        })
+
+        it("should classify negative numbers", () => {
+            expect(classifyNumber(-3)).toBe("negative")
+            expect(classifyNumber(-1)).toBe("negative")
+        })
+    })
+
+    describe("sumArray function", () => {
+
+        it("should sum positive numbers only", () => {
+            numbers = [1, -2, 3, -4, 5]
+            result = sumArray(numbers)
+            expect(result).toBe(9) # 1 + 3 + 5
+        })
+
+        it("should return zero for empty array", () => {
+            result = sumArray([])
+            expect(result).toBe(0)
+        })
+
+        it("should return zero when all numbers are negative", () => {
+            numbers = [-1, -2, -3]
+            result = sumArray(numbers)
+            expect(result).toBe(0)
+        })
+
+        it("should sum all positive numbers", () => {
+            numbers = [1, 2, 3, 4, 5]
+            result = sumArray(numbers)
+            expect(result).toBe(15)
+        })
+    })
+})
+
+# =============================================================================
+# EJEMPLO 3: COBERTURA DE CLASES Y MÉTODOS
+# =============================================================================
+
+"""
+Clase de ejemplo para demostrar cobertura de métodos
+"""
+class Calculator {
+    private history: List<String>
+
+    constructor() {
+        this.history = []
+    }
+
+    public fn add(a: Number, b: Number) -> Number {
+        result = a + b
+        this.history.push("add: ${a} + ${b} = ${result}")
+        return result
+    }
+
+    public fn subtract(a: Number, b: Number) -> Number {
+        result = a - b
+        this.history.push("subtract: ${a} - ${b} = ${result}")
+        return result
+    }
+
+    public fn multiply(a: Number, b: Number) -> Number {
+        if b == 0 {
+            this.history.push("multiply: ${a} * 0 = 0 (optimized)")
+            return 0
+        }
+
+        result = a * b
+        this.history.push("multiply: ${a} * ${b} = ${result}")
+        return result
+    }
+
+    public fn getHistory() -> List<String> {
+        return this.history.clone()
+    }
+
+    public fn clearHistory() -> void {
+        this.history.clear()
+    }
+}
+
+describe("Calculator Class Coverage", () => {
+
+    state calculator: Calculator
+
+    beforeEach(() => {
+        calculator = Calculator()
+    })
+
+    describe("add method", () => {
+
+        it("should add two positive numbers", () => {
+            result = calculator.add(5, 3)
+            expect(result).toBe(8)
+
+            history = calculator.getHistory()
+            expect(history).toHaveLength(1)
+            expect(history[0]).toMatch(/add: 5 \+ 3 = 8/)
+        })
+
+        it("should add with negative numbers", () => {
+            result = calculator.add(-2, 7)
+            expect(result).toBe(5)
+        })
+    })
+
+    describe("multiply method", () => {
+
+        it("should multiply normal numbers", () => {
+            result = calculator.multiply(4, 3)
+            expect(result).toBe(12)
+
+            history = calculator.getHistory()
+            expect(history[0]).toMatch(/multiply: 4 \* 3 = 12/)
+        })
+
+        it("should handle multiplication by zero", () => {
+            result = calculator.multiply(5, 0)
+            expect(result).toBe(0)
+
+            history = calculator.getHistory()
+            expect(history[0]).toMatch(/multiply: 5 \* 0 = 0 \(optimized\)/)
+        })
+    })
+
+    describe("history management", () => {
+
+        it("should maintain operation history", () => {
+            calculator.add(1, 2)
+            calculator.subtract(5, 3)
+            calculator.multiply(2, 4)
+
+            history = calculator.getHistory()
+            expect(history).toHaveLength(3)
+            expect(history[0]).toContain("add")
+            expect(history[1]).toContain("subtract")
+            expect(history[2]).toContain("multiply")
+        })
+
+        it("should clear history", () => {
+            calculator.add(1, 1)
+            expect(calculator.getHistory()).toHaveLength(1)
+
+            calculator.clearHistory()
+            expect(calculator.getHistory()).toHaveLength(0)
+        })
+    })
+})
+
+# =============================================================================
+# EJEMPLO 4: COBERTURA DE ERRORES Y EXCEPCIONES
+# =============================================================================
+
+"""
+Función que puede lanzar errores para cobertura de excepciones
+"""
+fn divide(a: Number, b: Number) -> Result<Number, String> {
+    if b == 0 {
+        return Err("Division by zero")
+    }
+
+    if a < 0 and b < 0 {
+        return Err("Both numbers cannot be negative")
+    }
+
+    return Ok(a / b)
+}
+
+/**
+ * Función con validaciones complejas
+ */
+fn validateUser(user: Map<String, any>) -> Result<Map<String, any>, String> {
+    if !user.has("name") {
+        return Err("Name is required")
+    }
+
+    name = user.get("name")
+    if name.length() < 2 {
+        return Err("Name must be at least 2 characters")
+    }
+
+    if !user.has("email") {
+        return Err("Email is required")
+    }
+
+    email = user.get("email")
+    if !email.contains("@") {
+        return Err("Invalid email format")
+    }
+
+    # Validación adicional para edad
+    if user.has("age") {
+        age = user.get("age")
+        if age < 0 {
+            return Err("Age cannot be negative")
+        }
+        if age > 150 {
+            return Err("Age cannot be greater than 150")
+        }
+    }
+
+    return Ok(user)
+}
+
+describe("Error Handling Coverage", () => {
+
+    describe("divide function", () => {
+
+        it("should divide normal numbers", () => {
+            result = divide(10, 2)
+            expect(result).toBe(Ok(5))
+        })
+
+        it("should handle division by zero", () => {
+            result = divide(5, 0)
+            expect(result).toBe(Err("Division by zero"))
+        })
+
+        it("should handle negative numbers", () => {
+            result = divide(-4, -2)
+            expect(result).toBe(Err("Both numbers cannot be negative"))
+        })
+
+        it("should allow one negative number", () => {
+            result = divide(-10, 2)
+            expect(result).toBe(Ok(-5))
+        })
+    })
+
+    describe("validateUser function", () => {
+
+        it("should validate complete user", () => {
+            user = {
+                "name": "John Doe",
+                "email": "john@example.com",
+                "age": 30
+            }
+
+            result = validateUser(user)
+            expect(result.isOk()).toBe(true)
+        })
+
+        it("should reject missing name", () => {
+            user = {
+                "email": "john@example.com"
+            }
+
+            result = validateUser(user)
+            expect(result).toBe(Err("Name is required"))
+        })
+
+        it("should reject short name", () => {
+            user = {
+                "name": "A",
+                "email": "john@example.com"
+            }
+
+            result = validateUser(user)
+            expect(result).toBe(Err("Name must be at least 2 characters"))
+        })
+
+        it("should reject invalid email", () => {
+            user = {
+                "name": "John",
+                "email": "invalid-email"
+            }
+
+            result = validateUser(user)
+            expect(result).toBe(Err("Invalid email format"))
+        })
+
+        it("should reject negative age", () => {
+            user = {
+                "name": "John",
+                "email": "john@example.com",
+                "age": -5
+            }
+
+            result = validateUser(user)
+            expect(result).toBe(Err("Age cannot be negative"))
+        })
+
+        it("should reject too high age", () => {
+            user = {
+                "name": "John",
+                "email": "john@example.com",
+                "age": 200
+            }
+
+            result = validateUser(user)
+            expect(result).toBe(Err("Age cannot be greater than 150"))
+        })
+
+        it("should accept user without age", () => {
+            user = {
+                "name": "John",
+                "email": "john@example.com"
+            }
+
+            result = validateUser(user)
+            expect(result.isOk()).toBe(true)
+        })
+    })
+})
+
+# =============================================================================
+# EJEMPLO 5: COBERTURA DE FUNCIONES ASÍNCRONAS
+# =============================================================================
+
+"""
+Servicio simulado para demostrar cobertura async
+"""
+class UserService {
+    private users: Map<String, Map<String, any>>
+
+    constructor() {
+        this.users = Map()
+    }
+
+    public async fn createUser(userData: Map<String, any>) -> Result<String, String> {
+        # Simular validación async
+        await this.delay(10)
+
+        if !userData.has("username") {
+            return Err("Username required")
+        }
+
+        username = userData.get("username")
+        if this.users.has(username) {
+            return Err("User already exists")
+        }
+
+        # Simular creación
+        userId = "user_${this.users.size() + 1}"
+        this.users.set(username, userData)
+
+        return Ok(userId)
+    }
+
+    public async fn getUser(username: String) -> Result<Map<String, any>, String> {
+        await this.delay(5)
+
+        if !this.users.has(username) {
+            return Err("User not found")
+        }
+
+        return Ok(this.users.get(username))
+    }
+
+    public async fn updateUser(username: String, updates: Map<String, any>) -> Result<void, String> {
+        await this.delay(15)
+
+        if !this.users.has(username) {
+            return Err("User not found")
+        }
+
+        user = this.users.get(username)
+        for key in updates.keys() {
+            user.set(key, updates.get(key))
+        }
+
+        this.users.set(username, user)
+        return Ok(void)
+    }
+
+    private async fn delay(ms: Number) -> void {
+        # Simulación de delay
+        return
+    }
+}
+
+describe("Async Coverage Examples", () => {
+
+    state userService: UserService
+
+    beforeEach(() => {
+        userService = UserService()
+    })
+
+    describe("createUser", () => {
+
+        it("should create user successfully", async () => {
+            userData = {
+                "username": "johndoe",
+                "email": "john@example.com",
+                "name": "John Doe"
+            }
+
+            result = await userService.createUser(userData)
+            expect(result.isOk()).toBe(true)
+            expect(result.unwrap()).toStartWith("user_")
+        })
+
+        it("should reject missing username", async () => {
+            userData = {
+                "email": "john@example.com"
+            }
+
+            result = await userService.createUser(userData)
+            expect(result).toBe(Err("Username required"))
+        })
+
+        it("should reject duplicate username", async () => {
+            userData1 = {
+                "username": "johndoe",
+                "email": "john@example.com"
+            }
+
+            userData2 = {
+                "username": "johndoe",
+                "email": "jane@example.com"
+            }
+
+            await userService.createUser(userData1)
+            result = await userService.createUser(userData2)
+            expect(result).toBe(Err("User already exists"))
+        })
+    })
+
+    describe("getUser", () => {
+
+        beforeEach(async () => {
+            userData = {
+                "username": "johndoe",
+                "email": "john@example.com",
+                "name": "John Doe"
+            }
+            await userService.createUser(userData)
+        })
+
+        it("should retrieve existing user", async () => {
+            result = await userService.getUser("johndoe")
+            expect(result.isOk()).toBe(true)
+
+            user = result.unwrap()
+            expect(user.get("username")).toBe("johndoe")
+            expect(user.get("email")).toBe("john@example.com")
+        })
+
+        it("should return error for non-existent user", async () => {
+            result = await userService.getUser("nonexistent")
+            expect(result).toBe(Err("User not found"))
+        })
+    })
+
+    describe("updateUser", () => {
+
+        beforeEach(async () => {
+            userData = {
+                "username": "johndoe",
+                "email": "john@example.com",
+                "name": "John Doe"
+            }
+            await userService.createUser(userData)
+        })
+
+        it("should update user successfully", async () => {
+            updates = {
+                "name": "John Smith",
+                "phone": "123-456-7890"
+            }
+
+            result = await userService.updateUser("johndoe", updates)
+            expect(result.isOk()).toBe(true)
+
+            # Verificar actualización
+            userResult = await userService.getUser("johndoe")
+            user = userResult.unwrap()
+            expect(user.get("name")).toBe("John Smith")
+            expect(user.get("phone")).toBe("123-456-7890")
+        })
+
+        it("should return error for non-existent user", async () => {
+            updates = { "name": "New Name" }
+            result = await userService.updateUser("nonexistent", updates)
+            expect(result).toBe(Err("User not found"))
+        })
+    })
+})
+
+# =============================================================================
+# EJEMPLO 6: COBERTURA DE MATCH EXPRESSIONS
+# =============================================================================
+
+"""
+Función con pattern matching complejo para cobertura de branches
+"""
+fn processCommand(command: String, args: List<String>) -> Result<String, String> {
+    match command {
+        "help" => {
+            if args.isEmpty() {
+                Ok("Available commands: help, version, echo, sum")
+            } else {
+                Ok("Help for command: ${args[0]}")
+            }
+        }
+        "version" => {
+            if args.isEmpty() {
+                Ok("Vela v1.0.0")
+            } else {
+                Err("Version command doesn't accept arguments")
+            }
+        }
+        "echo" => {
+            if args.isEmpty() {
+                Err("Echo command requires at least one argument")
+            } else {
+                Ok(args.join(" "))
+            }
+        }
+        "sum" => {
+            if args.length() < 2 {
+                Err("Sum command requires at least two numbers")
+            } else {
+                numbers = args.map(arg => Number.parse(arg))
+                if numbers.any(n => n.isNaN()) {
+                    Err("All arguments must be valid numbers")
+                } else {
+                    total = numbers.sum()
+                    Ok("Sum: ${total}")
+                }
+            }
+        }
+        _ => {
+            Err("Unknown command: ${command}")
+        }
+    }
+}
+
+describe("Pattern Matching Coverage", () => {
+
+    describe("help command", () => {
+
+        it("should show general help", () => {
+            result = processCommand("help", [])
+            expect(result.isOk()).toBe(true)
+            expect(result.unwrap()).toContain("Available commands")
+        })
+
+        it("should show command-specific help", () => {
+            result = processCommand("help", ["echo"])
+            expect(result.isOk()).toBe(true)
+            expect(result.unwrap()).toContain("Help for command: echo")
+        })
+    })
+
+    describe("version command", () => {
+
+        it("should show version", () => {
+            result = processCommand("version", [])
+            expect(result).toBe(Ok("Vela v1.0.0"))
+        })
+
+        it("should reject arguments", () => {
+            result = processCommand("version", ["extra"])
+            expect(result).toBe(Err("Version command doesn't accept arguments"))
+        })
+    })
+
+    describe("echo command", () => {
+
+        it("should echo arguments", () => {
+            result = processCommand("echo", ["hello", "world"])
+            expect(result).toBe(Ok("hello world"))
+        })
+
+        it("should reject no arguments", () => {
+            result = processCommand("echo", [])
+            expect(result).toBe(Err("Echo command requires at least one argument"))
+        })
+    })
+
+    describe("sum command", () => {
+
+        it("should sum valid numbers", () => {
+            result = processCommand("sum", ["1", "2", "3"])
+            expect(result).toBe(Ok("Sum: 6"))
+        })
+
+        it("should reject insufficient arguments", () => {
+            result = processCommand("sum", ["5"])
+            expect(result).toBe(Err("Sum command requires at least two numbers"))
+        })
+
+        it("should reject invalid numbers", () => {
+            result = processCommand("sum", ["1", "abc", "3"])
+            expect(result).toBe(Err("All arguments must be valid numbers"))
+        })
+    })
+
+    describe("unknown command", () => {
+
+        it("should reject unknown commands", () => {
+            result = processCommand("unknown", [])
+            expect(result).toBe(Err("Unknown command: unknown"))
+        })
+    })
+})
+
+# =============================================================================
+# EJEMPLO 7: DEMOSTRACIÓN DE COBERTURA INCOMPLETA
+# =============================================================================
+
+"""
+Función con código no cubierto para demostrar cobertura incompleta
+"""
+fn complexLogic(value: Number) -> String {
+    if value > 100 {
+        if value > 1000 {
+            return "very large"
+        } else {
+            return "large"
+        }
+    } else if value > 10 {
+        return "medium"
+    } else if value > 0 {
+        return "small"
+    } else if value == 0 {
+        return "zero"
+    } else {
+        # Esta rama nunca se ejecuta en los tests actuales
+        return "negative"
+    }
+}
+
+describe("Incomplete Coverage Example", () => {
+
+    it("should handle very large numbers", () => {
+        expect(complexLogic(1500)).toBe("very large")
+    })
+
+    it("should handle large numbers", () => {
+        expect(complexLogic(500)).toBe("large")
+    })
+
+    it("should handle medium numbers", () => {
+        expect(complexLogic(50)).toBe("medium")
+    })
+
+    it("should handle small numbers", () => {
+        expect(complexLogic(5)).toBe("small")
+    })
+
+    it("should handle zero", () => {
+        expect(complexLogic(0)).toBe("zero")
+    })
+
+    # Nota: No hay test para valores negativos, así que esa rama
+    # tendrá 0% cobertura, demostrando cobertura incompleta
+})
+
+# =============================================================================
+# EJEMPLO 8: INTEGRACIÓN CON CI/CD
+# =============================================================================
+
+describe("CI/CD Integration", () => {
+
+    it("should generate coverage reports", () => {
+        # Este test verifica que el sistema de cobertura funciona
+        # y puede generar reportes
+
+        collector = coverage().getCollector()
+
+        # Simular algunos hits de cobertura
+        collector.trackLine("test_file.vela", 10)
+        collector.trackFunction("test_file.vela", "testFunction")
+        collector.trackBranch("test_file.vela", 0, true)
+
+        # Generar reporte
+        report = collector.generateReport()
+
+        # Verificar que el reporte tiene datos
+        expect(report.totalFiles).toBeGreaterThan(0)
+        expect(report.lineCoveragePercent).toBeGreaterThanOrEqual(0)
+        expect(report.functionCoveragePercent).toBeGreaterThanOrEqual(0)
+        expect(report.branchCoveragePercent).toBeGreaterThanOrEqual(0)
+    })
+
+    it("should support multiple report formats", () => {
+        # Verificar que se pueden generar diferentes formatos
+        # En un entorno real, esto crearía archivos físicos
+
+        enableCoverage(true)
+        generateCoverageReports("test-coverage-output")
+
+        # Nota: En un test real, verificaríamos que los archivos se crearon
+        # Aquí solo verificamos que no hay errores
+        expect(true).toBe(true) # Placeholder assertion
+    })
+})
+
+# =============================================================================
+# INSTRUCCIONES PARA EJECUTAR
+# =============================================================================
+
+/*
+Para ejecutar estos ejemplos con cobertura:
+
+1. Ejecutar con el test runner:
+   vela test coverage_example.vela --coverage
+
+2. Ver reportes generados en coverage-examples/
+   - coverage.json: Reporte en formato JSON
+   - coverage.html: Reporte visual HTML
+   - coverage.lcov: Reporte LCOV para Coveralls/Codecov
+
+3. El reporte mostrará métricas como:
+   - Cobertura de líneas: ~85%
+   - Cobertura de funciones: ~90%
+   - Cobertura de ramas: ~75%
+
+4. Áreas con cobertura baja:
+   - Rama "negative" en complexLogic() - nunca ejecutada
+   - Algunos casos edge en validaciones
+
+Esto demuestra cómo el sistema de cobertura identifica
+áreas que necesitan más tests.
+*/

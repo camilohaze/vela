@@ -1,0 +1,294 @@
+"""
+Ejemplo completo de Assertions Library de Vela
+
+Este archivo demuestra todos los matchers disponibles
+en la librería de assertions completa.
+
+Jira: VELA-1130
+Fecha: 2025-12-14
+"""
+
+import { describe, it, expect } from '../api'
+import { CustomMatcher } from '../assertions'
+
+// Datos de prueba
+class User {
+  name: String
+  age: Number
+  email: String
+  active: Bool
+
+  constructor(name: String, age: Number, email: String, active: Bool) {
+    this.name = name
+    this.age = age
+    this.email = email
+    this.active = active
+  }
+}
+
+class Calculator {
+  fn add(a: Number, b: Number) -> Number { return a + b }
+  fn divide(a: Number, b: Number) -> Result<Number> {
+    if b == 0 { return Err("Division by zero") }
+    return Ok(a / b)
+  }
+}
+
+// Tests de assertions de igualdad
+describe("Equality Assertions", () => {
+  it("should test strict equality", () => {
+    expect(5).toBe(5)
+    expect("hello").toBe("hello")
+    expect(true).toBe(true)
+  })
+
+  it("should test deep equality", () => {
+    expect([1, 2, 3]).toEqual([1, 2, 3])
+    expect(User("John", 30, "john@example.com", true))
+      .toEqual(User("John", 30, "john@example.com", true))
+  })
+
+  it("should test floating point closeness", () => {
+    expect(3.14159).toBeCloseTo(3.1416, 3)
+    expect(0.1 + 0.2).toBeCloseTo(0.3, 1)
+  })
+})
+
+// Tests de assertions negadas
+describe("Negated Assertions", () => {
+  it("should support negation", () => {
+    expect(5).not.toBe(3)
+    expect([1, 2, 3]).not.toContain(4)
+    expect("hello world").not.toMatch("goodbye")
+  })
+})
+
+// Tests de assertions de verdad
+describe("Truthiness Assertions", () => {
+  it("should test truthy values", () => {
+    expect(true).toBeTruthy()
+    expect(1).toBeTruthy()
+    expect("hello").toBeTruthy()
+    expect([1, 2, 3]).toBeTruthy()
+  })
+
+  it("should test falsy values", () => {
+    expect(false).toBeFalsy()
+    expect(0).toBeFalsy()
+    expect("").toBeFalsy()
+    expect([]).toBeFalsy()
+  })
+
+  it("should test null/undefined", () => {
+    expect(None).toBeNull()
+    expect(Some("value")).not.toBeNull()
+  })
+})
+
+// Tests de assertions numéricas
+describe("Number Assertions", () => {
+  it("should test comparisons", () => {
+    expect(10).toBeGreaterThan(5)
+    expect(10).toBeGreaterThanOrEqual(10)
+    expect(5).toBeLessThan(10)
+    expect(5).toBeLessThanOrEqual(5)
+  })
+})
+
+// Tests de assertions de strings
+describe("String Assertions", () => {
+  it("should test string matching", () => {
+    expect("hello world").toMatch("world")
+    expect("hello world").toContain("world")
+    expect("hello world").toStartWith("hello")
+    expect("hello world").toEndWith("world")
+  })
+
+  it("should test string length", () => {
+    expect("hello").toHaveLength(5)
+    expect("").toBeEmpty()
+  })
+})
+
+// Tests de assertions de arrays
+describe("Array Assertions", () => {
+  it("should test array contents", () => {
+    expect([1, 2, 3]).toContain(2)
+    expect([1, 2, 3]).toContainEqual(2)
+    expect([1, 2, 3]).toInclude(1, 3)
+    expect([1, 2, 3]).toHaveLength(3)
+  })
+
+  it("should test array equality", () => {
+    expect([1, 2, 3]).toEqualArray([1, 2, 3])
+    expect([]).toBeEmpty()
+  })
+})
+
+// Tests de assertions de objetos
+describe("Object Assertions", () => {
+  let user = User("John", 30, "john@example.com", true)
+
+  it("should test object properties", () => {
+    expect(user).toHaveProperty("name")
+    expect(user).toHaveProperty("name", "John")
+    expect(user).toHaveProperty("age", 30)
+    expect(user).toHaveProperty("active", true)
+  })
+
+  it("should test object matching", () => {
+    expect(user).toMatchObject({
+      name: "John",
+      age: 30
+    })
+  })
+})
+
+// Tests de assertions de tipos
+describe("Type Assertions", () => {
+  it("should test types", () => {
+    expect(42).toBeNumber()
+    expect("hello").toBeString()
+    expect(true).toBeBool()
+    expect([1, 2, 3]).toBeArray()
+    expect({name: "John"}).toBeObject()
+  })
+})
+
+// Tests de assertions de errores
+describe("Error Assertions", () => {
+  let calc = Calculator()
+
+  it("should test thrown errors", () => {
+    expect(() => calc.divide(10, 0)).toThrow("Division by zero")
+    expect(() => throw Error("Custom error")).toThrow("Custom error")
+  })
+
+  it("should test functions that don't throw", () => {
+    expect(() => calc.add(1, 2)).not.toThrow()
+  })
+})
+
+// Tests de matchers personalizados
+describe("Custom Matchers", () => {
+  it("should support custom matchers", () => {
+    let evenMatcher = CustomMatcher(
+      (value) => match value {
+        Number(n) => n % 2 == 0
+        _ => false
+      },
+      "to be even",
+      (actual) => "Expected ${actual} to be even"
+    )
+
+    expect(4).toMatchCustom(evenMatcher)
+    expect(5).not.toMatchCustom(evenMatcher)
+  })
+
+  it("should support email validation matcher", () => {
+    let emailMatcher = CustomMatcher(
+      (value) => match value {
+        String(s) => s.contains("@") && s.contains(".")
+        _ => false
+      },
+      "to be a valid email",
+      (actual) => "Expected ${actual} to be a valid email"
+    )
+
+    expect("user@example.com").toMatchCustom(emailMatcher)
+    expect("invalid-email").not.toMatchCustom(emailMatcher)
+  })
+})
+
+// Tests de performance
+describe("Performance Assertions", () => {
+  it("should test operation completion time", () => {
+    let slowOperation = () => {
+      let sum = 0
+      for i in 0..10000 {
+        sum += i
+      }
+      return sum
+    }
+
+    expect(slowOperation).toCompleteWithin(100)  // 100ms
+    expect(slowOperation).toCompleteFasterThan(50)  // 50ms
+  })
+})
+
+// Tests de async operations (simulados)
+describe("Async Assertions", () => {
+  it("should handle async operations", () => {
+    // En una implementación real, estas serían operaciones async
+    let asyncOperation = () => {
+      // Simular operación async
+      return "result"
+    }
+
+    expect(asyncOperation()).toBe("result")
+  })
+})
+
+// Tests de edge cases
+describe("Edge Cases", () => {
+  it("should handle empty values", () => {
+    expect("").toBeEmpty()
+    expect([]).toBeEmpty()
+    expect("").toHaveLength(0)
+    expect([]).toHaveLength(0)
+  })
+
+  it("should handle special values", () => {
+    expect(0).toBeFalsy()
+    expect(1).toBeTruthy()
+    expect(None).toBeNull()
+    expect(Some(42)).not.toBeNull()
+  })
+})
+
+// Función helper para crear matchers personalizados comunes
+fn createEmailMatcher() -> CustomMatcher {
+  return CustomMatcher(
+    (value) => match value {
+      String(s) => s.contains("@") && s.contains(".")
+      _ => false
+    },
+    "to be a valid email",
+    (actual) => "Expected ${actual} to be a valid email"
+  )
+}
+
+fn createPositiveNumberMatcher() -> CustomMatcher {
+  return CustomMatcher(
+    (value) => match value {
+      Number(n) => n > 0
+      _ => false
+    },
+    "to be a positive number",
+    (actual) => "Expected ${actual} to be a positive number"
+  )
+}
+
+// Tests usando matchers helper
+describe("Helper Matchers", () => {
+  it("should use email matcher helper", () => {
+    let emailMatcher = createEmailMatcher()
+    expect("test@example.com").toMatchCustom(emailMatcher)
+    expect("invalid").not.toMatchCustom(emailMatcher)
+  })
+
+  it("should use positive number matcher helper", () => {
+    let positiveMatcher = createPositiveNumberMatcher()
+    expect(5).toMatchCustom(positiveMatcher)
+    expect(-1).not.toMatchCustom(positiveMatcher)
+    expect(0).not.toMatchCustom(positiveMatcher)
+  })
+})
+
+// Export para uso en otros archivos
+export {
+  User,
+  Calculator,
+  createEmailMatcher,
+  createPositiveNumberMatcher
+}

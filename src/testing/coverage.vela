@@ -1,0 +1,688 @@
+"""
+Code Coverage Tracking for Vela Testing Framework
+
+VELA-1130: TASK-113D
+Historia: VELA-1130
+Fecha: 2024-01-15
+
+Implementación de sistema de cobertura de código con tracking de:
+- Cobertura de líneas (line coverage)
+- Cobertura de funciones (function coverage)
+- Cobertura de ramas (branch coverage)
+- Reportes en múltiples formatos (JSON, HTML, LCOV)
+- Integración con test runner
+"""
+
+import 'system:fs'
+import 'system:json'
+import 'system:http'
+
+# =============================================================================
+# TIPOS DE DATOS PARA COBERTURA
+# =============================================================================
+
+"""
+Estructura para almacenar información de cobertura de una línea
+"""
+struct LineCoverage {
+    lineNumber: Number
+    hits: Number
+    source: String
+}
+
+"""
+Estructura para almacenar información de cobertura de una función
+"""
+struct FunctionCoverage {
+    name: String
+    line: Number
+    hits: Number
+    source: String
+}
+
+"""
+Estructura para almacenar información de cobertura de una rama
+"""
+struct BranchCoverage {
+    line: Number
+    branch: Number
+    hits: Number
+    source: String
+}
+
+"""
+Estructura principal para almacenar cobertura de un archivo
+"""
+struct FileCoverage {
+    filePath: String
+    lines: List<LineCoverage>
+    functions: List<FunctionCoverage>
+    branches: List<BranchCoverage>
+    totalLines: Number
+    coveredLines: Number
+    totalFunctions: Number
+    coveredFunctions: Number
+    totalBranches: Number
+    coveredBranches: Number
+}
+
+"""
+Estructura para reportes de cobertura global
+"""
+struct CoverageReport {
+    files: List<FileCoverage>
+    totalFiles: Number
+    coveredFiles: Number
+    totalLines: Number
+    coveredLines: Number
+    totalFunctions: Number
+    coveredFunctions: Number
+    totalBranches: Number
+    coveredBranches: Number
+    lineCoveragePercent: Float
+    functionCoveragePercent: Float
+    branchCoveragePercent: Float
+    timestamp: String
+}
+
+# =============================================================================
+# INSTRUMENTACIÓN DE CÓDIGO
+# =============================================================================
+
+"""
+Clase para instrumentar código fuente con tracking de cobertura
+"""
+class CodeInstrumenter {
+    private sourceMap: Map<String, List<Number>>
+    private functionMap: Map<String, String>
+    private branchMap: Map<String, Number>
+
+    """
+    Instrumenta código fuente para tracking de cobertura
+    """
+    public fn instrument(source: String, filePath: String) -> String {
+        this.sourceMap = Map()
+        this.functionMap = Map()
+        this.branchMap = Map()
+
+        # Parsear el código y agregar instrumentation
+        instrumented = this.addLineCoverage(source, filePath)
+        instrumented = this.addFunctionCoverage(instrumented, filePath)
+        instrumented = this.addBranchCoverage(instrumented, filePath)
+
+        return instrumented
+    }
+
+    """
+    Agrega tracking de cobertura de líneas
+    """
+    private fn addLineCoverage(source: String, filePath: String) -> String {
+        lines = source.split("\n")
+        instrumentedLines = []
+
+        for i in 0..lines.length() {
+            line = lines[i]
+            trimmed = line.trim()
+
+            # No instrumentar líneas vacías o comentarios
+            if trimmed.isEmpty() or trimmed.startsWith("//") or trimmed.startsWith("/*") {
+                instrumentedLines.push(line)
+                continue
+            }
+
+            # Agregar instrumentation de línea
+            coverageCall = "__coverage__.trackLine('${filePath}', ${i + 1});"
+            instrumentedLines.push(line + " " + coverageCall)
+        }
+
+        return instrumentedLines.join("\n")
+    }
+
+    """
+    Agrega tracking de cobertura de funciones
+    """
+    private fn addFunctionCoverage(source: String, filePath: String) -> String {
+        # Usar regex para encontrar definiciones de funciones
+        # fn functionName(...) -> ReturnType {
+        pattern = "fn\\s+([a-zA-Z_][a-zA-Z0-9_]*)\\s*\\("
+        matches = source.findAll(pattern)
+
+        instrumented = source
+        for match in matches {
+            functionName = match.group(1)
+            coverageCall = "__coverage__.trackFunction('${filePath}', '${functionName}');"
+            # Insertar después de la definición de función
+            replacement = "fn ${functionName}(" + coverageCall
+            instrumented = instrumented.replace(match.fullMatch, replacement)
+        }
+
+        return instrumented
+    }
+
+    """
+    Agrega tracking de cobertura de ramas (if/else, match)
+    """
+    private fn addBranchCoverage(source: String, filePath: String) -> String {
+        instrumented = source
+
+        # Instrumentar if statements
+        ifPattern = "\\bif\\s+(.+?)\\s*\\{"
+        matches = source.findAll(ifPattern)
+        branchIndex = 0
+
+        for match in matches {
+            condition = match.group(1)
+            coverageCall = "__coverage__.trackBranch('${filePath}', ${branchIndex}, ${condition});"
+            replacement = "if ${coverageCall} ${condition} {"
+            instrumented = instrumented.replace(match.fullMatch, replacement)
+            branchIndex += 1
+        }
+
+        # Instrumentar match expressions
+        matchPattern = "\\bmatch\\s+(.+?)\\s*\\{"
+        matches = source.findAll(matchPattern)
+
+        for match in matches {
+            expression = match.group(1)
+            coverageCall = "__coverage__.trackBranch('${filePath}', ${branchIndex}, ${expression});"
+            replacement = "match ${coverageCall} ${expression} {"
+            instrumented = instrumented.replace(match.fullMatch, replacement)
+            branchIndex += 1
+        }
+
+        return instrumented
+    }
+}
+
+# =============================================================================
+# COLLECTOR DE COBERTURA
+# =============================================================================
+
+"""
+Clase global para recolectar datos de cobertura durante la ejecución
+"""
+class CoverageCollector {
+    private coverage: Map<String, FileCoverage>
+    private instrumenter: CodeInstrumenter
+
+    constructor() {
+        this.coverage = Map()
+        this.instrumenter = CodeInstrumenter()
+    }
+
+    """
+    Inicializa cobertura para un archivo
+    """
+    public fn initializeFile(filePath: String, source: String) -> void {
+        instrumentedSource = this.instrumenter.instrument(source, filePath)
+
+        fileCoverage = FileCoverage {
+            filePath: filePath,
+            lines: [],
+            functions: [],
+            branches: [],
+            totalLines: this.countLines(source),
+            coveredLines: 0,
+            totalFunctions: this.countFunctions(source),
+            coveredFunctions: 0,
+            totalBranches: this.countBranches(source),
+            coveredBranches: 0
+        }
+
+        this.coverage.set(filePath, fileCoverage)
+
+        # Ejecutar código instrumentado
+        this.executeInstrumentedCode(instrumentedSource)
+    }
+
+    """
+    Registra un hit en una línea específica
+    """
+    public fn trackLine(filePath: String, lineNumber: Number) -> void {
+        if !this.coverage.has(filePath) {
+            return
+        }
+
+        fileCoverage = this.coverage.get(filePath)
+
+        # Buscar línea existente o crear nueva
+        existingLine = fileCoverage.lines.find(l => l.lineNumber == lineNumber)
+        if existingLine.isSome() {
+            existingLine.hits += 1
+        } else {
+            lineCoverage = LineCoverage {
+                lineNumber: lineNumber,
+                hits: 1,
+                source: "" # Se llenará después
+            }
+            fileCoverage.lines.push(lineCoverage)
+        }
+
+        # Actualizar estadísticas
+        this.updateLineCoverage(fileCoverage)
+    }
+
+    """
+    Registra un hit en una función específica
+    """
+    public fn trackFunction(filePath: String, functionName: String) -> void {
+        if !this.coverage.has(filePath) {
+            return
+        }
+
+        fileCoverage = this.coverage.get(filePath)
+
+        # Buscar función existente o crear nueva
+        existingFunction = fileCoverage.functions.find(f => f.name == functionName)
+        if existingFunction.isSome() {
+            existingFunction.hits += 1
+        } else {
+            functionCoverage = FunctionCoverage {
+                name: functionName,
+                line: 0, # Se determinará después
+                hits: 1,
+                source: ""
+            }
+            fileCoverage.functions.push(functionCoverage)
+        }
+
+        # Actualizar estadísticas
+        this.updateFunctionCoverage(fileCoverage)
+    }
+
+    """
+    Registra un hit en una rama específica
+    """
+    public fn trackBranch(filePath: String, branchIndex: Number, condition: Bool) -> void {
+        if !this.coverage.has(filePath) {
+            return
+        }
+
+        fileCoverage = this.coverage.get(filePath)
+
+        # Buscar rama existente o crear nueva
+        existingBranch = fileCoverage.branches.find(b => b.branch == branchIndex)
+        if existingBranch.isSome() {
+            existingBranch.hits += 1
+        } else {
+            branchCoverage = BranchCoverage {
+                line: 0, # Se determinará después
+                branch: branchIndex,
+                hits: 1,
+                source: ""
+            }
+            fileCoverage.branches.push(branchCoverage)
+        }
+
+        # Actualizar estadísticas
+        this.updateBranchCoverage(fileCoverage)
+    }
+
+    """
+    Genera reporte de cobertura completo
+    """
+    public fn generateReport() -> CoverageReport {
+        files = this.coverage.values()
+        totalFiles = files.length()
+        coveredFiles = files.filter(f => f.coveredLines > 0).length()
+
+        totalLines = files.map(f => f.totalLines).sum()
+        coveredLines = files.map(f => f.coveredLines).sum()
+
+        totalFunctions = files.map(f => f.totalFunctions).sum()
+        coveredFunctions = files.map(f => f.coveredFunctions).sum()
+
+        totalBranches = files.map(f => f.totalBranches).sum()
+        coveredBranches = files.map(f => f.coveredBranches).sum()
+
+        lineCoveragePercent = if totalLines > 0 { (coveredLines / totalLines) * 100 } else { 0 }
+        functionCoveragePercent = if totalFunctions > 0 { (coveredFunctions / totalFunctions) * 100 } else { 0 }
+        branchCoveragePercent = if totalBranches > 0 { (coveredBranches / totalBranches) * 100 } else { 0 }
+
+        return CoverageReport {
+            files: files,
+            totalFiles: totalFiles,
+            coveredFiles: coveredFiles,
+            totalLines: totalLines,
+            coveredLines: coveredLines,
+            totalFunctions: totalFunctions,
+            coveredFunctions: coveredFunctions,
+            totalBranches: totalBranches,
+            coveredBranches: coveredBranches,
+            lineCoveragePercent: lineCoveragePercent,
+            functionCoveragePercent: functionCoveragePercent,
+            branchCoveragePercent: branchCoveragePercent,
+            timestamp: Date.now().toISOString()
+        }
+    }
+
+    # Métodos auxiliares privados
+
+    private fn countLines(source: String) -> Number {
+        return source.split("\n").filter(line => !line.trim().isEmpty() and !line.trim().startsWith("//")).length()
+    }
+
+    private fn countFunctions(source: String) -> Number {
+        pattern = "\\bfn\\s+[a-zA-Z_][a-zA-Z0-9_]*\\s*\\("
+        return source.findAll(pattern).length()
+    }
+
+    private fn countBranches(source: String) -> Number {
+        ifPattern = "\\bif\\s+.+?\\s*\\{"
+        matchPattern = "\\bmatch\\s+.+?\\s*\\{"
+        return source.findAll(ifPattern).length() + source.findAll(matchPattern).length()
+    }
+
+    private fn updateLineCoverage(fileCoverage: FileCoverage) -> void {
+        fileCoverage.coveredLines = fileCoverage.lines.filter(l => l.hits > 0).length()
+    }
+
+    private fn updateFunctionCoverage(fileCoverage: FileCoverage) -> void {
+        fileCoverage.coveredFunctions = fileCoverage.functions.filter(f => f.hits > 0).length()
+    }
+
+    private fn updateBranchCoverage(fileCoverage: FileCoverage) -> void {
+        fileCoverage.coveredBranches = fileCoverage.branches.filter(b => b.hits > 0).length()
+    }
+
+    private fn executeInstrumentedCode(instrumentedSource: String) -> void {
+        # Aquí iría la lógica para ejecutar el código instrumentado
+        # En un entorno real, esto se haría a través del runtime de Vela
+        try {
+            # Simular ejecución
+            eval(instrumentedSource)
+        } catch (error) {
+            # Log error but don't fail coverage collection
+            print("Warning: Error executing instrumented code: ${error}")
+        }
+    }
+}
+
+# =============================================================================
+# REPORT GENERATORS
+# =============================================================================
+
+"""
+Interfaz para generadores de reportes de cobertura
+"""
+interface CoverageReporter {
+    fn generate(report: CoverageReport) -> String
+    fn getFormat() -> String
+}
+
+/**
+ * Generador de reportes JSON
+ */
+class JsonCoverageReporter implements CoverageReporter {
+    public fn generate(report: CoverageReport) -> String {
+        return JSON.stringify(report, null, 2)
+    }
+
+    public fn getFormat() -> String {
+        return "json"
+    }
+}
+
+/**
+ * Generador de reportes HTML
+ */
+class HtmlCoverageReporter implements CoverageReporter {
+    public fn generate(report: CoverageReport) -> String {
+        html = """
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Vela Code Coverage Report</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .summary { background: #f0f0f0; padding: 20px; border-radius: 5px; margin-bottom: 20px; }
+        .metric { display: inline-block; margin: 10px; text-align: center; }
+        .metric-value { font-size: 2em; font-weight: bold; }
+        .metric-label { color: #666; }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+        th { background-color: #f2f2f2; }
+        .covered { background-color: #d4edda; }
+        .uncovered { background-color: #f8d7da; }
+    </style>
+</head>
+<body>
+    <h1>Vela Code Coverage Report</h1>
+    <div class="summary">
+        <div class="metric">
+            <div class="metric-value">${report.lineCoveragePercent.toFixed(1)}%</div>
+            <div class="metric-label">Line Coverage</div>
+        </div>
+        <div class="metric">
+            <div class="metric-value">${report.functionCoveragePercent.toFixed(1)}%</div>
+            <div class="metric-label">Function Coverage</div>
+        </div>
+        <div class="metric">
+            <div class="metric-value">${report.branchCoveragePercent.toFixed(1)}%</div>
+            <div class="metric-label">Branch Coverage</div>
+        </div>
+    </div>
+
+    <h2>File Coverage</h2>
+    <table>
+        <tr>
+            <th>File</th>
+            <th>Lines</th>
+            <th>Functions</th>
+            <th>Branches</th>
+        </tr>
+"""
+
+        for fileCoverage in report.files {
+            linePercent = if fileCoverage.totalLines > 0 { (fileCoverage.coveredLines / fileCoverage.totalLines) * 100 } else { 0 }
+            functionPercent = if fileCoverage.totalFunctions > 0 { (fileCoverage.coveredFunctions / fileCoverage.totalFunctions) * 100 } else { 0 }
+            branchPercent = if fileCoverage.totalBranches > 0 { (fileCoverage.coveredBranches / fileCoverage.totalBranches) * 100 } else { 0 }
+
+            html += """
+        <tr>
+            <td>${fileCoverage.filePath}</td>
+            <td>${fileCoverage.coveredLines}/${fileCoverage.totalLines} (${linePercent.toFixed(1)}%)</td>
+            <td>${fileCoverage.coveredFunctions}/${fileCoverage.totalFunctions} (${functionPercent.toFixed(1)}%)</td>
+            <td>${fileCoverage.coveredBranches}/${fileCoverage.totalBranches} (${branchPercent.toFixed(1)}%)</td>
+        </tr>
+"""
+        }
+
+        html += """
+    </table>
+    <p>Report generated at: ${report.timestamp}</p>
+</body>
+</html>
+"""
+
+        return html
+    }
+
+    public fn getFormat() -> String {
+        return "html"
+    }
+}
+
+/**
+ * Generador de reportes LCOV (compatible con Coveralls, Codecov)
+ */
+class LcovCoverageReporter implements CoverageReporter {
+    public fn generate(report: CoverageReport) -> String {
+        lcov = ""
+
+        for fileCoverage in report.files {
+            lcov += "SF:${fileCoverage.filePath}\n"
+
+            # Líneas
+            for line in fileCoverage.lines {
+                lcov += "DA:${line.lineNumber},${line.hits}\n"
+            }
+
+            # Funciones
+            for function in fileCoverage.functions {
+                lcov += "FN:${function.line},${function.name}\n"
+                lcov += "FNDA:${function.hits},${function.name}\n"
+            }
+
+            # Ramas
+            for branch in fileCoverage.branches {
+                lcov += "BRDA:${branch.line},${branch.branch},0,${branch.hits}\n"
+                lcov += "BRDA:${branch.line},${branch.branch},1,${branch.hits}\n"
+            }
+
+            lcov += "end_of_record\n"
+        }
+
+        return lcov
+    }
+
+    public fn getFormat() -> String {
+        return "lcov"
+    }
+}
+
+# =============================================================================
+# INTEGRACIÓN CON TEST RUNNER
+# =============================================================================
+
+"""
+Integración de cobertura con el test runner
+"""
+class CoverageIntegration {
+    private collector: CoverageCollector
+    private reporters: List<CoverageReporter>
+    private enabled: Bool
+
+    constructor() {
+        this.collector = CoverageCollector()
+        this.reporters = [
+            JsonCoverageReporter(),
+            HtmlCoverageReporter(),
+            LcovCoverageReporter()
+        ]
+        this.enabled = true
+    }
+
+    """
+    Habilita/desabilita la cobertura
+    """
+    public fn setEnabled(enabled: Bool) -> void {
+        this.enabled = enabled
+    }
+
+    """
+    Inicializa cobertura para archivos de test
+    """
+    public fn initializeForTestSuite(testFiles: List<String>) -> void {
+        if !this.enabled {
+            return
+        }
+
+        for testFile in testFiles {
+            source = this.loadSourceFile(testFile)
+            this.collector.initializeFile(testFile, source)
+        }
+    }
+
+    """
+    Genera y guarda reportes de cobertura
+    """
+    public fn generateReports(outputDir: String = "coverage") -> void {
+        if !this.enabled {
+            return
+        }
+
+        report = this.collector.generateReport()
+
+        # Crear directorio de salida
+        this.ensureDirectory(outputDir)
+
+        # Generar reportes en todos los formatos
+        for reporter in this.reporters {
+            format = reporter.getFormat()
+            content = reporter.generate(report)
+            fileName = "${outputDir}/coverage.${format}"
+            this.writeFile(fileName, content)
+        }
+
+        # Imprimir resumen en consola
+        this.printSummary(report)
+    }
+
+    """
+    Obtiene el collector para acceso directo
+    """
+    public fn getCollector() -> CoverageCollector {
+        return this.collector
+    }
+
+    # Métodos auxiliares privados
+
+    private fn loadSourceFile(filePath: String) -> String {
+        # En un entorno real, esto leería el archivo del sistema de archivos
+        try {
+            return fs.readFile(filePath, "utf8")
+        } catch (error) {
+            print("Warning: Could not load source file ${filePath}: ${error}")
+            return ""
+        }
+    }
+
+    private fn ensureDirectory(dirPath: String) -> void {
+        try {
+            if !fs.exists(dirPath) {
+                fs.mkdir(dirPath, { recursive: true })
+            }
+        } catch (error) {
+            print("Warning: Could not create directory ${dirPath}: ${error}")
+        }
+    }
+
+    private fn writeFile(filePath: String, content: String) -> void {
+        try {
+            fs.writeFile(filePath, content, "utf8")
+        } catch (error) {
+            print("Warning: Could not write file ${filePath}: ${error}")
+        }
+    }
+
+    private fn printSummary(report: CoverageReport) -> void {
+        print("\n📊 Code Coverage Summary")
+        print("========================")
+        print("Files: ${report.coveredFiles}/${report.totalFiles}")
+        print("Lines: ${report.coveredLines}/${report.totalLines} (${report.lineCoveragePercent.toFixed(1)}%)")
+        print("Functions: ${report.coveredFunctions}/${report.totalFunctions} (${report.functionCoveragePercent.toFixed(1)}%)")
+        print("Branches: ${report.coveredBranches}/${report.totalBranches} (${report.branchCoveragePercent.toFixed(1)}%)")
+        print("\nCoverage reports generated in 'coverage/' directory")
+    }
+}
+
+# =============================================================================
+# API GLOBAL PARA COBERTURA
+# =============================================================================
+
+"""
+Instancia global del sistema de cobertura
+"""
+state __coverage__: CoverageIntegration = CoverageIntegration()
+
+"""
+Función global para acceso fácil a cobertura
+"""
+public fn coverage() -> CoverageIntegration {
+    return __coverage__
+}
+
+"""
+Función de conveniencia para habilitar/deshabilitar cobertura
+"""
+public fn enableCoverage(enabled: Bool = true) -> void {
+    __coverage__.setEnabled(enabled)
+}
+
+"""
+Función de conveniencia para generar reportes
+"""
+public fn generateCoverageReports(outputDir: String = "coverage") -> void {
+    __coverage__.generateReports(outputDir)
+}

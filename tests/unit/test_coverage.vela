@@ -1,0 +1,790 @@
+"""
+Tests unitarios para el sistema de cobertura de código
+
+VELA-1130: TASK-113D
+Historia: VELA-1130
+Fecha: 2024-01-15
+
+Tests que validan el funcionamiento del sistema de cobertura:
+- CodeInstrumenter
+- CoverageCollector
+- CoverageIntegration
+- Reportes (JSON, HTML, LCOV)
+"""
+
+import 'testing:api'
+import 'testing:assertions'
+import 'testing:coverage'
+
+# =============================================================================
+# TESTS PARA CODEINSTRUMENTER
+# =============================================================================
+
+describe("CodeInstrumenter", () => {
+
+    state instrumenter: CodeInstrumenter
+
+    beforeEach(() => {
+        instrumenter = CodeInstrumenter()
+    })
+
+    describe("instrument method", () => {
+
+        it("should instrument simple function", () => {
+            source = """
+fn add(a: Number, b: Number) -> Number {
+    return a + b
+}
+"""
+            instrumented = instrumenter.instrument(source, "test.vela")
+
+            expect(instrumented).toContain("__coverage__.trackFunction('test.vela', 'add')")
+            expect(instrumented).toContain("__coverage__.trackLine('test.vela',")
+        })
+
+        it("should instrument if statements", () => {
+            source = """
+fn check(value: Number) -> Bool {
+    if value > 0 {
+        return true
+    }
+    return false
+}
+"""
+            instrumented = instrumenter.instrument(source, "test.vela")
+
+            expect(instrumented).toContain("__coverage__.trackBranch('test.vela',")
+        })
+
+        it("should instrument match expressions", () => {
+            source = """
+fn classify(n: Number) -> String {
+    match n {
+        0 => "zero"
+        _ => "non-zero"
+    }
+}
+"""
+            instrumented = instrumenter.instrument(source, "test.vela")
+
+            expect(instrumented).toContain("__coverage__.trackBranch('test.vela',")
+        })
+
+        it("should not instrument comments", () => {
+            source = """
+// This is a comment
+fn test() -> void {
+    // Another comment
+    x = 1
+}
+"""
+            instrumented = instrumenter.instrument(source, "test.vela")
+
+            # Comments should not have instrumentation
+            lines = instrumented.split("\n")
+            commentLines = lines.filter(line => line.trim().startsWith("//"))
+            expect(commentLines.length()).toBe(2) # Original comments preserved
+        })
+
+        it("should not instrument empty lines", () => {
+            source = """
+fn test() -> void {
+
+    x = 1
+
+}
+"""
+            instrumented = instrumenter.instrument(source, "test.vela")
+
+            lines = instrumented.split("\n")
+            emptyLines = lines.filter(line => line.trim().isEmpty())
+            expect(emptyLines.length()).toBe(2) # Original empty lines preserved
+        })
+    })
+
+    describe("addLineCoverage method", () => {
+
+        it("should add line tracking calls", () => {
+            source = "x = 1\ny = 2"
+            result = instrumenter.addLineCoverage(source, "test.vela")
+
+            expect(result).toContain("__coverage__.trackLine('test.vela', 1);")
+            expect(result).toContain("__coverage__.trackLine('test.vela', 2);")
+        })
+
+        it("should skip comments and empty lines", () => {
+            source = "// comment\n\nx = 1"
+            result = instrumenter.addLineCoverage(source, "test.vela")
+
+            expect(result).not().toContain("trackLine('test.vela', 1);") # comment
+            expect(result).not().toContain("trackLine('test.vela', 2);") # empty
+            expect(result).toContain("trackLine('test.vela', 3);") # code
+        })
+    })
+
+    describe("addFunctionCoverage method", () => {
+
+        it("should add function tracking", () => {
+            source = "fn calculate() -> Number { return 42 }"
+            result = instrumenter.addFunctionCoverage(source, "test.vela")
+
+            expect(result).toContain("__coverage__.trackFunction('test.vela', 'calculate')")
+        })
+
+        it("should handle multiple functions", () => {
+            source = """
+fn func1() -> void { }
+fn func2(a: Number) -> Number { return a }
+"""
+            result = instrumenter.addFunctionCoverage(source, "test.vela")
+
+            expect(result).toContain("trackFunction('test.vela', 'func1')")
+            expect(result).toContain("trackFunction('test.vela', 'func2')")
+        })
+
+        it("should handle function parameters", () => {
+            source = "fn complex(a: Number, b: String, c: Bool) -> Result<Number, String> { }"
+            result = instrumenter.addFunctionCoverage(source, "test.vela")
+
+            expect(result).toContain("trackFunction('test.vela', 'complex')")
+        })
+    })
+
+    describe("addBranchCoverage method", () => {
+
+        it("should add branch tracking for if statements", () => {
+            source = "if x > 0 { return true }"
+            result = instrumenter.addBranchCoverage(source, "test.vela")
+
+            expect(result).toContain("__coverage__.trackBranch('test.vela', 0,")
+        })
+
+        it("should add branch tracking for match expressions", () => {
+            source = "match value { 1 => \"one\" _ => \"other\" }"
+            result = instrumenter.addBranchCoverage(source, "test.vela")
+
+            expect(result).toContain("__coverage__.trackBranch('test.vela', 0,")
+        })
+
+        it("should handle multiple branches", () => {
+            source = """
+if a > 0 { x = 1 }
+if b < 0 { y = 2 }
+match c { 1 => "one" _ => "other" }
+"""
+            result = instrumenter.addBranchCoverage(source, "test.vela")
+
+            # Should have 3 branch tracking calls
+            branchCount = result.split("__coverage__.trackBranch").length() - 1
+            expect(branchCount).toBe(3)
+        })
+    })
+})
+
+# =============================================================================
+# TESTS PARA COVERAGE COLLECTOR
+# =============================================================================
+
+describe("CoverageCollector", () => {
+
+    state collector: CoverageCollector
+
+    beforeEach(() => {
+        collector = CoverageCollector()
+    })
+
+    describe("initializeFile method", () => {
+
+        it("should initialize file coverage data", () => {
+            source = """
+fn add(a: Number, b: Number) -> Number {
+    return a + b
+}
+"""
+            collector.initializeFile("test.vela", source)
+
+            report = collector.generateReport()
+            expect(report.files).toHaveLength(1)
+
+            fileCoverage = report.files[0]
+            expect(fileCoverage.filePath).toBe("test.vela")
+            expect(fileCoverage.totalFunctions).toBe(1)
+            expect(fileCoverage.totalLines).toBeGreaterThan(0)
+        })
+
+        it("should count branches correctly", () => {
+            source = """
+fn check(value: Number) -> Bool {
+    if value > 0 {
+        return true
+    } else {
+        return false
+    }
+    match value {
+        0 => "zero"
+        _ => "other"
+    }
+}
+"""
+            collector.initializeFile("test.vela", source)
+
+            report = collector.generateReport()
+            fileCoverage = report.files[0]
+            expect(fileCoverage.totalBranches).toBe(2) # 1 if + 1 match
+        })
+    })
+
+    describe("trackLine method", () => {
+
+        beforeEach(() => {
+            source = "fn test() -> void { x = 1 }"
+            collector.initializeFile("test.vela", source)
+        })
+
+        it("should record line hits", () => {
+            collector.trackLine("test.vela", 1)
+
+            report = collector.generateReport()
+            fileCoverage = report.files[0]
+
+            expect(fileCoverage.coveredLines).toBe(1)
+            expect(fileCoverage.lines).toHaveLength(1)
+            expect(fileCoverage.lines[0].hits).toBe(1)
+        })
+
+        it("should accumulate multiple hits", () => {
+            collector.trackLine("test.vela", 1)
+            collector.trackLine("test.vela", 1)
+            collector.trackLine("test.vela", 1)
+
+            report = collector.generateReport()
+            expect(report.files[0].lines[0].hits).toBe(3)
+        })
+
+        it("should ignore unknown files", () => {
+            collector.trackLine("unknown.vela", 1)
+
+            report = collector.generateReport()
+            expect(report.files).toHaveLength(1) # Only the initialized file
+        })
+    })
+
+    describe("trackFunction method", () => {
+
+        beforeEach(() => {
+            source = "fn func1() -> void { } fn func2() -> void { }"
+            collector.initializeFile("test.vela", source)
+        })
+
+        it("should record function hits", () => {
+            collector.trackFunction("test.vela", "func1")
+
+            report = collector.generateReport()
+            fileCoverage = report.files[0]
+
+            expect(fileCoverage.coveredFunctions).toBe(1)
+            expect(fileCoverage.functions).toHaveLength(1)
+            expect(fileCoverage.functions[0].name).toBe("func1")
+            expect(fileCoverage.functions[0].hits).toBe(1)
+        })
+
+        it("should handle multiple functions", () => {
+            collector.trackFunction("test.vela", "func1")
+            collector.trackFunction("test.vela", "func2")
+
+            report = collector.generateReport()
+            expect(report.files[0].coveredFunctions).toBe(2)
+        })
+    })
+
+    describe("trackBranch method", () => {
+
+        beforeEach(() => {
+            source = "if true { } match x { _ => }"
+            collector.initializeFile("test.vela", source)
+        })
+
+        it("should record branch hits", () => {
+            collector.trackBranch("test.vela", 0, true)
+
+            report = collector.generateReport()
+            expect(report.files[0].coveredBranches).toBe(1)
+        })
+
+        it("should handle multiple branches", () => {
+            collector.trackBranch("test.vela", 0, true)
+            collector.trackBranch("test.vela", 1, false)
+
+            report = collector.generateReport()
+            expect(report.files[0].coveredBranches).toBe(2)
+        })
+    })
+
+    describe("generateReport method", () => {
+
+        it("should generate comprehensive report", () => {
+            # Setup test data
+            source1 = "fn test1() -> void { x = 1 }"
+            source2 = "fn test2() -> void { y = 2 }"
+
+            collector.initializeFile("file1.vela", source1)
+            collector.initializeFile("file2.vela", source2)
+
+            collector.trackLine("file1.vela", 1)
+            collector.trackFunction("file1.vela", "test1")
+            collector.trackLine("file2.vela", 1)
+            collector.trackFunction("file2.vela", "test2")
+
+            report = collector.generateReport()
+
+            expect(report.totalFiles).toBe(2)
+            expect(report.coveredFiles).toBe(2)
+            expect(report.totalLines).toBeGreaterThan(0)
+            expect(report.coveredLines).toBe(2)
+            expect(report.totalFunctions).toBe(2)
+            expect(report.coveredFunctions).toBe(2)
+            expect(report.lineCoveragePercent).toBe(100)
+            expect(report.functionCoveragePercent).toBe(100)
+        })
+
+        it("should calculate percentages correctly", () => {
+            source = "fn test() -> void { x = 1\n y = 2 }"
+            collector.initializeFile("test.vela", source)
+
+            # Cover only one line
+            collector.trackLine("test.vela", 1)
+
+            report = collector.generateReport()
+
+            expect(report.coveredLines).toBe(1)
+            expect(report.lineCoveragePercent).toBeLessThan(100)
+            expect(report.lineCoveragePercent).toBeGreaterThan(0)
+        })
+
+        it("should handle empty coverage", () => {
+            source = "fn test() -> void { }"
+            collector.initializeFile("test.vela", source)
+
+            report = collector.generateReport()
+
+            expect(report.totalFiles).toBe(1)
+            expect(report.coveredFiles).toBe(0)
+            expect(report.lineCoveragePercent).toBe(0)
+            expect(report.functionCoveragePercent).toBe(0)
+        })
+    })
+})
+
+# =============================================================================
+# TESTS PARA REPORT GENERATORS
+# =============================================================================
+
+describe("Coverage Reporters", () => {
+
+    state mockReport: CoverageReport
+
+    beforeEach(() => {
+        # Create mock coverage report
+        lineCoverage = LineCoverage {
+            lineNumber: 1,
+            hits: 5,
+            source: "x = 1"
+        }
+
+        functionCoverage = FunctionCoverage {
+            name: "testFunction",
+            line: 1,
+            hits: 3,
+            source: ""
+        }
+
+        branchCoverage = BranchCoverage {
+            line: 2,
+            branch: 0,
+            hits: 2,
+            source: ""
+        }
+
+        fileCoverage = FileCoverage {
+            filePath: "test.vela",
+            lines: [lineCoverage],
+            functions: [functionCoverage],
+            branches: [branchCoverage],
+            totalLines: 10,
+            coveredLines: 5,
+            totalFunctions: 3,
+            coveredFunctions: 2,
+            totalBranches: 4,
+            coveredBranches: 2
+        }
+
+        mockReport = CoverageReport {
+            files: [fileCoverage],
+            totalFiles: 1,
+            coveredFiles: 1,
+            totalLines: 10,
+            coveredLines: 5,
+            totalFunctions: 3,
+            coveredFunctions: 2,
+            totalBranches: 4,
+            coveredBranches: 2,
+            lineCoveragePercent: 50.0,
+            functionCoveragePercent: 66.7,
+            branchCoveragePercent: 50.0,
+            timestamp: "2024-01-15T10:00:00Z"
+        }
+    })
+
+    describe("JsonCoverageReporter", () => {
+
+        state reporter: JsonCoverageReporter
+
+        beforeEach(() => {
+            reporter = JsonCoverageReporter()
+        })
+
+        it("should generate valid JSON", () => {
+            json = reporter.generate(mockReport)
+
+            expect(json).toStartWith("{")
+            expect(json).toEndWith("}")
+            expect(json).toContain('"totalFiles":1')
+            expect(json).toContain('"lineCoveragePercent":50')
+        })
+
+        it("should include all report data", () => {
+            json = reporter.generate(mockReport)
+
+            expect(json).toContain('"files"')
+            expect(json).toContain('"totalLines":10')
+            expect(json).toContain('"coveredLines":5')
+            expect(json).toContain('"timestamp"')
+        })
+
+        it("should return correct format", () => {
+            expect(reporter.getFormat()).toBe("json")
+        })
+    })
+
+    describe("HtmlCoverageReporter", () => {
+
+        state reporter: HtmlCoverageReporter
+
+        beforeEach(() => {
+            reporter = HtmlCoverageReporter()
+        })
+
+        it("should generate valid HTML", () => {
+            html = reporter.generate(mockReport)
+
+            expect(html).toStartWith("<!DOCTYPE html>")
+            expect(html).toContain("<html>")
+            expect(html).toContain("</html>")
+            expect(html).toContain("Vela Code Coverage Report")
+        })
+
+        it("should include coverage metrics", () => {
+            html = reporter.generate(mockReport)
+
+            expect(html).toContain("50.0%")
+            expect(html).toContain("66.7%")
+            expect(html).toContain("test.vela")
+        })
+
+        it("should include summary table", () => {
+            html = reporter.generate(mockReport)
+
+            expect(html).toContain("<table>")
+            expect(html).toContain("<th>File</th>")
+            expect(html).toContain("<td>test.vela</td>")
+        })
+
+        it("should return correct format", () => {
+            expect(reporter.getFormat()).toBe("html")
+        })
+    })
+
+    describe("LcovCoverageReporter", () => {
+
+        state reporter: LcovCoverageReporter
+
+        beforeEach(() => {
+            reporter = LcovCoverageReporter()
+        })
+
+        it("should generate valid LCOV format", () => {
+            lcov = reporter.generate(mockReport)
+
+            expect(lcov).toContain("SF:test.vela")
+            expect(lcov).toContain("DA:1,5")
+            expect(lcov).toContain("FN:1,testFunction")
+            expect(lcov).toContain("FNDA:3,testFunction")
+            expect(lcov).toContain("BRDA:2,0,0,2")
+            expect(lcov).toContain("end_of_record")
+        })
+
+        it("should handle multiple files", () => {
+            # Add another file to the report
+            fileCoverage2 = FileCoverage {
+                filePath: "test2.vela",
+                lines: [],
+                functions: [],
+                branches: [],
+                totalLines: 5,
+                coveredLines: 3,
+                totalFunctions: 1,
+                coveredFunctions: 1,
+                totalBranches: 0,
+                coveredBranches: 0
+            }
+
+            multiFileReport = CoverageReport {
+                files: [mockReport.files[0], fileCoverage2],
+                totalFiles: 2,
+                coveredFiles: 2,
+                totalLines: 15,
+                coveredLines: 8,
+                totalFunctions: 4,
+                coveredFunctions: 3,
+                totalBranches: 4,
+                coveredBranches: 2,
+                lineCoveragePercent: 53.3,
+                functionCoveragePercent: 75.0,
+                branchCoveragePercent: 50.0,
+                timestamp: "2024-01-15T10:00:00Z"
+            }
+
+            lcov = reporter.generate(multiFileReport)
+
+            expect(lcov).toContain("SF:test.vela")
+            expect(lcov).toContain("SF:test2.vela")
+            expect(lcov.split("end_of_record").length()).toBe(3) # 2 files + empty end
+        })
+
+        it("should return correct format", () => {
+            expect(reporter.getFormat()).toBe("lcov")
+        })
+    })
+})
+
+# =============================================================================
+# TESTS PARA COVERAGE INTEGRATION
+# =============================================================================
+
+describe("CoverageIntegration", () => {
+
+    state integration: CoverageIntegration
+
+    beforeEach(() => {
+        integration = CoverageIntegration()
+    })
+
+    describe("setEnabled method", () => {
+
+        it("should enable coverage", () => {
+            integration.setEnabled(true)
+            # No direct way to test, but should not throw
+            expect(true).toBe(true)
+        })
+
+        it("should disable coverage", () => {
+            integration.setEnabled(false)
+            # No direct way to test, but should not throw
+            expect(true).toBe(true)
+        })
+    })
+
+    describe("initializeForTestSuite method", () => {
+
+        it("should initialize multiple files", () => {
+            testFiles = ["test1.vela", "test2.vela"]
+            integration.initializeForTestSuite(testFiles)
+
+            collector = integration.getCollector()
+            report = collector.generateReport()
+
+            expect(report.totalFiles).toBe(2)
+        })
+
+        it("should handle empty file list", () => {
+            integration.initializeForTestSuite([])
+            collector = integration.getCollector()
+            report = collector.generateReport()
+
+            expect(report.totalFiles).toBe(0)
+        })
+    })
+
+    describe("generateReports method", () => {
+
+        beforeEach(() => {
+            # Setup some coverage data
+            source = "fn test() -> void { x = 1 }"
+            collector = integration.getCollector()
+            collector.initializeFile("test.vela", source)
+            collector.trackLine("test.vela", 1)
+        })
+
+        it("should generate reports when enabled", () => {
+            integration.setEnabled(true)
+            # Should not throw - in real environment would create files
+            integration.generateReports("test-output")
+            expect(true).toBe(true)
+        })
+
+        it("should skip report generation when disabled", () => {
+            integration.setEnabled(false)
+            # Should not throw and not generate files
+            integration.generateReports("test-output")
+            expect(true).toBe(true)
+        })
+    })
+
+    describe("getCollector method", () => {
+
+        it("should return coverage collector", () => {
+            collector = integration.getCollector()
+            expect(collector).not().toBeNull()
+            expect(collector.generateReport).toBeDefined()
+        })
+    })
+})
+
+# =============================================================================
+# TESTS PARA FUNCIONES GLOBALES
+# =============================================================================
+
+describe("Global Coverage Functions", () => {
+
+    describe("coverage function", () => {
+
+        it("should return coverage integration instance", () => {
+            cov = coverage()
+            expect(cov).not().toBeNull()
+            expect(cov.setEnabled).toBeDefined()
+            expect(cov.generateReports).toBeDefined()
+        })
+
+        it("should return the same instance", () => {
+            cov1 = coverage()
+            cov2 = coverage()
+            expect(cov1).toBe(cov2)
+        })
+    })
+
+    describe("enableCoverage function", () => {
+
+        it("should enable coverage", () => {
+            enableCoverage(true)
+            # Test that it doesn't throw
+            expect(true).toBe(true)
+        })
+
+        it("should disable coverage", () => {
+            enableCoverage(false)
+            expect(true).toBe(true)
+        })
+    })
+
+    describe("generateCoverageReports function", () => {
+
+        it("should generate reports with default directory", () => {
+            generateCoverageReports()
+            expect(true).toBe(true)
+        })
+
+        it("should generate reports with custom directory", () => {
+            generateCoverageReports("custom-dir")
+            expect(true).toBe(true)
+        })
+    })
+})
+
+# =============================================================================
+# TESTS DE INTEGRACIÓN COMPLETA
+# =============================================================================
+
+describe("Coverage System Integration", () => {
+
+    it("should work end-to-end", () => {
+        # Enable coverage
+        enableCoverage(true)
+
+        # Create test files
+        testFiles = ["integration_test.vela"]
+
+        # Initialize
+        cov = coverage()
+        cov.initializeForTestSuite(testFiles)
+
+        # Simulate some coverage activity
+        collector = cov.getCollector()
+        collector.trackLine("integration_test.vela", 1)
+        collector.trackFunction("integration_test.vela", "testFunc")
+        collector.trackBranch("integration_test.vela", 0, true)
+
+        # Generate report
+        report = collector.generateReport()
+
+        # Verify report
+        expect(report.totalFiles).toBe(1)
+        expect(report.coveredFiles).toBe(1)
+        expect(report.coveredLines).toBe(1)
+        expect(report.coveredFunctions).toBe(1)
+        expect(report.coveredBranches).toBe(1)
+
+        # Generate output reports
+        cov.generateReports("integration-coverage")
+    })
+
+    it("should handle multiple test suites", () => {
+        enableCoverage(true)
+
+        # First test suite
+        suite1Files = ["suite1_test.vela", "suite1_helper.vela"]
+        cov = coverage()
+        cov.initializeForTestSuite(suite1Files)
+
+        collector = cov.getCollector()
+        collector.trackLine("suite1_test.vela", 1)
+        collector.trackLine("suite1_helper.vela", 2)
+
+        # Second test suite (should accumulate)
+        suite2Files = ["suite2_test.vela"]
+        cov.initializeForTestSuite(suite2Files)
+        collector.trackLine("suite2_test.vela", 1)
+
+        report = collector.generateReport()
+
+        expect(report.totalFiles).toBe(3)
+        expect(report.coveredLines).toBe(3)
+    })
+
+    it("should support different report formats", () => {
+        enableCoverage(true)
+
+        source = "fn test() -> void { if true { x = 1 } }"
+        cov = coverage()
+        collector = cov.getCollector()
+        collector.initializeFile("format_test.vela", source)
+
+        collector.trackLine("format_test.vela", 1)
+        collector.trackFunction("format_test.vela", "test")
+        collector.trackBranch("format_test.vela", 0, true)
+
+        report = collector.generateReport()
+
+        # Test all reporters
+        jsonReporter = JsonCoverageReporter()
+        htmlReporter = HtmlCoverageReporter()
+        lcovReporter = LcovCoverageReporter()
+
+        jsonOutput = jsonReporter.generate(report)
+        htmlOutput = htmlReporter.generate(report)
+        lcovOutput = lcovReporter.generate(report)
+
+        expect(jsonOutput).toContain('"totalFiles":1')
+        expect(htmlOutput).toContain('Vela Code Coverage Report')
+        expect(lcovOutput).toContain('SF:format_test.vela')
+    })
+})
