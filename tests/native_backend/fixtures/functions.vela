@@ -1,0 +1,12 @@
+// Function test
+fn factorial(n: int) -> int {
+    if n <= 1 {
+        return 1;
+    }
+    return n * factorial(n - 1);
+}
+
+fn main() -> void {
+    let result = factorial(5);
+    print(result);
+}

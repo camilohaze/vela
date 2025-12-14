@@ -1,0 +1,31 @@
+// Complex application test
+struct User {
+    id: int,
+    name: string,
+    active: bool
+}
+
+fn find_active_users(users: []User) -> []User {
+    let active = [];
+    for i in 0..users.length() {
+        if users[i].active {
+            active.push(users[i]);
+        }
+    }
+    return active;
+}
+
+fn main() -> void {
+    let users = [
+        User { id: 1, name: "Alice", active: true },
+        User { id: 2, name: "Bob", active: false },
+        User { id: 3, name: "Charlie", active: true }
+    ];
+
+    let active_users = find_active_users(users);
+    print("Found ${active_users.length()} active users");
+
+    for i in 0..active_users.length() {
+        print("${active_users[i].name} is active");
+    }
+}

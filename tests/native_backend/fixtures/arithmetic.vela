@@ -1,0 +1,9 @@
+// Simple arithmetic test
+fn main() -> void {
+    let a = 5;
+    let b = 3;
+    let sum = a + b;
+    let product = a * b;
+    print(sum);
+    print(product);
+}
