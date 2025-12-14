@@ -22,6 +22,9 @@ pub use concurrency::r#async;
 // Re-export event system types from events module
 pub use events::{Event, EventHandler, EventPublisher, EventSubscriber, TypedEventHandler, HandlerWrapperTrait, HandlerWrapper, EventBus, EventError, EventResult};
 
+// Re-export stream API types
+pub use streams::{Stream, StreamBuilder, StreamImpl, BackpressureController, BackpressureStrategy, Subscription};
+
 // Resilience patterns
 pub mod resilience;
 

@@ -42,6 +42,19 @@ pub enum FlowControl {
     Drop,
 }
 
+/// Errors that can occur during backpressure operations
+#[derive(Debug, Clone, PartialEq)]
+pub enum BackpressureError {
+    /// Item was dropped due to backpressure strategy
+    Dropped,
+    /// Buffer is full and cannot accept more items
+    BufferFull,
+    /// Operation would block but blocking is not allowed
+    WouldBlock,
+    /// Error from upstream source
+    UpstreamError(String),
+}
+
 /// Controller for backpressure management
 pub struct BackpressureController {
     strategy: BackpressureStrategy,
@@ -66,7 +79,7 @@ impl BackpressureController {
     }
 
     pub fn should_apply_backpressure(&self) -> bool {
-        self.current_pressure.load(Ordering::Relaxed) >= self.high_watermark
+        self.current_pressure.load(Ordering::Relaxed) > self.low_watermark
     }
 
     pub fn should_resume(&self) -> bool {
@@ -130,7 +143,7 @@ impl Default for Subscription {
 }
 
 /// Core Stream trait defining the functional API
-pub trait Stream<T: Send>: Send {
+pub trait Stream<T: Send + Clone>: Send {
     /// Transform each element using a mapper function
     fn map<U, F>(self, mapper: F) -> MapStream<Self, F, T>
     where
@@ -311,8 +324,8 @@ impl<S, F, T, U> Stream<U> for MapStream<S, F, T>
 where
     S: Stream<T>,
     F: Fn(T) -> U + Send,
-    T: Sized + Send,
-    U: Sized + Send,
+    T: Sized + Send + Clone,
+    U: Sized + Send + Clone,
 {
     fn poll_next(&mut self) -> Poll<Option<U>> {
         match self.stream.poll_next() {
@@ -333,7 +346,7 @@ impl<S, F, T> Stream<T> for FilterStream<S, F>
 where
     S: Stream<T>,
     F: Fn(&T) -> bool + Send,
-    T: Send,
+    T: Send + Clone,
 {
     fn poll_next(&mut self) -> Poll<Option<T>> {
         loop {
@@ -363,8 +376,8 @@ impl<S, F, T, U> Stream<U> for FlatMapStream<S, F, T, U>
 where
     S: Stream<T>,
     F: Fn(T) -> Box<dyn Stream<U>> + Send,
-    T: Sized + Send,
-    U: Sized + Send,
+    T: Sized + Send + Clone,
+    U: Sized + Send + Clone,
 {
     fn poll_next(&mut self) -> Poll<Option<U>> {
         loop {
@@ -401,7 +414,7 @@ pub struct TakeStream<S> {
 impl<S, T> Stream<T> for TakeStream<S>
 where
     S: Stream<T>,
-    T: Send,
+    T: Send + Clone,
 {
     fn poll_next(&mut self) -> Poll<Option<T>> {
         if self.remaining == 0 {
@@ -428,7 +441,7 @@ pub struct DropStream<S> {
 impl<S, T> Stream<T> for DropStream<S>
 where
     S: Stream<T>,
-    T: Send,
+    T: Send + Clone,
 {
     fn poll_next(&mut self) -> Poll<Option<T>> {
         while self.remaining > 0 {
@@ -455,7 +468,7 @@ impl<S, F, T> Stream<T> for TakeWhileStream<S, F>
 where
     S: Stream<T>,
     F: Fn(&T) -> bool + Send,
-    T: Send,
+    T: Send + Clone,
 {
     fn poll_next(&mut self) -> Poll<Option<T>> {
         match self.stream.poll_next() {
@@ -522,28 +535,28 @@ pub struct ThrottleStream<S, T> {
 impl<S, T> Stream<T> for ThrottleStream<S, T>
 where
     S: Stream<T>,
-    T: Send,
+    T: Send + Clone,
 {
     fn poll_next(&mut self) -> Poll<Option<T>> {
-        match self.stream.poll_next() {
-            Poll::Ready(Some(value)) => {
-                let now = Instant::now();
-                if let Some(last) = self.last_emit {
-                    if now.duration_since(last) >= self.duration {
-                        self.last_emit = Some(now);
-                        Poll::Ready(Some(value))
+        loop {
+            match self.stream.poll_next() {
+                Poll::Ready(Some(value)) => {
+                    let now = Instant::now();
+                    if let Some(last) = self.last_emit {
+                        if now.duration_since(last) >= self.duration {
+                            self.last_emit = Some(now);
+                            return Poll::Ready(Some(value));
+                        }
+                        // Skip this value, continue polling
                     } else {
-                        // Skip this value, continue polling for next
-                        self.poll_next()
+                        // First emission
+                        self.last_emit = Some(now);
+                        return Poll::Ready(Some(value));
                     }
-                } else {
-                    // First emission
-                    self.last_emit = Some(now);
-                    Poll::Ready(Some(value))
                 }
+                Poll::Ready(None) => return Poll::Ready(None),
+                Poll::Pending => return Poll::Pending,
             }
-            Poll::Ready(None) => Poll::Ready(None),
-            Poll::Pending => Poll::Pending,
         }
     }
 }
@@ -611,21 +624,23 @@ pub struct SampleStream<S, T> {
 impl<S, T> Stream<T> for SampleStream<S, T>
 where
     S: Stream<T>,
-    T: Send,
+    T: Send + Clone,
 {
     fn poll_next(&mut self) -> Poll<Option<T>> {
         let now = Instant::now();
 
         if let Some(last) = self.last_sample {
             if now.duration_since(last) < self.duration {
-                // Not time to sample yet, skip values
-                match self.stream.poll_next() {
-                    Poll::Ready(Some(_)) => {
-                        // Skip this value and continue polling
-                        self.poll_next()
+                // Not time to sample yet, consume values without emitting
+                loop {
+                    match self.stream.poll_next() {
+                        Poll::Ready(Some(_)) => {
+                            // Skip this value, continue consuming
+                            continue;
+                        }
+                        Poll::Ready(None) => return Poll::Ready(None),
+                        Poll::Pending => return Poll::Pending,
                     }
-                    Poll::Ready(None) => Poll::Ready(None),
-                    Poll::Pending => Poll::Pending,
                 }
             } else {
                 // Time to sample, emit the next available value
@@ -688,6 +703,10 @@ where
                         // Would need async blocking, for now just drop
                         self.poll_next()
                     }
+                    Err(BackpressureError::UpstreamError(_)) => {
+                        // Upstream error, for now just drop and continue
+                        self.poll_next()
+                    }
                 }
             }
             Poll::Ready(None) => Poll::Ready(None),
@@ -707,7 +726,7 @@ impl<S, T, U, F> Future for ReduceFuture<S, T, U, F>
 where
     S: Stream<T>,
     F: Fn(U, T) -> U + Send,
-    T: Sized + Send,
+    T: Sized + Send + Clone,
     U: Sized + Send,
 {
     type Output = U;
@@ -747,7 +766,7 @@ impl<T> StreamImpl<T> {
 
 impl<T> Stream<T> for StreamImpl<T>
 where
-    T: Send,
+    T: Send + Clone,
 {
     fn poll_next(&mut self) -> Poll<Option<T>> {
         self.iterator.poll_next()
@@ -850,6 +869,12 @@ impl AsyncIterator for IntervalIterator {
     }
 }
 
+
+
+
+
+
+
 /// Backpressure buffer for flow control
 pub struct BackpressureBuffer<T> {
     buffer: VecDeque<T>,
@@ -862,7 +887,7 @@ impl<T> BackpressureBuffer<T> {
         Self {
             buffer: VecDeque::new(),
             capacity,
-            strategy: BackpressureStrategy::DropOldest,
+            strategy: BackpressureStrategy::Error,
         }
     }
 
@@ -926,11 +951,98 @@ impl<T> BackpressureBuffer<T> {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
-pub enum BackpressureError {
-    Dropped,
-    BufferFull,
-    WouldBlock,
+/// Create a shareable stream that allows multiple subscriptions
+pub fn share<S, T>(stream: S) -> SharedStream<S, T>
+where
+    S: Stream<T> + Send + 'static,
+    T: Send + Clone + 'static,
+{
+    SharedStream::new(stream)
+}
+
+/// Stream that allows multiple subscriptions by sharing the underlying stream
+pub struct SharedStream<S, T> {
+    values: Arc<Mutex<Option<Vec<T>>>>,
+    _phantom: std::marker::PhantomData<S>,
+}
+
+impl<S, T> SharedStream<S, T>
+where
+    S: Stream<T> + Send + 'static,
+    T: Send + Clone + 'static,
+{
+    pub fn new(stream: S) -> Self {
+        let values = Arc::new(Mutex::new(None));
+        let values_clone = values.clone();
+
+        // Spawn a task to collect all values from the original stream
+        tokio::spawn(async move {
+            let mut collected_values = Vec::new();
+            let mut stream = stream;
+
+            loop {
+                match stream.poll_next() {
+                    Poll::Ready(Some(value)) => collected_values.push(value),
+                    Poll::Ready(None) => break,
+                    Poll::Pending => tokio::time::sleep(Duration::from_millis(1)).await,
+                }
+            }
+
+            *values_clone.lock().unwrap() = Some(collected_values);
+        });
+
+        Self {
+            values,
+            _phantom: std::marker::PhantomData,
+        }
+    }
+}
+
+impl<S, T> Stream<T> for SharedStream<S, T>
+where
+    S: Stream<T> + Send + 'static,
+    T: Send + Clone + 'static,
+{
+    fn poll_next(&mut self) -> Poll<Option<T>> {
+        // SharedStream doesn't support polling directly - use subscribe instead
+        Poll::Pending
+    }
+
+    fn subscribe<F, E, C>(self, on_next: F, on_error: E, on_complete: C) -> Subscription
+    where
+        F: Fn(T) + Send + 'static,
+        E: Fn(Box<dyn std::error::Error>) + Send + 'static,
+        C: Fn() + Send + 'static,
+    {
+        let subscription = Subscription::new();
+        let subscription_clone = subscription.clone();
+        let values_arc = self.values.clone();
+
+        tokio::spawn(async move {
+            // Wait for values to be collected
+            loop {
+                if let Ok(guard) = values_arc.try_lock() {
+                    if let Some(ref values) = *guard {
+                        // Values are ready, emit them to the subscriber
+                        if subscription_clone.is_subscribed() {
+                            for value in values.clone() {
+                                if !subscription_clone.is_subscribed() {
+                                    break;
+                                }
+                                on_next(value);
+                            }
+                            on_complete();
+                        }
+                        break;
+                    }
+                }
+                // Values not ready yet, wait a bit
+                tokio::time::sleep(Duration::from_millis(1)).await;
+            }
+        });
+
+        subscription
+    }
 }
 
 #[cfg(test)]
