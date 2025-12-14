@@ -1,0 +1,371 @@
+"""
+Testing API for Vela - Jest/Mocha style testing framework
+
+This module provides the core testing API with describe, it, and expect functions
+compatible with Jest/Mocha syntax.
+
+Jira: VELA-1130
+Historia: US-28
+Fecha: 2025-12-14
+"""
+
+// Test suite state management
+state currentSuite: TestSuite? = None
+state suites: List<TestSuite> = []
+state globalTestResults: TestResults = TestResults()
+
+// Test data structures
+struct TestSuite {
+  name: String
+  tests: List<Test>
+  beforeEach: (() -> void)?
+  afterEach: (() -> void)?
+  beforeAll: (() -> void)?
+  afterAll: (() -> void)?
+}
+
+struct Test {
+  description: String
+  fn: () -> void
+  suite: TestSuite
+  result: TestResult?
+}
+
+struct TestResult {
+  passed: Bool
+  error: String?
+  duration: Number
+}
+
+struct TestResults {
+  total: Number = 0
+  passed: Number = 0
+  failed: Number = 0
+  duration: Number = 0
+}
+
+// Main testing API functions
+
+/**
+ * Describe a test suite
+ * @param name - Name of the test suite
+ * @param fn - Function containing the test suite definition
+ */
+public fn describe(name: String, fn: () -> void) -> void {
+  let suite = TestSuite {
+    name: name,
+    tests: [],
+    beforeEach: None,
+    afterEach: None,
+    beforeAll: None,
+    afterAll: None
+  }
+
+  let previousSuite = currentSuite
+  currentSuite = Some(suite)
+
+  // Execute suite definition
+  fn()
+
+  // Add suite to global list
+  suites.add(suite)
+
+  // Restore previous suite
+  currentSuite = previousSuite
+}
+
+/**
+ * Define a test case
+ * @param description - Description of what the test does
+ * @param fn - Test function
+ */
+public fn it(description: String, fn: () -> void) -> void {
+  match currentSuite {
+    Some(suite) => {
+      let test = Test {
+        description: description,
+        fn: fn,
+        suite: suite,
+        result: None
+      }
+      suite.tests.add(test)
+    }
+    None => {
+      throw Error("Cannot define test outside of describe block")
+    }
+  }
+}
+
+/**
+ * Alias for it() - define a test case
+ */
+public fn test(description: String, fn: () -> void) -> void {
+  it(description, fn)
+}
+
+/**
+ * Setup function that runs before each test in the current suite
+ */
+public fn beforeEach(fn: () -> void) -> void {
+  match currentSuite {
+    Some(suite) => {
+      suite.beforeEach = Some(fn)
+    }
+    None => {
+      throw Error("Cannot use beforeEach outside of describe block")
+    }
+  }
+}
+
+/**
+ * Cleanup function that runs after each test in the current suite
+ */
+public fn afterEach(fn: () -> void) -> void {
+  match currentSuite {
+    Some(suite) => {
+      suite.afterEach = Some(fn)
+    }
+    None => {
+      throw Error("Cannot use afterEach outside of describe block")
+    }
+  }
+}
+
+/**
+ * Setup function that runs once before all tests in the current suite
+ */
+public fn beforeAll(fn: () -> void) -> void {
+  match currentSuite {
+    Some(suite) => {
+      suite.beforeAll = Some(fn)
+    }
+    None => {
+      throw Error("Cannot use beforeAll outside of describe block")
+    }
+  }
+}
+
+/**
+ * Cleanup function that runs once after all tests in the current suite
+ */
+public fn afterAll(fn: () -> void) -> void {
+  match currentSuite {
+    Some(suite) => {
+      suite.afterAll = Some(fn)
+    }
+    None => {
+      throw Error("Cannot use afterAll outside of describe block")
+    }
+  }
+}
+
+/**
+ * Create an expectation for a value
+ * @param actual - The actual value to test
+ * @returns Expectation object with matcher methods
+ */
+public fn expect(actual: any) -> Expectation {
+  return Expectation { actual: actual }
+}
+
+// Expectation class with matcher methods
+class Expectation {
+  actual: any
+
+  constructor(actual: any) {
+    this.actual = actual
+  }
+
+  // Equality matchers
+  fn toBe(expected: any) -> void {
+    if this.actual != expected {
+      throw AssertionError("Expected ${expected}, but got ${this.actual}")
+    }
+  }
+
+  fn toEqual(expected: any) -> void {
+    // Deep equality check
+    if !deepEqual(this.actual, expected) {
+      throw AssertionError("Expected ${expected}, but got ${this.actual}")
+    }
+  }
+
+  fn toBeCloseTo(expected: Float, precision: Number = 2) -> void {
+    let diff = Math.abs(this.actual - expected)
+    let tolerance = Math.pow(10, -precision)
+    if diff > tolerance {
+      throw AssertionError("Expected ${expected} ± ${tolerance}, but got ${this.actual}")
+    }
+  }
+
+  // Truthiness matchers
+  fn toBeTruthy() -> void {
+    if !this.actual {
+      throw AssertionError("Expected truthy value, but got ${this.actual}")
+    }
+  }
+
+  fn toBeFalsy() -> void {
+    if this.actual {
+      throw AssertionError("Expected falsy value, but got ${this.actual}")
+    }
+  }
+
+  fn toBeNull() -> void {
+    if this.actual != None {
+      throw AssertionError("Expected null, but got ${this.actual}")
+    }
+  }
+
+  // Number matchers
+  fn toBeGreaterThan(expected: Number) -> void {
+    if !(this.actual > expected) {
+      throw AssertionError("Expected ${this.actual} to be greater than ${expected}")
+    }
+  }
+
+  fn toBeGreaterThanOrEqual(expected: Number) -> void {
+    if !(this.actual >= expected) {
+      throw AssertionError("Expected ${this.actual} to be greater than or equal to ${expected}")
+    }
+  }
+
+  fn toBeLessThan(expected: Number) -> void {
+    if !(this.actual < expected) {
+      throw AssertionError("Expected ${this.actual} to be less than ${expected}")
+    }
+  }
+
+  fn toBeLessThanOrEqual(expected: Number) -> void {
+    if !(this.actual <= expected) {
+      throw AssertionError("Expected ${this.actual} to be less than or equal to ${expected}")
+    }
+  }
+
+  // String matchers
+  fn toMatch(pattern: String) -> void {
+    // Simple string contains check (could be enhanced with regex)
+    if !this.actual.contains(pattern) {
+      throw AssertionError("Expected ${this.actual} to match pattern ${pattern}")
+    }
+  }
+
+  fn toContain(substring: String) -> void {
+    match this.actual {
+      String(s) => {
+        if !s.contains(substring) {
+          throw AssertionError("Expected '${s}' to contain '${substring}'")
+        }
+      }
+      _ => {
+        throw AssertionError("toContain can only be used with strings")
+      }
+    }
+  }
+
+  // Array matchers
+  fn toContain(item: any) -> void {
+    match this.actual {
+      List(items) => {
+        let found = false
+        for item in items {
+          if item == item {  // Could be enhanced with deep equality
+            found = true
+            break
+          }
+        }
+        if !found {
+          throw AssertionError("Expected array to contain ${item}")
+        }
+      }
+      _ => {
+        throw AssertionError("toContain can only be used with arrays")
+      }
+    }
+  }
+
+  fn toHaveLength(expected: Number) -> void {
+    match this.actual {
+      List(items) => {
+        if items.length() != expected {
+          throw AssertionError("Expected array to have length ${expected}, but got ${items.length()}")
+        }
+      }
+      String(s) => {
+        if s.length() != expected {
+          throw AssertionError("Expected string to have length ${expected}, but got ${s.length()}")
+        }
+      }
+      _ => {
+        throw AssertionError("toHaveLength can only be used with arrays or strings")
+      }
+    }
+  }
+
+  // Error matchers
+  fn toThrow(expectedError: String? = None) -> void {
+    let threw = false
+    let thrownError: String? = None
+
+    try {
+      match this.actual {
+        () -> void(fn) => fn()
+        _ => throw AssertionError("toThrow can only be used with functions")
+      }
+    } catch (e) {
+      threw = true
+      thrownError = Some(e.message)
+    }
+
+    if !threw {
+      throw AssertionError("Expected function to throw, but it didn't")
+    }
+
+    match expectedError {
+      Some(expected) => {
+        match thrownError {
+          Some(actual) => {
+            if !actual.contains(expected) {
+              throw AssertionError("Expected error to contain '${expected}', but got '${actual}'")
+            }
+          }
+          None => {
+            throw AssertionError("Expected error to contain '${expected}', but no error message")
+          }
+        }
+      }
+      None => {
+        // Just check that it threw, no specific message required
+      }
+    }
+  }
+}
+
+// Utility functions
+fn deepEqual(a: any, b: any) -> Bool {
+  // Simple deep equality - could be enhanced
+  return a == b
+}
+
+// Custom error type for assertions
+class AssertionError {
+  message: String
+
+  constructor(message: String) {
+    this.message = message
+  }
+
+  fn toString() -> String {
+    return "AssertionError: ${this.message}"
+  }
+}
+
+// Test runner functions (will be implemented in next task)
+fn runTests() -> TestResults {
+  // Implementation in TASK-113B
+  return globalTestResults
+}
+
+fn runTestSuite(suite: TestSuite) -> void {
+  // Implementation in TASK-113B
+}

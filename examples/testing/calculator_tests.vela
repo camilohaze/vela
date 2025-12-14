@@ -1,0 +1,293 @@
+"""
+Ejemplo completo de testing con Vela
+
+Este archivo demuestra cómo usar el framework de testing de Vela
+con la API estilo Jest/Mocha.
+
+Jira: VELA-1130
+Fecha: 2025-12-14
+"""
+
+import { describe, it, expect, beforeEach, afterEach } from 'testing'
+
+// Código que vamos a testear
+class Calculator {
+  fn add(a: Number, b: Number) -> Number {
+    return a + b
+  }
+
+  fn subtract(a: Number, b: Number) -> Number {
+    return a - b
+  }
+
+  fn multiply(a: Number, b: Number) -> Number {
+    return a * b
+  }
+
+  fn divide(a: Number, b: Number) -> Result<Number> {
+    if b == 0 {
+      return Err("Division by zero")
+    }
+    return Ok(a / b)
+  }
+
+  fn factorial(n: Number) -> Number {
+    if n <= 1 {
+      return 1
+    }
+    return n * factorial(n - 1)
+  }
+}
+
+class StringUtils {
+  fn reverse(s: String) -> String {
+    return s.split("").reverse().join("")
+  }
+
+  fn isPalindrome(s: String) -> Bool {
+    let reversed = reverse(s)
+    return s.toLowerCase() == reversed.toLowerCase()
+  }
+
+  fn countWords(s: String) -> Number {
+    return s.split(" ").filter(word => word.length() > 0).length()
+  }
+}
+
+// Tests para Calculator
+describe("Calculator", () => {
+  state calc: Calculator = Calculator()
+
+  beforeEach(() => {
+    calc = Calculator()  // Fresh instance for each test
+  })
+
+  describe("Addition", () => {
+    it("should add positive numbers", () => {
+      expect(calc.add(2, 3)).toBe(5)
+      expect(calc.add(10, 15)).toBe(25)
+    })
+
+    it("should handle zero", () => {
+      expect(calc.add(0, 5)).toBe(5)
+      expect(calc.add(5, 0)).toBe(5)
+      expect(calc.add(0, 0)).toBe(0)
+    })
+
+    it("should handle negative numbers", () => {
+      expect(calc.add(-2, 3)).toBe(1)
+      expect(calc.add(-5, -3)).toBe(-8)
+    })
+  })
+
+  describe("Subtraction", () => {
+    it("should subtract numbers", () => {
+      expect(calc.subtract(10, 3)).toBe(7)
+      expect(calc.subtract(5, 10)).toBe(-5)
+    })
+
+    it("should handle zero", () => {
+      expect(calc.subtract(5, 0)).toBe(5)
+      expect(calc.subtract(0, 5)).toBe(-5)
+    })
+  })
+
+  describe("Multiplication", () => {
+    it("should multiply numbers", () => {
+      expect(calc.multiply(3, 4)).toBe(12)
+      expect(calc.multiply(5, 0)).toBe(0)
+      expect(calc.multiply(-2, 3)).toBe(-6)
+    })
+  })
+
+  describe("Division", () => {
+    it("should divide numbers", () => {
+      expect(calc.divide(10, 2)).toEqual(Ok(5))
+      expect(calc.divide(15, 3)).toEqual(Ok(5))
+    })
+
+    it("should handle division by zero", () => {
+      expect(calc.divide(10, 0)).toEqual(Err("Division by zero"))
+    })
+
+    it("should handle decimal results", () => {
+      let result = calc.divide(5, 2)
+      match result {
+        Ok(value) => expect(value).toBeCloseTo(2.5, 1)
+        Err(_) => throw Error("Expected Ok result")
+      }
+    })
+  })
+
+  describe("Factorial", () => {
+    it("should calculate factorial", () => {
+      expect(calc.factorial(0)).toBe(1)
+      expect(calc.factorial(1)).toBe(1)
+      expect(calc.factorial(5)).toBe(120)
+      expect(calc.factorial(10)).toBe(3628800)
+    })
+  })
+})
+
+// Tests para StringUtils
+describe("StringUtils", () => {
+  state utils: StringUtils = StringUtils()
+
+  beforeEach(() => {
+    utils = StringUtils()
+  })
+
+  describe("Reverse", () => {
+    it("should reverse strings", () => {
+      expect(utils.reverse("hello")).toBe("olleh")
+      expect(utils.reverse("12345")).toBe("54321")
+      expect(utils.reverse("")).toBe("")
+    })
+
+    it("should handle unicode", () => {
+      expect(utils.reverse("🚀⭐🌟")).toBe("🌟⭐🚀")
+    })
+  })
+
+  describe("Palindrome", () => {
+    it("should detect palindromes", () => {
+      expect(utils.isPalindrome("radar")).toBeTruthy()
+      expect(utils.isPalindrome("level")).toBeTruthy()
+      expect(utils.isPalindrome("hello")).toBeFalsy()
+    })
+
+    it("should be case insensitive", () => {
+      expect(utils.isPalindrome("Radar")).toBeTruthy()
+      expect(utils.isPalindrome("LeVeL")).toBeTruthy()
+    })
+
+    it("should handle single characters", () => {
+      expect(utils.isPalindrome("a")).toBeTruthy()
+      expect(utils.isPalindrome("")).toBeTruthy()
+    })
+  })
+
+  describe("Word Count", () => {
+    it("should count words correctly", () => {
+      expect(utils.countWords("hello world")).toBe(2)
+      expect(utils.countWords("this is a test")).toBe(4)
+      expect(utils.countWords("single")).toBe(1)
+      expect(utils.countWords("")).toBe(0)
+    })
+
+    it("should handle multiple spaces", () => {
+      expect(utils.countWords("hello   world")).toBe(2)
+      expect(utils.countWords("  spaced  out  ")).toBe(3)
+    })
+
+    it("should handle punctuation", () => {
+      expect(utils.countWords("hello, world!")).toBe(2)
+      expect(utils.countWords("this is a test.")).toBe(5)
+    })
+  })
+})
+
+// Tests de async/await (si se implementa en el futuro)
+describe("Async Operations", () => {
+  it("should handle promises", () => {
+    // Placeholder for async testing
+    expect(true).toBeTruthy()
+  })
+})
+
+// Tests de error handling
+describe("Error Handling", () => {
+  it("should throw on invalid input", () => {
+    expect(() => {
+      throw Error("Test error")
+    }).toThrow("Test error")
+  })
+
+  it("should catch exceptions", () => {
+    let caught = false
+    try {
+      throw Error("Expected error")
+    } catch (e) {
+      caught = true
+      expect(e.message).toContain("Expected error")
+    }
+    expect(caught).toBeTruthy()
+  })
+})
+
+// Tests de collections
+describe("Collections", () => {
+  it("should work with arrays", () => {
+    let numbers = [1, 2, 3, 4, 5]
+    expect(numbers).toHaveLength(5)
+    expect(numbers).toContain(3)
+    expect(numbers).not.toContain(6)
+  })
+
+  it("should work with strings", () => {
+    let text = "hello world"
+    expect(text).toHaveLength(11)
+    expect(text).toContain("world")
+    expect(text).toMatch("hello")
+  })
+})
+
+// Performance tests (placeholder)
+describe("Performance", () => {
+  it("should perform operations quickly", () => {
+    let start = Date.now()
+    let calc = Calculator()
+
+    // Perform some operations
+    for i in 0..1000 {
+      calc.add(i, i + 1)
+    }
+
+    let end = Date.now()
+    let duration = end - start
+
+    // Should complete in less than 100ms
+    expect(duration).toBeLessThan(100)
+  })
+})
+
+// Ejemplo de test con setup/teardown más complejo
+describe("Complex Setup", () => {
+  state testData: List<Number> = []
+
+  beforeAll(() => {
+    // Setup that runs once before all tests
+    print("Setting up complex test data...")
+    testData = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+  })
+
+  afterAll(() => {
+    // Cleanup that runs once after all tests
+    print("Cleaning up complex test data...")
+    testData = []
+  })
+
+  beforeEach(() => {
+    // Setup that runs before each test
+    print("Preparing test...")
+  })
+
+  afterEach(() => {
+    // Cleanup that runs after each test
+    print("Test completed.")
+  })
+
+  it("should have test data available", () => {
+    expect(testData).toHaveLength(10)
+    expect(testData).toContain(5)
+  })
+
+  it("should be able to modify test data", () => {
+    let originalLength = testData.length()
+    testData.add(11)
+    expect(testData).toHaveLength(originalLength + 1)
+  })
+})
+
+// Export para uso en otros archivos
+export { Calculator, StringUtils }
