@@ -1,73 +1,73 @@
 name: Deploy Documentation
 
 on:
-  push:
-    branches: [ main ]
-    paths:
-      - 'docs/**'
-      - '.github/workflows/deploy-docs.yml'
-  pull_request:
-    branches: [ main ]
-    paths:
-      - 'docs/**'
+    push:
+        branches: [main]
+        paths:
+            - "docs/**"
+            - ".github/workflows/deploy-docs.yml"
+    pull_request:
+        branches: [main]
+        paths:
+            - "docs/**"
 
 jobs:
-  deploy:
-    runs-on: ubuntu-latest
+    deploy:
+        runs-on: ubuntu-latest
 
-    steps:
-    - name: Checkout
-      uses: actions/checkout@v4
-      with:
-        fetch-depth: 0
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v4
+              with:
+                  fetch-depth: 0
 
-    - name: Setup mdBook
-      run: |
-        curl -L https://github.com/rust-lang/mdBook/releases/download/v0.4.35/mdbook-v0.4.35-x86_64-unknown-linux-gnu.tar.gz | tar xz
-        chmod +x mdbook
-        sudo mv mdbook /usr/local/bin/
+            - name: Setup mdBook
+              run: |
+                  curl -L https://github.com/rust-lang/mdBook/releases/download/v0.4.35/mdbook-v0.4.35-x86_64-unknown-linux-gnu.tar.gz | tar xz
+                  chmod +x mdbook
+                  sudo mv mdbook /usr/local/bin/
 
-    - name: Setup mdBook preprocessors
-      run: |
-        cargo install mdbook-toc
-        cargo install mdbook-mermaid
+            - name: Setup mdBook preprocessors
+              run: |
+                  cargo install mdbook-toc
+                  cargo install mdbook-mermaid
 
-    - name: Build documentation
-      run: |
-        cd docs
-        mdbook build
+            - name: Build documentation
+              run: |
+                  cd docs
+                  mdbook build
 
-    - name: Deploy to GitHub Pages
-      if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-      uses: peaceiris/actions-gh-pages@v3
-      with:
-        github_token: ${{ secrets.GITHUB_TOKEN }}
-        publish_dir: ./docs/book
-        cname: docs.velalang.org
+            - name: Deploy to GitHub Pages
+              if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+              uses: peaceiris/actions-gh-pages@v3
+              with:
+                  github_token: ${{ secrets.GITHUB_TOKEN }}
+                  publish_dir: ./docs/book
+                  cname: docs.velalang.org
 
-    - name: Comment PR with preview link
-      if: github.event_name == 'pull_request'
-      uses: actions/github-script@v7
-      with:
-        script: |
-          const { exec } = require('child_process');
-          const { promisify } = require('util');
-          const execAsync = promisify(exec);
+            - name: Comment PR with preview link
+              if: github.event_name == 'pull_request'
+              uses: actions/github-script@v7
+              with:
+                  script: |
+                      const { exec } = require('child_process');
+                      const { promisify } = require('util');
+                      const execAsync = promisify(exec);
 
-          try {
-            // Get the PR number
-            const prNumber = context.issue.number;
+                      try {
+                        // Get the PR number
+                        const prNumber = context.issue.number;
 
-            // Build preview URL
-            const previewUrl = `https://velalang.github.io/vela/pr-preview/${prNumber}/`;
+                        // Build preview URL
+                        const previewUrl = `https://velalang.github.io/vela/pr-preview/${prNumber}/`;
 
-            // Comment on PR
-            await github.rest.issues.createComment({
-              issue_number: prNumber,
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              body: `📚 **Documentation Preview**\n\nYour documentation changes are available for preview at: ${previewUrl}`
-            });
-          } catch (error) {
-            console.log('Could not create PR comment:', error.message);
-          }
+                        // Comment on PR
+                        await github.rest.issues.createComment({
+                          issue_number: prNumber,
+                          owner: context.repo.owner,
+                          repo: context.repo.repo,
+                          body: `📚 **Documentation Preview**\n\nYour documentation changes are available for preview at: ${previewUrl}`
+                        });
+                      } catch (error) {
+                        console.log('Could not create PR comment:', error.message);
+                      }
