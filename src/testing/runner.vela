@@ -1,0 +1,405 @@
+"""
+Test Runner for Vela Testing Framework
+
+This module provides automatic test execution, result collection,
+and multiple reporting formats.
+
+Jira: VELA-1130
+Historia: US-28
+Fecha: 2025-12-14
+"""
+
+import { suites, globalTestResults } from './api'
+
+// Result structures
+struct TestSuiteResult {
+  suite: TestSuite
+  results: List<TestResult>
+  passed: Number
+  failed: Number
+  duration: Number
+}
+
+struct TestRunResult {
+  total: Number
+  passed: Number
+  failed: Number
+  duration: Number
+  suiteResults: List<TestSuiteResult>
+}
+
+// Reporter interface
+interface Reporter {
+  fn onSuiteStart(suite: TestSuite) -> void
+  fn onSuiteEnd(result: TestSuiteResult) -> void
+  fn onTestStart(test: Test) -> void
+  fn onTestEnd(result: TestResult) -> void
+  fn onRunEnd(results: TestRunResult) -> void
+}
+
+// Console Reporter
+class ConsoleReporter implements Reporter {
+  fn onSuiteStart(suite: TestSuite) -> void {
+    print("🔄 Running suite: ${suite.name}")
+  }
+
+  fn onSuiteEnd(result: TestSuiteResult) -> void {
+    let status = if result.failed == 0 { "✅" } else { "❌" }
+    print("${status} ${result.suite.name} (${result.passed} passed, ${result.failed} failed, ${result.duration}ms)")
+  }
+
+  fn onTestStart(test: Test) -> void {
+    // Could show progress indicator
+  }
+
+  fn onTestEnd(result: TestResult) -> void {
+    let status = if result.passed { "✅" } else { "❌" }
+    let error = match result.error {
+      Some(err) => "\n    ${err}"
+      None => ""
+    }
+    print("  ${status} ${result.description} (${result.duration}ms)${error}")
+  }
+
+  fn onRunEnd(results: TestRunResult) -> void {
+    print("\n📊 Test Results: ${results.passed} passed, ${results.failed} failed (${results.duration}ms)")
+    if results.failed > 0 {
+      print("❌ Some tests failed")
+    } else {
+      print("🎉 All tests passed!")
+    }
+  }
+}
+
+// JSON Reporter
+class JsonReporter implements Reporter {
+  outputPath: String
+
+  constructor(outputPath: String) {
+    this.outputPath = outputPath
+  }
+
+  fn onSuiteStart(suite: TestSuite) -> void {
+    // No-op for JSON reporter
+  }
+
+  fn onSuiteEnd(result: TestSuiteResult) -> void {
+    // No-op for JSON reporter
+  }
+
+  fn onTestStart(test: Test) -> void {
+    // No-op for JSON reporter
+  }
+
+  fn onTestEnd(result: TestResult) -> void {
+    // No-op for JSON reporter
+  }
+
+  fn onRunEnd(results: TestRunResult) -> void {
+    let json = toJson(results)
+    writeFile(this.outputPath, json)
+  }
+}
+
+// JUnit XML Reporter (for CI/CD)
+class JunitReporter implements Reporter {
+  outputPath: String
+
+  constructor(outputPath: String) {
+    this.outputPath = outputPath
+  }
+
+  fn onSuiteStart(suite: TestSuite) -> void {
+    // No-op
+  }
+
+  fn onSuiteEnd(result: TestSuiteResult) -> void {
+    // No-op
+  }
+
+  fn onTestStart(test: Test) -> void {
+    // No-op
+  }
+
+  fn onTestEnd(result: TestResult) -> void {
+    // No-op
+  }
+
+  fn onRunEnd(results: TestRunResult) -> void {
+    let xml = toJunitXml(results)
+    writeFile(this.outputPath, xml)
+  }
+}
+
+// HTML Reporter
+class HtmlReporter implements Reporter {
+  outputPath: String
+
+  constructor(outputPath: String) {
+    this.outputPath = outputPath
+  }
+
+  fn onSuiteStart(suite: TestSuite) -> void {
+    // No-op
+  }
+
+  fn onSuiteEnd(result: TestSuiteResult) -> void {
+    // No-op
+  }
+
+  fn onTestStart(test: Test) -> void {
+    // No-op
+  }
+
+  fn onTestEnd(result: TestResult) -> void {
+    // No-op
+  }
+
+  fn onRunEnd(results: TestRunResult) -> void {
+    let html = generateHtmlReport(results)
+    writeFile(this.outputPath, html)
+  }
+}
+
+// Main TestRunner class
+class TestRunner {
+  reporters: List<Reporter> = []
+  filter: String? = None
+
+  constructor() {
+    // Add console reporter by default
+    this.reporters.add(ConsoleReporter())
+  }
+
+  fn addReporter(reporter: Reporter) -> void {
+    this.reporters.add(reporter)
+  }
+
+  fn setFilter(pattern: String) -> void {
+    this.filter = Some(pattern)
+  }
+
+  fn runAll() -> TestRunResult {
+    let startTime = Date.now()
+    let suiteResults: List<TestSuiteResult> = []
+    let totalPassed = 0
+    let totalFailed = 0
+
+    for suite in suites {
+      if this.shouldRunSuite(suite) {
+        let result = this.runSuite(suite)
+        suiteResults.add(result)
+        totalPassed += result.passed
+        totalFailed += result.failed
+      }
+    }
+
+    let totalDuration = Date.now() - startTime
+
+    let runResult = TestRunResult {
+      total: totalPassed + totalFailed,
+      passed: totalPassed,
+      failed: totalFailed,
+      duration: totalDuration,
+      suiteResults: suiteResults
+    }
+
+    // Notify reporters
+    for reporter in this.reporters {
+      reporter.onRunEnd(runResult)
+    }
+
+    return runResult
+  }
+
+  fn runSuite(suite: TestSuite) -> TestSuiteResult {
+    // Notify reporters
+    for reporter in this.reporters {
+      reporter.onSuiteStart(suite)
+    }
+
+    let startTime = Date.now()
+    let results: List<TestResult> = []
+    let passed = 0
+    let failed = 0
+
+    // beforeAll
+    match suite.beforeAll {
+      Some(hook) => hook()
+      None => {}
+    }
+
+    for test in suite.tests {
+      if this.shouldRunTest(test) {
+        // beforeEach
+        match suite.beforeEach {
+          Some(hook) => hook()
+          None => {}
+        }
+
+        // Run test
+        let result = this.runTest(test)
+        results.add(result)
+
+        if result.passed {
+          passed += 1
+        } else {
+          failed += 1
+        }
+
+        // afterEach
+        match suite.afterEach {
+          Some(hook) => hook()
+          None => {}
+        }
+      }
+    }
+
+    // afterAll
+    match suite.afterAll {
+      Some(hook) => hook()
+      None => {}
+    }
+
+    let duration = Date.now() - startTime
+
+    let suiteResult = TestSuiteResult {
+      suite: suite,
+      results: results,
+      passed: passed,
+      failed: failed,
+      duration: duration
+    }
+
+    // Notify reporters
+    for reporter in this.reporters {
+      reporter.onSuiteEnd(suiteResult)
+    }
+
+    return suiteResult
+  }
+
+  fn runTest(test: Test) -> TestResult {
+    // Notify reporters
+    for reporter in this.reporters {
+      reporter.onTestStart(test)
+    }
+
+    let startTime = Date.now()
+
+    let result = try {
+      test.fn()
+      let duration = Date.now() - startTime
+      TestResult {
+        passed: true,
+        error: None,
+        duration: duration
+      }
+    } catch (e) {
+      let duration = Date.now() - startTime
+      TestResult {
+        passed: false,
+        error: Some(e.message),
+        duration: duration
+      }
+    }
+
+    // Notify reporters
+    for reporter in this.reporters {
+      reporter.onTestEnd(result)
+    }
+
+    return result
+  }
+
+  fn shouldRunSuite(suite: TestSuite) -> Bool {
+    match this.filter {
+      Some(pattern) => suite.name.contains(pattern)
+      None => true
+    }
+  }
+
+  fn shouldRunTest(test: Test) -> Bool {
+    match this.filter {
+      Some(pattern) => {
+        test.suite.name.contains(pattern) || test.description.contains(pattern)
+      }
+      None => true
+    }
+  }
+}
+
+// Utility functions for reporters
+fn toJson(results: TestRunResult) -> String {
+  // Simple JSON serialization (would be enhanced in real implementation)
+  return "{
+  \"total\": ${results.total},
+  \"passed\": ${results.passed},
+  \"failed\": ${results.failed},
+  \"duration\": ${results.duration}
+}"
+}
+
+fn toJunitXml(results: TestRunResult) -> String {
+  // JUnit XML format for CI/CD
+  return "<?xml version=\"1.0\" encoding=\"UTF-8\"?>
+<testsuites>
+  <testsuite name=\"Vela Tests\" tests=\"${results.total}\" failures=\"${results.failed}\" time=\"${results.duration / 1000}\">
+  </testsuite>
+</testsuites>"
+}
+
+fn generateHtmlReport(results: TestRunResult) -> String {
+  return "<!DOCTYPE html>
+<html>
+<head>
+  <title>Vela Test Results</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 20px; }
+    .passed { color: green; }
+    .failed { color: red; }
+    .summary { font-size: 1.2em; font-weight: bold; }
+  </style>
+</head>
+<body>
+  <h1>Vela Test Results</h1>
+  <div class=\"summary\">
+    Total: ${results.total}, Passed: <span class=\"passed\">${results.passed}</span>, Failed: <span class=\"failed\">${results.failed}</span>
+  </div>
+</body>
+</html>"
+}
+
+fn writeFile(path: String, content: String) -> void {
+  // File I/O would be implemented in the runtime
+  print("Writing to ${path}: ${content.substring(0, 100)}...")
+}
+
+// Global test runner instance
+state defaultRunner: TestRunner = TestRunner()
+
+// Public API functions
+public fn runTests() -> TestRunResult {
+  return defaultRunner.runAll()
+}
+
+public fn runTestsWithFilter(pattern: String) -> TestRunResult {
+  defaultRunner.setFilter(pattern)
+  return defaultRunner.runAll()
+}
+
+public fn addReporter(reporter: Reporter) -> void {
+  defaultRunner.addReporter(reporter)
+}
+
+// Export classes for external use
+export {
+  TestRunner,
+  ConsoleReporter,
+  JsonReporter,
+  JunitReporter,
+  HtmlReporter,
+  runTests,
+  runTestsWithFilter,
+  addReporter
+}

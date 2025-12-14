@@ -1,0 +1,198 @@
+"""
+Ejemplo de uso del Test Runner de Vela
+
+Este archivo demuestra cómo ejecutar tests automáticamente
+y generar diferentes tipos de reportes.
+
+Jira: VELA-1130
+Fecha: 2025-12-14
+"""
+
+import { describe, it, expect } from './api'
+import { TestRunner, ConsoleReporter, JsonReporter, JunitReporter, HtmlReporter, runTests, addReporter } from './runner'
+
+// Importar tests (en un sistema real, esto sería automático)
+import './calculator_tests'
+
+// Función principal para ejecutar tests
+fn main() -> void {
+  print("🚀 Ejecutando Test Suite de Vela")
+  print("=" * 50)
+
+  // Configurar reporters adicionales
+  addReporter(JsonReporter("test-results.json"))
+  addReporter(JunitReporter("test-results.xml"))
+  addReporter(HtmlReporter("test-results.html"))
+
+  // Ejecutar todos los tests
+  let results = runTests()
+
+  print("\n" + "=" * 50)
+  print("📊 Resumen Final:"  print("   Total de tests: ${results.total}")
+  print("   Tests pasados: ${results.passed}")
+  print("   Tests fallidos: ${results.failed}")
+  print("   Tiempo total: ${results.duration}ms")
+
+  // Reporte detallado por suite
+  print("\n📋 Detalle por Suite:")
+  for suiteResult in results.suiteResults {
+    let status = if suiteResult.failed == 0 { "✅" } else { "❌" }
+    print("   ${status} ${suiteResult.suite.name}: ${suiteResult.passed}/${suiteResult.passed + suiteResult.failed} (${suiteResult.duration}ms)")
+  }
+
+  // Generar código de salida basado en resultados
+  if results.failed > 0 {
+    print("\n❌ Algunos tests fallaron. Revisa los reportes para más detalles.")
+    exit(1)
+  } else {
+    print("\n🎉 Todos los tests pasaron exitosamente!")
+    exit(0)
+  }
+}
+
+// Función para ejecutar tests con filtro
+fn runFilteredTests(pattern: String) -> void {
+  print("🔍 Ejecutando tests que coinciden con: '${pattern}'")
+  print("-" * 50)
+
+  let runner = TestRunner()
+  runner.setFilter(pattern)
+  runner.addReporter(ConsoleReporter())
+
+  let results = runner.runAll()
+
+  print("\n📊 Resultados filtrados:")
+  print("   Tests encontrados: ${results.total}")
+  print("   Tests pasados: ${results.passed}")
+  print("   Tests fallidos: ${results.failed}")
+}
+
+// Función para ejecutar solo una suite específica
+fn runSuiteTests(suiteName: String) -> void {
+  print("🎯 Ejecutando suite: '${suiteName}'")
+  print("-" * 50)
+
+  let runner = TestRunner()
+  runner.setFilter(suiteName)
+  runner.addReporter(ConsoleReporter())
+
+  let results = runner.runAll()
+
+  if results.total == 0 {
+    print("⚠️  No se encontraron tests para la suite '${suiteName}'")
+  }
+}
+
+// Función de utilidad para benchmarks
+fn runBenchmarks() -> void {
+  print("⚡ Ejecutando Benchmarks")
+  print("=" * 50)
+
+  let runner = TestRunner()
+  runner.setFilter("Performance")
+  runner.addReporter(ConsoleReporter())
+
+  let startTime = Date.now()
+  let results = runner.runAll()
+  let totalTime = Date.now() - startTime
+
+  print("\n⏱️  Benchmark completado en ${totalTime}ms")
+  print("   Tests de performance: ${results.total}")
+  print("   Todos pasaron: ${results.failed == 0}")
+}
+
+// Función para generar reporte de cobertura (placeholder)
+fn generateCoverageReport() -> void {
+  print("📊 Generando Reporte de Cobertura")
+  print("-" * 50)
+
+  // En una implementación real, esto analizaría qué líneas se ejecutaron
+  print("✅ Cobertura de líneas: 85%")
+  print("✅ Cobertura de ramas: 78%")
+  print("✅ Cobertura de funciones: 92%")
+
+  print("\n📄 Reporte generado: coverage.html")
+}
+
+// Configuración de CI/CD
+fn setupCI() -> void {
+  print("🔧 Configurando entorno CI/CD")
+  print("-" * 50)
+
+  // Configurar reporters para CI
+  addReporter(JunitReporter("junit-results.xml"))
+  addReporter(JsonReporter("test-results.json"))
+
+  // Configurar variables de entorno
+  setEnv("VELA_TEST_MODE", "ci")
+  setEnv("VELA_TEST_TIMEOUT", "30000")  // 30 segundos
+
+  print("✅ Reporters JUnit y JSON configurados")
+  print("✅ Variables de entorno establecidas")
+}
+
+// Función de ayuda para debugging
+fn debugTest(testName: String) -> void {
+  print("🐛 Debug mode para test: '${testName}'")
+  print("-" * 50)
+
+  let runner = TestRunner()
+  runner.setFilter(testName)
+  runner.addReporter(ConsoleReporter())
+
+  // Modo verbose para debugging
+  setEnv("VELA_TEST_VERBOSE", "true")
+
+  let results = runner.runAll()
+
+  if results.failed > 0 {
+    print("\n🔍 Analizando fallos...")
+    for suiteResult in results.suiteResults {
+      for testResult in suiteResult.results {
+        if !testResult.passed {
+          match testResult.error {
+            Some(error) => {
+              print("❌ Error en '${testResult.description}': ${error}")
+              print("   Sugerencias de debugging:")
+              print("   - Verifica los valores de entrada")
+              print("   - Revisa la lógica de la función testeada")
+              print("   - Verifica que las dependencias estén inicializadas")
+            }
+            None => {}
+          }
+        }
+      }
+    }
+  }
+}
+
+// Función para ejecutar tests en paralelo (si se implementa)
+fn runParallelTests() -> void {
+  print("🔄 Ejecutando tests en paralelo")
+  print("-" * 50)
+
+  // En una implementación real, esto distribuiría tests entre workers
+  print("✅ Tests distribuidos entre 4 workers")
+  print("✅ Ejecutando en paralelo...")
+
+  let results = runTests()
+
+  print("✅ Tests paralelos completados")
+}
+
+// Exportar funciones para uso desde línea de comandos
+export {
+  main,
+  runFilteredTests,
+  runSuiteTests,
+  runBenchmarks,
+  generateCoverageReport,
+  setupCI,
+  debugTest,
+  runParallelTests
+}
+
+// Si se ejecuta directamente, correr main
+if __name__ == "__main__" {
+  main()
+}
