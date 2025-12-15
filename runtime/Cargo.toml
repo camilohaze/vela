@@ -43,6 +43,10 @@ criterion = "0.5"
 name = "async_iterators"
 path = "tests/async_iterators_tests.rs"
 
+[[test]]
+name = "animation_integration_tests"
+path = "../tests/integration/animation_integration_tests.rs"
+
 [[bench]]
 name = "runtime_bench"
 harness = false

@@ -371,10 +371,18 @@ pub mod curves {
     pub const BOUNCE_IN_OUT: EasingCurve = EasingCurve::BounceInOut;
 
     // CSS standard curves
-    pub const EASE: EasingCurve = EasingCurve::CubicBezier(CubicBezier::new(0.25, 0.1, 0.25, 1.0));
-    pub const EASE_IN: EasingCurve = EasingCurve::CubicBezier(CubicBezier::new(0.42, 0.0, 1.0, 1.0));
-    pub const EASE_OUT: EasingCurve = EasingCurve::CubicBezier(CubicBezier::new(0.0, 0.0, 0.58, 1.0));
-    pub const EASE_IN_OUT: EasingCurve = EasingCurve::CubicBezier(CubicBezier::new(0.42, 0.0, 0.58, 1.0));
+    pub fn ease() -> EasingCurve {
+        EasingCurve::CubicBezier(CubicBezier::new(0.25, 0.1, 0.25, 1.0))
+    }
+    pub fn ease_in() -> EasingCurve {
+        EasingCurve::CubicBezier(CubicBezier::new(0.42, 0.0, 1.0, 1.0))
+    }
+    pub fn ease_out() -> EasingCurve {
+        EasingCurve::CubicBezier(CubicBezier::new(0.0, 0.0, 0.58, 1.0))
+    }
+    pub fn ease_in_out() -> EasingCurve {
+        EasingCurve::CubicBezier(CubicBezier::new(0.42, 0.0, 0.58, 1.0))
+    }
 }
 
 #[cfg(test)]

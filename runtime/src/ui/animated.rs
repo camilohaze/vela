@@ -5,7 +5,16 @@
 
 use std::time::{Duration, Instant};
 use std::collections::HashMap;
-use crate::signals::{Signal, SignalValue};
+use reactive::{Signal};
+
+/// Value types that can be passed to widget properties
+#[derive(Debug, Clone, PartialEq)]
+pub enum SignalValue {
+    Float(f32),
+    Int(i32),
+    Bool(bool),
+    String(String),
+}
 
 use crate::ui::curves::EasingCurve;
 
@@ -76,7 +85,6 @@ pub struct AnimationCallbacks {
 }
 
 /// Advanced Animation Controller with full control features
-#[derive(Debug)]
 pub struct AdvancedAnimationController {
     duration: Duration,
     curve: Curve,
@@ -285,6 +293,7 @@ impl AdvancedAnimationController {
     pub fn current_repeat(&self) -> u32 {
         self.current_repeat
     }
+}
 
 /// Animation that can be sequenced or run in parallel
 pub trait Animation {
@@ -408,7 +417,7 @@ impl Animation for AnimationParallel {
 
 // Wrapper to make AnimationController implement Animation trait
 pub struct AnimationControllerWrapper {
-    pub controller: AnimationController,
+    pub controller: AdvancedAnimationController,
 }
 
 impl Animation for AnimationControllerWrapper {
@@ -444,85 +453,9 @@ impl Animation for AdvancedAnimationControllerWrapper {
     }
 }
 
-impl AnimationController {
-    pub fn new(duration: Duration) -> Self {
-        Self {
-            duration,
-            curve: Curve::Linear,
-            start_time: None,
-            is_playing: false,
-            is_completed: false,
-            progress_signal: Signal::new(0.0),
-        }
-    }
-
-    pub fn with_curve(mut self, curve: Curve) -> Self {
-        self.curve = curve;
-        self
-    }
-
-    pub fn forward(&mut self) {
-        self.start_time = Some(Instant::now());
-        self.is_playing = true;
-        self.is_completed = false;
-    }
-
-    pub fn reverse(&mut self) {
-        self.start_time = Some(Instant::now());
-        self.is_playing = true;
-        self.is_completed = false;
-        // For reverse, we start from current progress and go backwards
-    }
-
-    pub fn stop(&mut self) {
-        self.is_playing = false;
-    }
-
-    pub fn reset(&mut self) {
-        self.start_time = None;
-        self.is_playing = false;
-        self.is_completed = false;
-        self.progress_signal.set(0.0);
-    }
-
-    /// Update animation progress and return current value
-    pub fn update(&mut self) -> f32 {
-        if !self.is_playing || self.start_time.is_none() {
-            return self.progress_signal.get();
-        }
-
-        let elapsed = self.start_time.unwrap().elapsed();
-        let progress = (elapsed.as_secs_f32() / self.duration.as_secs_f32()).min(1.0);
-
-        if progress >= 1.0 {
-            self.is_playing = false;
-            self.is_completed = true;
-            self.progress_signal.set(1.0);
-            1.0
-        } else {
-            let curved_progress = self.curve.transform(progress);
-            self.progress_signal.set(curved_progress);
-            curved_progress
-        }
-    }
-
-    pub fn is_completed(&self) -> bool {
-        self.is_completed
-    }
-
-    pub fn progress(&self) -> f32 {
-        self.progress_signal.get()
-    }
-
-    pub fn progress_signal(&self) -> &Signal<f32> {
-        &self.progress_signal
-    }
-}
-
 /// Animated widget that applies animations to its child properties
-#[derive(Debug)]
 pub struct Animated<T> {
-    controller: AnimationController,
+    controller: AdvancedAnimationController,
     tween: Tween<T>,
     child: Box<dyn Widget>,
     property_updater: Box<dyn Fn(&mut dyn Widget, T)>,
@@ -538,7 +471,7 @@ where
     T: std::ops::Add<Output = T> + std::ops::Sub<Output = T> + std::ops::Mul<f32, Output = T> + Copy + 'static,
 {
     pub fn new(
-        controller: AnimationController,
+        controller: AdvancedAnimationController,
         tween: Tween<T>,
         child: Box<dyn Widget>,
         property_updater: Box<dyn Fn(&mut dyn Widget, T)>,
@@ -561,18 +494,18 @@ where
         self.child.render()
     }
 
-    pub fn controller(&self) -> &AnimationController {
+    pub fn controller(&self) -> &AdvancedAnimationController {
         &self.controller
     }
 
-    pub fn controller_mut(&mut self) -> &mut AnimationController {
+    pub fn controller_mut(&mut self) -> &mut AdvancedAnimationController {
         &mut self.controller
     }
 }
 
 /// Builder for creating animated widgets
 pub struct AnimatedBuilder {
-    controller: Option<AnimationController>,
+    controller: Option<AdvancedAnimationController>,
     tweens: HashMap<String, Box<dyn std::any::Any>>,
 }
 
@@ -584,7 +517,7 @@ impl AnimatedBuilder {
         }
     }
 
-    pub fn controller(mut self, controller: AnimationController) -> Self {
+    pub fn controller(mut self, controller: AdvancedAnimationController) -> Self {
         self.controller = Some(controller);
         self
     }
@@ -597,7 +530,7 @@ impl AnimatedBuilder {
     pub fn build<W: Widget + 'static>(self, child: W) -> Animated<f32> {
         // For simplicity, create a basic animation
         // In a real implementation, this would handle multiple properties
-        let controller = self.controller.unwrap_or_else(|| AnimationController::new(Duration::from_secs(1)));
+        let controller = self.controller.unwrap_or_else(|| AdvancedAnimationController::new(Duration::from_secs(1)));
         let tween = Tween::new(0.0, 1.0);
 
         Animated::new(
@@ -636,7 +569,7 @@ mod tests {
 
     #[test]
     fn test_animation_controller() {
-        let mut controller = AnimationController::new(Duration::from_millis(100));
+        let mut controller = AdvancedAnimationController::new(Duration::from_millis(100));
         controller.forward();
 
         // Initially should be 0

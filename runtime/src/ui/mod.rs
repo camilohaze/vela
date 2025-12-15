@@ -6,9 +6,9 @@ pub mod animated;
 pub mod curves;
 
 pub use animated::{
-    Animated, AnimationController, Curve, Tween, AnimatedBuilder, Widget,
+    Animated, Curve, Tween, AnimatedBuilder, Widget,
     AnimationStatus, AnimationCallbacks, AdvancedAnimationController,
     Animation, AnimationSequence, AnimationParallel,
     AnimationControllerWrapper, AdvancedAnimationControllerWrapper
 };
-pub use curves::{EasingCurve, CubicBezier, interpolation, curves};
+pub use curves::{EasingCurve, CubicBezier, interpolation};
