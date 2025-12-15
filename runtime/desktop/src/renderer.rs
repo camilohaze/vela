@@ -8,58 +8,67 @@ integrating with the Vela widget system for desktop applications.
 use std::sync::Arc;
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
+use skia_safe::{
+    surfaces, images,
+    Canvas, Color as SkiaColor, Font, FontMgr, Paint as SkiaPaint, Point, Rect as SkiaRect,
+    Surface, TextBlob, Typeface,
+};
 
 /// Main renderer interface
 pub struct DesktopRenderer {
-    skia_context: Arc<SkiaContext>,
-    surface: Option<SkiaSurface>,
-    canvas: Option<SkiaCanvas>,
+    surface: Option<Surface>,
+    font_mgr: FontMgr,
 }
 
 impl DesktopRenderer {
     /// Create a new desktop renderer
     pub fn new(width: u32, height: u32) -> Result<Self> {
-        let skia_context = Arc::new(SkiaContext::new()?);
+        let mut surface = surfaces::raster_n32_premul((width as i32, height as i32))
+            .ok_or_else(|| anyhow::anyhow!("Failed to create Skia surface"))?;
+
+        let font_mgr = FontMgr::default();
 
         Ok(Self {
-            skia_context,
-            surface: None,
-            canvas: None,
+            surface: Some(surface),
+            font_mgr,
         })
     }
 
     /// Resize the render surface
     pub fn resize(&mut self, width: u32, height: u32) -> Result<()> {
-        self.surface = Some(SkiaSurface::new(
-            Arc::clone(&self.skia_context),
-            width,
-            height,
-        )?);
-
-        self.canvas = self.surface.as_ref()
-            .map(|surface| surface.get_canvas());
-
+        self.surface = Some(
+            surfaces::raster_n32_premul((width as i32, height as i32))
+                .ok_or_else(|| anyhow::anyhow!("Failed to create Skia surface"))?
+        );
         Ok(())
     }
 
     /// Begin a new frame
     pub fn begin_frame(&mut self) -> Result<()> {
-        if let Some(canvas) = &mut self.canvas {
-            canvas.clear(Color::white());
+        if let Some(surface) = &mut self.surface {
+            let canvas = surface.canvas();
+            canvas.clear(SkiaColor::WHITE);
         }
         Ok(())
     }
 
     /// Render a widget tree
     pub fn render_widget(&mut self, widget: &WidgetNode) -> Result<()> {
-        if let Some(canvas) = &mut self.canvas {
-            Self::render_widget_recursive_static(canvas, widget, 0.0, 0.0)?;
+        if let Some(surface) = &mut self.surface {
+            let canvas = surface.canvas();
+            Self::render_widget_recursive_static(canvas, widget, &self.font_mgr, 0.0, 0.0)?;
         }
         Ok(())
     }
 
     /// Static version of render_widget_recursive to avoid borrowing issues
-    fn render_widget_recursive_static(canvas: &mut SkiaCanvas, widget: &WidgetNode, x: f32, y: f32) -> Result<()> {
+    fn render_widget_recursive_static(
+        canvas: &Canvas,
+        widget: &WidgetNode,
+        font_mgr: &FontMgr,
+        x: f32,
+        y: f32,
+    ) -> Result<()> {
         let x = x + widget.layout.x;
         let y = y + widget.layout.y;
 
@@ -67,29 +76,39 @@ impl DesktopRenderer {
             WidgetType::Container => {
                 // Render container background if specified
                 if let Some(bg_color) = widget.style.background_color {
-                    let rect = Rect::new(x, y, widget.layout.width, widget.layout.height);
-                    canvas.draw_rect(&rect, &Paint::fill(bg_color));
+                    let rect = SkiaRect::from_xywh(x, y, widget.layout.width, widget.layout.height);
+                    let mut paint = SkiaPaint::default();
+                    paint.set_color(bg_color.to_skia());
+                    paint.set_anti_alias(true);
+                    canvas.draw_rect(rect, &paint);
                 }
 
                 // Render children
                 for child in &widget.children {
-                    Self::render_widget_recursive_static(canvas, child, x, y)?;
+                    Self::render_widget_recursive_static(canvas, child, font_mgr, x, y)?;
                 }
             }
 
             WidgetType::Text(text_props) => {
-                let paint = Paint::text(
-                    text_props.color,
-                    text_props.size,
-                    &text_props.font_family,
-                );
+                let typeface = font_mgr
+                    .match_family_style(&text_props.font_family, Default::default())
+                    .ok_or_else(|| anyhow::anyhow!("Failed to load font family"))?;
 
-                canvas.draw_text(text_props.content.as_str(), x, y, &paint);
+                let font = Font::from_typeface(typeface, text_props.size);
+
+                let mut paint = SkiaPaint::default();
+                paint.set_color(text_props.color.to_skia());
+                paint.set_anti_alias(true);
+
+                let text_blob = TextBlob::from_str(&text_props.content, &font)
+                    .ok_or_else(|| anyhow::anyhow!("Failed to create text blob"))?;
+
+                canvas.draw_text_blob(&text_blob, (x, y), &paint);
             }
 
             WidgetType::Button(button_props) => {
                 // Draw button background
-                let rect = Rect::new(x, y, widget.layout.width, widget.layout.height);
+                let rect = SkiaRect::from_xywh(x, y, widget.layout.width, widget.layout.height);
                 let bg_color = if button_props.pressed {
                     button_props.pressed_color
                 } else if button_props.hovered {
@@ -98,28 +117,58 @@ impl DesktopRenderer {
                     button_props.normal_color
                 };
 
-                canvas.draw_rect(&rect, &Paint::fill(bg_color));
+                let mut paint = SkiaPaint::default();
+                paint.set_color(bg_color.to_skia());
+                paint.set_anti_alias(true);
+                canvas.draw_rect(rect, &paint);
 
                 // Draw button border
-                canvas.draw_rect(&rect, &Paint::stroke(button_props.border_color, 1.0));
+                let mut border_paint = SkiaPaint::default();
+                border_paint.set_color(button_props.border_color.to_skia());
+                border_paint.set_stroke_width(1.0);
+                border_paint.set_style(skia_safe::PaintStyle::Stroke);
+                border_paint.set_anti_alias(true);
+                canvas.draw_rect(rect, &border_paint);
 
                 // Draw button text
-                let text_paint = Paint::text(
-                    button_props.text_color,
-                    button_props.text_size,
-                    &button_props.font_family,
-                );
+                let typeface = font_mgr
+                    .match_family_style(&button_props.font_family, Default::default())
+                    .ok_or_else(|| anyhow::anyhow!("Failed to load font family"))?;
 
-                let text_x = x + (widget.layout.width - text_paint.measure_text(&button_props.text)) / 2.0;
+                let font = Font::from_typeface(typeface, button_props.text_size);
+
+                let mut text_paint = SkiaPaint::default();
+                text_paint.set_color(button_props.text_color.to_skia());
+                text_paint.set_anti_alias(true);
+
+                let text_blob = TextBlob::from_str(&button_props.text, &font)
+                    .ok_or_else(|| anyhow::anyhow!("Failed to create text blob"))?;
+
+                let text_bounds = text_blob.bounds();
+                let text_x = x + (widget.layout.width - text_bounds.width()) / 2.0;
                 let text_y = y + (widget.layout.height + button_props.text_size) / 2.0;
 
-                canvas.draw_text(&button_props.text, text_x, text_y, &text_paint);
+                canvas.draw_text_blob(&text_blob, (text_x, text_y), &text_paint);
             }
 
             WidgetType::Image(image_props) => {
-                if let Some(image) = &image_props.image_data {
-                    let rect = Rect::new(x, y, widget.layout.width, widget.layout.height);
-                    canvas.draw_image(image, &rect);
+                if let Some(image_data) = &image_props.image_data {
+                    // Create Skia image from pixel data
+                    let image_info = skia_safe::ImageInfo::new(
+                        (image_data.width as i32, image_data.height as i32),
+                        skia_safe::ColorType::RGBA8888,
+                        skia_safe::AlphaType::Premul,
+                        None,
+                    );
+
+                    if let Some(mut skia_image) = images::raster_from_data(
+                        &image_info,
+                        skia_safe::Data::new_copy(&image_data.pixels),
+                        (image_data.width * 4) as usize,
+                    ) {
+                        let rect = SkiaRect::from_xywh(x, y, widget.layout.width, widget.layout.height);
+                        canvas.draw_image_rect(&skia_image, None, rect, &SkiaPaint::default());
+                    }
                 }
             }
 
@@ -131,97 +180,31 @@ impl DesktopRenderer {
 
         Ok(())
     }
+    /// End frame and flush
     pub fn end_frame(&mut self) -> Result<()> {
-        if let Some(surface) = &mut self.surface {
-            surface.flush()?;
-        }
+        // Surface is automatically flushed when dropped or when we access pixels
         Ok(())
     }
 
     /// Get the rendered frame buffer
-    pub fn get_framebuffer(&self) -> Option<&[u8]> {
-        self.surface.as_ref()
-            .and_then(|surface| surface.get_pixels())
-    }
-
-    /// Recursive widget rendering
-    fn render_widget_recursive(
-        canvas: &mut SkiaCanvas,
-        widget: &WidgetNode,
-        offset_x: f32,
-        offset_y: f32,
-    ) -> Result<()> {
-        let x = offset_x + widget.layout.x;
-        let y = offset_y + widget.layout.y;
-
-        match &widget.widget_type {
-            WidgetType::Container => {
-                // Render container background if specified
-                if let Some(bg_color) = widget.style.background_color {
-                    let rect = Rect::new(x, y, widget.layout.width, widget.layout.height);
-                    canvas.draw_rect(&rect, &Paint::fill(bg_color));
-                }
-
-                // Render children
-                for child in &widget.children {
-                    Self::render_widget_recursive(canvas, child, x, y)?;
-                }
-            }
-
-            WidgetType::Text(text_props) => {
-                let paint = Paint::text(
-                    text_props.color,
-                    text_props.size,
-                    &text_props.font_family,
-                );
-
-                canvas.draw_text(text_props.content.as_str(), x, y, &paint);
-            }
-
-            WidgetType::Button(button_props) => {
-                // Draw button background
-                let rect = Rect::new(x, y, widget.layout.width, widget.layout.height);
-                let bg_color = if button_props.pressed {
-                    button_props.pressed_color
-                } else if button_props.hovered {
-                    button_props.hover_color
-                } else {
-                    button_props.normal_color
-                };
-
-                canvas.draw_rect(&rect, &Paint::fill(bg_color));
-
-                // Draw button border
-                canvas.draw_rect(&rect, &Paint::stroke(button_props.border_color, 1.0));
-
-                // Draw button text
-                let text_paint = Paint::text(
-                    button_props.text_color,
-                    button_props.text_size,
-                    &button_props.font_family,
-                );
-
-                let text_x = x + (widget.layout.width - text_paint.measure_text(&button_props.text)) / 2.0;
-                let text_y = y + (widget.layout.height + button_props.text_size) / 2.0;
-
-                canvas.draw_text(&button_props.text, text_x, text_y, &text_paint);
-            }
-
-            WidgetType::Image(image_props) => {
-                if let Some(image) = &image_props.image_data {
-                    let rect = Rect::new(x, y, widget.layout.width, widget.layout.height);
-                    canvas.draw_image(image, &rect);
-                }
-            }
-
-            WidgetType::Custom(_) => {
-                // Custom widgets handle their own rendering
-                // This would be implemented by the widget itself
-            }
+    pub fn get_framebuffer(&mut self) -> Option<Vec<u8>> {
+        if let Some(surface) = &mut self.surface {
+            let image = surface.image_snapshot();
+            image.peek_pixels().map(|pixmap| pixmap.pixels().unwrap_or_default().to_vec())
+        } else {
+            None
         }
-
-        Ok(())
     }
+}
+
+/// Deserialize VelaVDOM JSON into widget tree
+pub fn deserialize_vdom(json: &str) -> Result<WidgetNode> {
+    serde_json::from_str(json).map_err(|e| anyhow::anyhow!("Failed to deserialize VDOM: {}", e))
+}
+
+/// Serialize widget tree to VelaVDOM JSON
+pub fn serialize_vdom(widget: &WidgetNode) -> Result<String> {
+    serde_json::to_string_pretty(widget).map_err(|e| anyhow::anyhow!("Failed to serialize VDOM: {}", e))
 }
 
 /// Widget node for rendering
@@ -347,84 +330,10 @@ impl Color {
     pub const fn blue() -> Self {
         Self::rgb(0, 0, 255)
     }
-}
 
-// Placeholder types for Skia integration
-// These would be replaced with actual Skia bindings
-
-struct SkiaContext;
-impl SkiaContext {
-    fn new() -> Result<Self> {
-        Ok(Self)
+    /// Convert to Skia color
+    pub fn to_skia(&self) -> SkiaColor {
+        SkiaColor::from_argb(self.a, self.r, self.g, self.b)
     }
 }
 
-struct SkiaSurface;
-impl SkiaSurface {
-    fn new(_context: Arc<SkiaContext>, _width: u32, _height: u32) -> Result<Self> {
-        Ok(Self)
-    }
-
-    fn get_canvas(&self) -> SkiaCanvas {
-        SkiaCanvas
-    }
-
-    fn flush(&mut self) -> Result<()> {
-        Ok(())
-    }
-
-    fn get_pixels(&self) -> Option<&[u8]> {
-        None // Placeholder
-    }
-}
-
-struct SkiaCanvas;
-impl SkiaCanvas {
-    fn clear(&mut self, _color: Color) {
-        // Placeholder
-    }
-
-    fn draw_rect(&mut self, _rect: &Rect, _paint: &Paint) {
-        // Placeholder
-    }
-
-    fn draw_text(&mut self, _text: &str, _x: f32, _y: f32, _paint: &Paint) {
-        // Placeholder
-    }
-
-    fn draw_image(&mut self, _image: &ImageData, _rect: &Rect) {
-        // Placeholder
-    }
-}
-
-struct Rect {
-    x: f32,
-    y: f32,
-    width: f32,
-    height: f32,
-}
-
-impl Rect {
-    fn new(x: f32, y: f32, width: f32, height: f32) -> Self {
-        Self { x, y, width, height }
-    }
-}
-
-struct Paint;
-impl Paint {
-    fn fill(_color: Color) -> Self {
-        Self
-    }
-
-    fn stroke(_color: Color, _width: f32) -> Self {
-        Self
-    }
-
-    fn text(_color: Color, _size: f32, _font_family: &str) -> Self {
-        Self
-    }
-
-    fn measure_text(&self, _text: &str) -> f32 {
-        0.0 // Placeholder
-    }
-}

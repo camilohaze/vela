@@ -23,6 +23,9 @@ anyhow = "1.0"
 thiserror = "1.0"
 tracing = "0.1"
 
+# Skia for graphics rendering
+skia-safe = "0.68"
+
 [build-dependencies]
 cc = "1.0"
 bindgen = "0.69"
