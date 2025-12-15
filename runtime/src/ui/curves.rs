@@ -457,6 +457,6 @@ mod tests {
     #[test]
     fn test_predefined_curves() {
         assert_eq!(curves::LINEAR.transform(0.5), 0.5);
-        assert!(curves::EASE.transform(0.5) > 0.5); // Ease curve is above linear
+        assert!(curves::ease().transform(0.5) > 0.5); // Ease curve is above linear
     }
 }
