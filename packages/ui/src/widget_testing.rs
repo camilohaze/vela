@@ -349,7 +349,7 @@ macro_rules! widget_test {
     ($name:ident, $test:block) => {
         #[test]
         fn $name() {
-            let mut runner = $crate::widget_testing::WidgetTestRunner::new();
+            let mut runner = WidgetTestRunner::new();
             $test
             runner.run_assertions().expect("Widget test failed");
         }
@@ -361,14 +361,13 @@ macro_rules! advanced_widget_test {
     ($name:ident, $test:block) => {
         #[test]
         fn $name() {
-            let mut runner = $crate::widget_testing::WidgetTestRunner::with_advanced_testing();
+            let mut runner = WidgetTestRunner::with_advanced_testing();
             $test
             runner.run_assertions().expect("Advanced widget test failed");
         }
     };
 }
 
-#[macro_export]
 macro_rules! simulate_event {
     ($runner:expr, $widget:expr, $event:expr) => {
         $runner.simulator().simulate_event($widget, $event)
@@ -376,14 +375,12 @@ macro_rules! simulate_event {
     };
 }
 
-#[macro_export]
 macro_rules! expect_property {
     ($runner:expr, $widget:expr, $property:expr, $value:expr) => {
         $runner.expect_property($widget, $property, serde_json::json!($value));
     };
 }
 
-#[macro_export]
 macro_rules! expect_widget {
     ($runner:expr, $finder:expr, $matcher:expr) => {
         #[cfg(feature = "testing")]
@@ -391,7 +388,6 @@ macro_rules! expect_widget {
     };
 }
 
-#[macro_export]
 macro_rules! perform_interaction {
     ($runner:expr, $interaction:expr) => {
         #[cfg(feature = "testing")]
@@ -404,54 +400,72 @@ macro_rules! perform_interaction {
 mod tests {
     use super::*;
 
-    widget_test!(test_button_click, {
+    #[test]
+    fn test_button_click() {
+        let mut runner = WidgetTestRunner::new();
         // Crear un botón
         let button = runner.simulator().create_widget("submit_button");
         button.set_property("text", serde_json::Value::String("Submit".to_string()));
 
         // Simular click
-        simulate_event!(runner, "submit_button", WidgetEvent::Click);
+        runner.simulator().simulate_event("submit_button", WidgetEvent::Click)
+            .expect("Failed to simulate event");
 
         // Verificar que el botón fue clickeado
-        expect_property!(runner, "submit_button", "clicked", true);
-    });
+        runner.expect_property("submit_button", "clicked", serde_json::Value::Bool(true));
+        runner.run_assertions().expect("Widget test failed");
+    }
 
-    widget_test!(test_input_field, {
+    #[test]
+    fn test_input_field() {
+        let mut runner = WidgetTestRunner::new();
         // Crear un input field
         let input = runner.simulator().create_widget("username_input");
 
         // Simular input
-        simulate_event!(runner, "username_input", WidgetEvent::Input("testuser".to_string()));
+        runner.simulator().simulate_event("username_input", WidgetEvent::Input("testuser".to_string()))
+            .expect("Failed to simulate event");
 
         // Verificar el valor
-        expect_property!(runner, "username_input", "value", "testuser");
-    });
+        runner.expect_property("username_input", "value", serde_json::Value::String("testuser".to_string()));
+        runner.run_assertions().expect("Widget test failed");
+    }
 
-    widget_test!(test_focus_blur, {
+    #[test]
+    fn test_focus_blur() {
+        let mut runner = WidgetTestRunner::new();
         // Crear un input field
         let input = runner.simulator().create_widget("email_input");
 
         // Simular focus
-        simulate_event!(runner, "email_input", WidgetEvent::Focus);
+        runner.simulator().simulate_event("email_input", WidgetEvent::Focus)
+            .expect("Failed to simulate event");
 
         // Verificar focus
-        expect_property!(runner, "email_input", "focused", true);
+        runner.expect_property("email_input", "focused", serde_json::Value::Bool(true));
 
         // Simular blur
-        simulate_event!(runner, "email_input", WidgetEvent::Blur);
+        runner.simulator().simulate_event("email_input", WidgetEvent::Blur)
+            .expect("Failed to simulate event");
 
         // Verificar blur
-        expect_property!(runner, "email_input", "focused", false);
-    });
+        runner.expect_property("email_input", "focused", serde_json::Value::Bool(false));
+        runner.run_assertions().expect("Widget test failed");
+    }
 
-    widget_test!(test_event_logging, {
+    #[test]
+    fn test_event_logging() {
+        let mut runner = WidgetTestRunner::new();
         // Crear un widget
         let _widget = runner.simulator().create_widget("test_widget");
 
         // Simular varios eventos
-        simulate_event!(runner, "test_widget", WidgetEvent::Click);
-        simulate_event!(runner, "test_widget", WidgetEvent::Hover);
-        simulate_event!(runner, "test_widget", WidgetEvent::KeyPress("Enter".to_string()));
+        runner.simulator().simulate_event("test_widget", WidgetEvent::Click)
+            .expect("Failed to simulate event");
+        runner.simulator().simulate_event("test_widget", WidgetEvent::Hover)
+            .expect("Failed to simulate event");
+        runner.simulator().simulate_event("test_widget", WidgetEvent::KeyPress("Enter".to_string()))
+            .expect("Failed to simulate event");
 
         // Verificar log de eventos
         let log = runner.simulator().get_event_log();
@@ -459,13 +473,15 @@ mod tests {
         assert_eq!(log[0], ("test_widget".to_string(), WidgetEvent::Click));
         assert_eq!(log[1], ("test_widget".to_string(), WidgetEvent::Hover));
         assert_eq!(log[2], ("test_widget".to_string(), WidgetEvent::KeyPress("Enter".to_string())));
-    });
+    }
 
     // Tests avanzados usando el nuevo framework
     #[cfg(feature = "testing")]
-    advanced_widget_test!(test_advanced_button_interaction, {
+    #[test]
+    fn test_advanced_button_interaction() {
+        let mut runner = WidgetTestRunner::with_advanced_testing();
         // Este test requiere que el framework avanzado esté completamente integrado
         // Por ahora, solo verificamos que se puede crear el runner avanzado
         assert!(runner.advanced_app().is_some());
-    });
+    }
 }

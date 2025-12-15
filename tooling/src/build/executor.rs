@@ -149,8 +149,11 @@ impl BuildExecutor {
                 }
                 "android" => {
                     println!("🤖 Generating Android build artifacts...");
-                    // TODO: Implement Android build
-                    println!("⚠️  Android target not yet implemented");
+                    if let Err(e) = self.generate_android_artifacts() {
+                        eprintln!("❌ Android build failed: {}", e);
+                        return Ok(BuildResult::failed(duration));
+                    }
+                    println!("✅ Android build artifacts generated successfully");
                 }
                 "web" => {
                     println!("🌐 Generating Web build artifacts...");
@@ -316,6 +319,48 @@ impl BuildExecutor {
         Ok(())
     }
 
+    /// Generate Android-specific build artifacts
+    pub fn generate_android_artifacts(&self) -> Result<()> {
+        use std::fs;
+        use std::path::Path;
+
+        println!("🤖 Starting Android artifacts generation");
+
+        // Crear directorio de output para Android
+        let android_output_dir = self.config.output_dir.join("android");
+        println!("📁 Creating Android output directory: {}", android_output_dir.display());
+        fs::create_dir_all(&android_output_dir)?;
+        println!("✅ Android output directory created");
+
+        // Generar build.gradle.kts para el proyecto Android
+        println!("🔧 Generating build.gradle.kts");
+        self.generate_android_build_gradle(&android_output_dir)?;
+        println!("✅ build.gradle.kts generated");
+
+        // Generar código Kotlin para la aplicación Android
+        println!("🔧 Generating MainActivity.kt");
+        self.generate_android_app_code(&android_output_dir)?;
+        println!("✅ MainActivity.kt generated");
+
+        // Generar AndroidManifest.xml
+        println!("🔧 Generating AndroidManifest.xml");
+        self.generate_android_manifest(&android_output_dir)?;
+        println!("✅ AndroidManifest.xml generated");
+
+        // Copiar runtime Android compilado
+        println!("🔧 Copying Android runtime");
+        self.copy_android_runtime(&android_output_dir)?;
+        println!("✅ Android runtime copied");
+
+        // Copiar bytecode compilado de Vela
+        println!("🔧 Copying compiled bytecode");
+        self.copy_compiled_bytecode(&android_output_dir)?;
+        println!("✅ Bytecode copied");
+
+        println!("🤖 Android artifacts generated in: {}", android_output_dir.display());
+        Ok(())
+    }
+
     /// Generate Package.swift for Swift Package Manager
     pub fn generate_package_swift(&self, output_dir: &Path) -> Result<()> {
         let package_swift = r#"// swift-tools-version:5.7
@@ -345,6 +390,291 @@ let package = Package(
         let package_path = output_dir.join("Package.swift");
         std::fs::write(package_path, package_swift)?;
         println!("📄 Generated Package.swift");
+        Ok(())
+    }
+
+    /// Generate build.gradle.kts for Android project
+    pub fn generate_android_build_gradle(&self, output_dir: &Path) -> Result<()> {
+        let build_gradle = r#"plugins {
+    id 'com.android.application'
+    id 'org.jetbrains.kotlin.android'
+    id 'org.jetbrains.kotlin.plugin.serialization'
+}
+
+android {
+    namespace 'com.velalang.app'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId "com.velalang.app"
+        minSdk 21
+        targetSdk 34
+        versionCode 1
+        versionName "1.0"
+
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+
+    kotlinOptions {
+        jvmTarget = '1.8'
+    }
+
+    buildFeatures {
+        compose true
+    }
+
+    composeOptions {
+        kotlinCompilerExtensionVersion '1.5.8'
+    }
+
+    packagingOptions {
+        resources {
+            excludes += '/META-INF/{AL2.0,LGPL2.1}'
+        }
+    }
+
+    sourceSets {
+        main {
+            jniLibs.srcDirs += ['libs']
+        }
+    }
+}
+
+dependencies {
+    implementation 'androidx.core:core-ktx:1.12.0'
+    implementation 'androidx.lifecycle:lifecycle-runtime-ktx:2.7.0'
+    implementation 'androidx.activity:activity-compose:1.8.2'
+
+    // Jetpack Compose
+    implementation platform('androidx.compose:compose-bom:2024.02.00')
+    implementation 'androidx.compose.ui:ui'
+    implementation 'androidx.compose.ui:ui-graphics'
+    implementation 'androidx.compose.ui:ui-tooling-preview'
+    implementation 'androidx.compose.material3:material3'
+
+    // Kotlinx Serialization
+    implementation 'org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.3'
+
+    // Coil for image loading
+    implementation 'io.coil-kt:coil-compose:2.5.0'
+
+    // Vela Android Runtime
+    implementation project(':runtime-android')
+
+    // Testing
+    testImplementation 'junit:junit:4.13.2'
+    androidTestImplementation platform('androidx.compose:compose-bom:2024.02.00')
+    androidTestImplementation 'androidx.compose.ui:ui-test-junit4'
+    debugImplementation 'androidx.compose.ui:ui-tooling'
+    debugImplementation 'androidx.compose.ui:ui-test-manifest'
+}
+"#;
+
+        let build_gradle_path = output_dir.join("build.gradle.kts");
+        std::fs::write(build_gradle_path, build_gradle)?;
+        println!("📄 Generated build.gradle.kts");
+        Ok(())
+    }
+
+    /// Generate Android app code
+    pub fn generate_android_app_code(&self, output_dir: &Path) -> Result<()> {
+        let main_dir = output_dir.join("src").join("main");
+        let kotlin_dir = main_dir.join("kotlin").join("com").join("velalang").join("app");
+        std::fs::create_dir_all(&kotlin_dir)?;
+
+        // Generate MainActivity.kt
+        let main_activity = r#"package com.velalang.app
+
+import android.os.Bundle
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.setContent
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.tooling.preview.Preview
+import com.velalang.runtime.android.AndroidRenderEngine
+import com.velalang.runtime.android.VelaConfig
+
+class MainActivity : ComponentActivity() {
+    private lateinit var velaEngine: AndroidRenderEngine
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+
+        // Initialize Vela engine
+        velaEngine = AndroidRenderEngine(
+            context = this,
+            config = VelaConfig(
+                enableDebug = BuildConfig.DEBUG,
+                maxMemoryMB = 256,
+                enableProfiling = false
+            )
+        )
+
+        // Initialize runtime
+        val initialized = velaEngine.initialize()
+        if (!initialized) {
+            // Fallback to basic Compose UI
+            setContent {
+                VelaApp()
+            }
+            return
+        }
+
+        // Set Vela-powered content
+        setContent {
+            MaterialTheme {
+                Surface(
+                    modifier = Modifier.fillMaxSize(),
+                    color = MaterialTheme.colorScheme.background
+                ) {
+                    velaEngine.RenderApp()
+                }
+            }
+        }
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        // Engine cleanup is handled by DisposableEffect in RenderApp
+    }
+}
+
+@Composable
+fun VelaApp() {
+    // Fallback UI when Vela runtime fails to initialize
+    androidx.compose.material3.Text(
+        text = "Hello from Vela!",
+        modifier = Modifier.fillMaxSize()
+    )
+}
+
+@Preview(showBackground = true)
+@Composable
+fun DefaultPreview() {
+    MaterialTheme {
+        VelaApp()
+    }
+}
+"#;
+
+        let main_activity_path = kotlin_dir.join("MainActivity.kt");
+        std::fs::write(main_activity_path, main_activity)?;
+        println!("📄 Generated MainActivity.kt");
+
+        Ok(())
+    }
+
+    /// Generate AndroidManifest.xml
+    pub fn generate_android_manifest(&self, output_dir: &Path) -> Result<()> {
+        let manifest_xml = r#"<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
+    <application
+        android:allowBackup="true"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:fullBackupContent="@xml/backup_rules"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.VelaApp"
+        tools:targetApi="31">
+
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:theme="@style/Theme.VelaApp">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+    </application>
+
+</manifest>
+"#;
+
+        let manifest_path = output_dir.join("src").join("main").join("AndroidManifest.xml");
+        std::fs::create_dir_all(manifest_path.parent().unwrap())?;
+        std::fs::write(manifest_path, manifest_xml)?;
+        println!("📄 Generated AndroidManifest.xml");
+        Ok(())
+    }
+
+    /// Copy Android runtime artifacts
+    pub fn copy_android_runtime(&self, output_dir: &Path) -> Result<()> {
+        use std::fs;
+
+        // Path to the Android runtime project (try both relative paths)
+        let runtime_path = self.config.project_root.join("runtime").join("android");
+        let parent_runtime_path = self.config.project_root.parent()
+            .unwrap_or(&self.config.project_root)
+            .join("runtime")
+            .join("android");
+
+        let actual_runtime_path = if runtime_path.exists() {
+            runtime_path
+        } else if parent_runtime_path.exists() {
+            parent_runtime_path
+        } else {
+            println!("⚠️  Android runtime not found at: {} or {}", runtime_path.display(), parent_runtime_path.display());
+            println!("   Make sure the runtime/android project exists");
+            // Still create settings.gradle.kts even if runtime doesn't exist
+            runtime_path
+        };
+
+        // Copy the entire runtime/android directory as a module if it exists
+        let runtime_dest = output_dir.join("runtime-android");
+        if actual_runtime_path.exists() {
+            self.copy_dir_recursive(&actual_runtime_path, &runtime_dest)?;
+            println!("📦 Copied Android runtime to: {}", runtime_dest.display());
+        }
+
+        // Create settings.gradle.kts to include the runtime module (always generate)
+        let settings_gradle = r#"pluginManagement {
+    repositories {
+        google()
+        mavenCentral()
+        gradlePluginPortal()
+    }
+}
+
+dependencyResolutionManagement {
+    repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+    repositories {
+        google()
+        mavenCentral()
+    }
+}
+
+rootProject.name = "VelaApp"
+include ':app'
+include ':runtime-android'
+"#;
+
+        let settings_path = output_dir.join("settings.gradle.kts");
+        std::fs::write(&settings_path, settings_gradle)?;
+        println!("📄 Generated settings.gradle.kts at: {}", settings_path.display());
+
         Ok(())
     }
 
@@ -495,25 +825,70 @@ void vela_ios_handle_touch_event(void *runtime, const char *event_json);
         Ok(())
     }
 
-    /// Copy compiled bytecode to iOS output
-    pub fn copy_compiled_bytecode(&self, ios_output_dir: &Path) -> Result<()> {
+    /// Copy compiled bytecode to output directory
+    pub fn copy_compiled_bytecode(&self, output_dir: &Path) -> Result<()> {
+        println!("🔍 Starting bytecode copy to: {}", output_dir.display());
         use std::fs;
 
-        let bytecode_dir = ios_output_dir.join("Bytecode");
-        fs::create_dir_all(&bytecode_dir)?;
+        let bytecode_dir = output_dir.join("Bytecode");
+        println!("📁 Creating bytecode directory: {}", bytecode_dir.display());
 
-        // Copy all .velac files from target/vela to ios/Bytecode
+        match fs::create_dir_all(&bytecode_dir) {
+            Ok(_) => println!("✅ Created bytecode directory successfully"),
+            Err(e) => {
+                println!("❌ Failed to create bytecode directory: {}", e);
+                return Err(e.into());
+            }
+        }
+
+        // Copy all .velac files from target/vela to output/Bytecode
         let vela_output_dir = self.config.output_dir.join("vela");
+        println!("🔍 Looking for .velac files in: {}", vela_output_dir.display());
+
         if vela_output_dir.exists() {
-            for entry in fs::read_dir(vela_output_dir)? {
+            println!("✅ Vela output directory exists");
+            let mut copied_count = 0;
+            for entry in fs::read_dir(&vela_output_dir)? {
                 let entry = entry?;
                 let path = entry.path();
+                println!("📋 Checking file: {}", path.display());
                 if path.extension().and_then(|s| s.to_str()) == Some("velac") {
                     let file_name = path.file_name().unwrap();
                     let dest = bytecode_dir.join(file_name);
+                    println!("📋 Copying bytecode: {} -> {}", path.display(), dest.display());
                     fs::copy(&path, &dest)?;
                     println!("📋 Copied bytecode: {}", file_name.to_string_lossy());
+                    copied_count += 1;
                 }
+            }
+            if copied_count == 0 {
+                println!("⚠️  No .velac files found in {}, skipping bytecode copy", vela_output_dir.display());
+            } else {
+                println!("✅ Copied {} bytecode files", copied_count);
+            }
+        } else {
+            println!("⚠️  Vela output directory {} does not exist, skipping bytecode copy", vela_output_dir.display());
+        }
+
+        println!("✅ Bytecode copy completed successfully");
+        Ok(())
+    }
+
+    /// Recursively copy a directory
+    fn copy_dir_recursive(&self, src: &Path, dst: &Path) -> Result<()> {
+        use std::fs;
+
+        fs::create_dir_all(dst)?;
+
+        for entry in fs::read_dir(src)? {
+            let entry = entry?;
+            let entry_path = entry.path();
+            let dest_path = dst.join(entry.file_name());
+
+            if entry_path.is_dir() {
+                self.copy_dir_recursive(&entry_path, &dest_path)?;
+            } else {
+                fs::copy(&entry_path, &dest_path)?;
             }
         }
 

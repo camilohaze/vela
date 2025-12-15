@@ -18,32 +18,28 @@ Arquitectura:
 
 package com.velalang.runtime.android
 
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.layout.Box
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.rememberCoroutineScope
+import java.nio.charset.StandardCharsets
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import java.nio.charset.StandardCharsets
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
 
-/**
- * Motor principal de renderizado para Android.
- * Coordina el runtime de Vela con Jetpack Compose.
- */
+/** Motor principal de renderizado para Android. Coordina el runtime de Vela con Jetpack Compose. */
 class AndroidRenderEngine(
-    private val context: Context,
-    private val config: VelaConfig = VelaConfig()
+        private val context: Context,
+        private val config: VelaConfig = VelaConfig()
 ) {
     private var runtimePtr: Long = 0L
     private val bridge = VelaAndroidBridge()
@@ -52,9 +48,7 @@ class AndroidRenderEngine(
         System.loadLibrary("vela_android_runtime")
     }
 
-    /**
-     * Inicializa el runtime de Vela
-     */
+    /** Inicializa el runtime de Vela */
     fun initialize(): Boolean {
         try {
             val configBytes = config.toJson().toByteArray(StandardCharsets.UTF_8)
@@ -66,9 +60,7 @@ class AndroidRenderEngine(
         }
     }
 
-    /**
-     * Renderiza un frame usando Jetpack Compose
-     */
+    /** Renderiza un frame usando Jetpack Compose */
     @Composable
     fun RenderApp() {
         val coroutineScope = rememberCoroutineScope()
@@ -100,14 +92,10 @@ class AndroidRenderEngine(
         }
 
         // Renderizar VDOM con manejo de eventos
-        VelaEventHandler(runtimePtr, bridge) {
-            vdom?.render()
-        }
+        VelaEventHandler(runtimePtr, bridge) { vdom?.render() }
     }
 
-    /**
-     * Procesa un evento nativo de Android
-     */
+    /** Procesa un evento nativo de Android */
     fun processEvent(event: VelaEvent) {
         try {
             val eventBytes = event.serialize().toByteArray(StandardCharsets.UTF_8)
@@ -118,9 +106,7 @@ class AndroidRenderEngine(
     }
 }
 
-/**
- * Puente JNI para comunicación con el runtime de Rust
- */
+/** Puente JNI para comunicación con el runtime de Rust */
 class VelaAndroidBridge {
     external fun initializeRuntime(config: ByteArray): Long
     external fun renderFrame(runtimePtr: Long, vdom: ByteArray?): ByteArray
@@ -128,45 +114,38 @@ class VelaAndroidBridge {
     external fun destroyRuntime(runtimePtr: Long)
 }
 
-/**
- * Manejador de eventos para componentes Vela
- */
+/** Manejador de eventos para componentes Vela */
 @Composable
-fun VelaEventHandler(
-    runtimePtr: Long,
-    bridge: VelaAndroidBridge,
-    content: @Composable () -> Unit
-) {
+fun VelaEventHandler(runtimePtr: Long, bridge: VelaAndroidBridge, content: @Composable () -> Unit) {
     val coroutineScope = rememberCoroutineScope()
 
-    Box(modifier = Modifier
-        .pointerInput(Unit) {
-            detectTapGestures { offset ->
-                val event = VelaEvent.Tap(offset.x, offset.y)
-                coroutineScope.launch {
-                    try {
-                        val eventBytes = event.serialize().toByteArray(StandardCharsets.UTF_8)
-                        bridge.processEvent(runtimePtr, eventBytes)
-                    } catch (e: Exception) {
-                        android.util.Log.e("VelaAndroid", "Event handling error", e)
+    Box(
+            modifier =
+                    Modifier.pointerInput(Unit) {
+                        detectTapGestures { offset ->
+                            val event = VelaEvent.Tap(offset.x, offset.y)
+                            coroutineScope.launch {
+                                try {
+                                    val eventBytes =
+                                            event.serialize().toByteArray(StandardCharsets.UTF_8)
+                                    bridge.processEvent(runtimePtr, eventBytes)
+                                } catch (e: Exception) {
+                                    android.util.Log.e("VelaAndroid", "Event handling error", e)
+                                }
+                            }
+                        }
                     }
-                }
-            }
-        }
-    ) {
-        content()
-    }
+    ) { content() }
 }
 
-/**
- * Configuración del runtime de Vela
- */
+/** Configuración del runtime de Vela */
 data class VelaConfig(
-    val enableDebug: Boolean = false,
-    val maxMemoryMB: Int = 256,
-    val enableProfiling: Boolean = false
+        val enableDebug: Boolean = false,
+        val maxMemoryMB: Int = 256,
+        val enableProfiling: Boolean = false
 ) {
-    fun toJson(): String = """
+    fun toJson(): String =
+            """
         {
             "enableDebug": $enableDebug,
             "maxMemoryMB": $maxMemoryMB,
@@ -175,16 +154,11 @@ data class VelaConfig(
     """.trimIndent()
 }
 
-/**
- * Representación del Virtual DOM de Vela
- */
-data class VelaVDOM(
-    val root: VelaNode
-) {
+/** Representación del Virtual DOM de Vela */
+data class VelaVDOM(val root: VelaNode) {
     fun serialize(): String = root.serialize()
 
-    @Composable
-    fun render() = root.render()
+    @Composable fun render() = root.render()
 
     companion object {
         private val json = Json {
@@ -208,21 +182,17 @@ data class VelaVDOM(
             return try {
                 when {
                     // Detectar tipo de nodo por campos presentes
-                    element.jsonObject.containsKey("text") && !element.jsonObject.containsKey("children") ->
-                        json.decodeFromJsonElement(TextNode.serializer(), element)
-
+                    element.jsonObject.containsKey("text") &&
+                            !element.jsonObject.containsKey("children") ->
+                            json.decodeFromJsonElement(TextNode.serializer(), element)
                     element.jsonObject.containsKey("children") ->
-                        json.decodeFromJsonElement(ContainerNode.serializer(), element)
-
+                            json.decodeFromJsonElement(ContainerNode.serializer(), element)
                     element.jsonObject.containsKey("onClick") ->
-                        json.decodeFromJsonElement(ButtonNode.serializer(), element)
-
+                            json.decodeFromJsonElement(ButtonNode.serializer(), element)
                     element.jsonObject.containsKey("url") ->
-                        json.decodeFromJsonElement(ImageNode.serializer(), element)
-
+                            json.decodeFromJsonElement(ImageNode.serializer(), element)
                     element.jsonObject.containsKey("onValueChange") ->
-                        json.decodeFromJsonElement(TextFieldNode.serializer(), element)
-
+                            json.decodeFromJsonElement(TextFieldNode.serializer(), element)
                     else -> {
                         android.util.Log.w("VelaVDOM", "Unknown node type: ${element}")
                         null
@@ -236,27 +206,23 @@ data class VelaVDOM(
     }
 }
 
-/**
- * Nodo del Virtual DOM
- */
+/** Nodo del Virtual DOM */
 interface VelaNode {
     fun serialize(): String
 
-    @Composable
-    fun render()
+    @Composable fun render()
 }
 
-/**
- * Eventos que pueden ocurrir en la UI
- */
+/** Eventos que pueden ocurrir en la UI */
 sealed class VelaEvent {
     data class Tap(val x: Float, val y: Float) : VelaEvent()
     data class Scroll(val deltaX: Float, val deltaY: Float) : VelaEvent()
     data class TextInput(val text: String) : VelaEvent()
 
-    fun serialize(): String = when (this) {
-        is Tap -> """{"type":"tap","x":$x,"y":$y}"""
-        is Scroll -> """{"type":"scroll","deltaX":$deltaX,"deltaY":$deltaY}"""
-        is TextInput -> """{"type":"textInput","text":"$text"}"""
-    }
+    fun serialize(): String =
+            when (this) {
+                is Tap -> """{"type":"tap","x":$x,"y":$y}"""
+                is Scroll -> """{"type":"scroll","deltaX":$deltaX,"deltaY":$deltaY}"""
+                is TextInput -> """{"type":"textInput","text":"$text"}"""
+            }
 }

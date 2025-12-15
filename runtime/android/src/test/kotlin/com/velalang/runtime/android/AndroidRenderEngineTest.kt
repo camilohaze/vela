@@ -34,17 +34,12 @@ class AndroidRenderEngineTest {
     private lateinit var engine: AndroidRenderEngine
     private lateinit var config: VelaConfig
 
-    @get:Rule
-    val composeTestRule = createComposeRule()
+    @get:Rule val composeTestRule = createComposeRule()
 
     @Before
     fun setup() {
         context = ApplicationProvider.getApplicationContext()
-        config = VelaConfig(
-            enableDebug = true,
-            maxMemoryMB = 128,
-            enableProfiling = false
-        )
+        config = VelaConfig(enableDebug = true, maxMemoryMB = 128, enableProfiling = false)
         engine = AndroidRenderEngine(context, config)
     }
 
@@ -62,11 +57,7 @@ class AndroidRenderEngineTest {
     @Test
     fun testConfigToJson() {
         // Given: VelaConfig instance
-        val config = VelaConfig(
-            enableDebug = true,
-            maxMemoryMB = 256,
-            enableProfiling = true
-        )
+        val config = VelaConfig(enableDebug = true, maxMemoryMB = 256, enableProfiling = true)
 
         // When: Convert to JSON
         val json = config.toJson()
@@ -91,10 +82,16 @@ class AndroidRenderEngineTest {
 
         // Then: JSON should be valid and contain correct data
         assertTrue("Tap event should contain type", tapJson.contains("\"type\":\"tap\""))
-        assertTrue("Tap event should contain coordinates", tapJson.contains("\"x\":100.0") && tapJson.contains("\"y\":200.0"))
+        assertTrue(
+                "Tap event should contain coordinates",
+                tapJson.contains("\"x\":100.0") && tapJson.contains("\"y\":200.0")
+        )
 
         assertTrue("Scroll event should contain type", scrollJson.contains("\"type\":\"scroll\""))
-        assertTrue("Scroll event should contain deltas", scrollJson.contains("\"deltaX\":10.0") && scrollJson.contains("\"deltaY\":-5.0"))
+        assertTrue(
+                "Scroll event should contain deltas",
+                scrollJson.contains("\"deltaX\":10.0") && scrollJson.contains("\"deltaY\":-5.0")
+        )
 
         assertTrue("Text event should contain type", textJson.contains("\"type\":\"textInput\""))
         assertTrue("Text event should contain text", textJson.contains("\"text\":\"Hello Vela\""))
@@ -103,7 +100,8 @@ class AndroidRenderEngineTest {
     @Test
     fun testVelaVDOMDeserialization() {
         // Given: Valid VDOM JSON
-        val vdomJson = """
+        val vdomJson =
+                """
         {
             "root": {
                 "id": "root",
@@ -119,7 +117,11 @@ class AndroidRenderEngineTest {
 
         // Then: VDOM should be parsed correctly
         assertNotNull("VDOM should not be null", vdom)
-        assertEquals("Root component type should be Container", "Container", vdom?.root?.componentType)
+        assertEquals(
+                "Root component type should be Container",
+                "Container",
+                vdom?.root?.componentType
+        )
     }
 
     @Test
@@ -169,11 +171,8 @@ class AndroidRenderEngineTest {
     @Test
     fun testMultipleEventTypes() {
         // Given: Different event types
-        val events = listOf(
-            VelaEvent.Tap(0f, 0f),
-            VelaEvent.Scroll(1f, 1f),
-            VelaEvent.TextInput("test")
-        )
+        val events =
+                listOf(VelaEvent.Tap(0f, 0f), VelaEvent.Scroll(1f, 1f), VelaEvent.TextInput("test"))
 
         // When: Serialize all events
         val serialized = events.map { it.serialize() }
@@ -201,19 +200,13 @@ class AndroidRenderEngineTest {
     }
 }
 
-/**
- * Tests para componentes individuales del render engine
- */
+/** Tests para componentes individuales del render engine */
 class VelaConfigTest {
 
     @Test
     fun testConfigWithCustomValues() {
         // Given: Custom config values
-        val config = VelaConfig(
-            enableDebug = true,
-            maxMemoryMB = 512,
-            enableProfiling = true
-        )
+        val config = VelaConfig(enableDebug = true, maxMemoryMB = 512, enableProfiling = true)
 
         // When: Convert to JSON
         val json = config.toJson()
@@ -239,9 +232,7 @@ class VelaConfigTest {
     }
 }
 
-/**
- * Tests para serialización de eventos
- */
+/** Tests para serialización de eventos */
 class VelaEventTest {
 
     @Test
@@ -307,11 +298,17 @@ class VelaEventTest {
     @Test
     fun testTextNodeSerialization() {
         // Given: TextNode instance
-        val textNode = TextNode(
-            text = "Hello Vela",
-            style = TextStyleData(fontSize = 18f, fontWeight = "Bold", color = "#FF0000"),
-            modifier = ModifierData(width = 200f, height = 50f, padding = 8f)
-        )
+        val textNode =
+                TextNode(
+                        text = "Hello Vela",
+                        style =
+                                TextStyleData(
+                                        fontSize = 18f,
+                                        fontWeight = "Bold",
+                                        color = "#FF0000"
+                                ),
+                        modifier = ModifierData(width = 200f, height = 50f, padding = 8f)
+                )
 
         // When: Serialize
         val json = textNode.serialize()
@@ -330,11 +327,12 @@ class VelaEventTest {
     fun testContainerNodeSerialization() {
         // Given: ContainerNode with children
         val childNode = TextNode(text = "Child")
-        val containerNode = ContainerNode(
-            children = listOf(childNode),
-            layout = LayoutType.Column,
-            modifier = ModifierData(padding = 16f, backgroundColor = "#FFFFFF")
-        )
+        val containerNode =
+                ContainerNode(
+                        children = listOf(childNode),
+                        layout = LayoutType.Column,
+                        modifier = ModifierData(padding = 16f, backgroundColor = "#FFFFFF")
+                )
 
         // When: Serialize
         val json = containerNode.serialize()
@@ -344,18 +342,26 @@ class VelaEventTest {
         assertTrue("Should contain children", json.contains("\"children\""))
         assertTrue("Should contain child text", json.contains("\"text\":\"Child\""))
         assertTrue("Should contain padding", json.contains("\"padding\":16.0"))
-        assertTrue("Should contain backgroundColor", json.contains("\"backgroundColor\":\"#FFFFFF\""))
+        assertTrue(
+                "Should contain backgroundColor",
+                json.contains("\"backgroundColor\":\"#FFFFFF\"")
+        )
     }
 
     @Test
     fun testButtonNodeSerialization() {
         // Given: ButtonNode
-        val buttonNode = ButtonNode(
-            text = "Click Me",
-            onClick = "button_click_event",
-            style = ButtonStyleData(backgroundColor = "#6200EE", contentColor = "#FFFFFF"),
-            modifier = ModifierData(width = 120f, height = 40f, cornerRadius = 8f)
-        )
+        val buttonNode =
+                ButtonNode(
+                        text = "Click Me",
+                        onClick = "button_click_event",
+                        style =
+                                ButtonStyleData(
+                                        backgroundColor = "#6200EE",
+                                        contentColor = "#FFFFFF"
+                                ),
+                        modifier = ModifierData(width = 120f, height = 40f, cornerRadius = 8f)
+                )
 
         // When: Serialize
         val json = buttonNode.serialize()
@@ -363,7 +369,10 @@ class VelaEventTest {
         // Then: Should contain button data
         assertTrue("Should contain text", json.contains("\"text\":\"Click Me\""))
         assertTrue("Should contain onClick", json.contains("\"onClick\":\"button_click_event\""))
-        assertTrue("Should contain backgroundColor", json.contains("\"backgroundColor\":\"#6200EE\""))
+        assertTrue(
+                "Should contain backgroundColor",
+                json.contains("\"backgroundColor\":\"#6200EE\"")
+        )
         assertTrue("Should contain contentColor", json.contains("\"contentColor\":\"#FFFFFF\""))
         assertTrue("Should contain cornerRadius", json.contains("\"cornerRadius\":8.0"))
     }
@@ -371,11 +380,12 @@ class VelaEventTest {
     @Test
     fun testImageNodeSerialization() {
         // Given: ImageNode
-        val imageNode = ImageNode(
-            url = "https://example.com/image.png",
-            contentScale = androidx.compose.ui.layout.ContentScale.Crop,
-            modifier = ModifierData(width = 300f, height = 200f)
-        )
+        val imageNode =
+                ImageNode(
+                        url = "https://example.com/image.png",
+                        contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                        modifier = ModifierData(width = 300f, height = 200f)
+                )
 
         // When: Serialize
         val json = imageNode.serialize()
@@ -389,20 +399,27 @@ class VelaEventTest {
     @Test
     fun testTextFieldNodeSerialization() {
         // Given: TextFieldNode
-        val textFieldNode = TextFieldNode(
-            value = "Initial text",
-            placeholder = "Enter text here",
-            onValueChange = "text_change_event",
-            modifier = ModifierData(padding = 12f, cornerRadius = 4f)
-        )
+        val textFieldNode =
+                TextFieldNode(
+                        value = "Initial text",
+                        placeholder = "Enter text here",
+                        onValueChange = "text_change_event",
+                        modifier = ModifierData(padding = 12f, cornerRadius = 4f)
+                )
 
         // When: Serialize
         val json = textFieldNode.serialize()
 
         // Then: Should contain text field data
         assertTrue("Should contain value", json.contains("\"value\":\"Initial text\""))
-        assertTrue("Should contain placeholder", json.contains("\"placeholder\":\"Enter text here\""))
-        assertTrue("Should contain onValueChange", json.contains("\"onValueChange\":\"text_change_event\""))
+        assertTrue(
+                "Should contain placeholder",
+                json.contains("\"placeholder\":\"Enter text here\"")
+        )
+        assertTrue(
+                "Should contain onValueChange",
+                json.contains("\"onValueChange\":\"text_change_event\"")
+        )
         assertTrue("Should contain padding", json.contains("\"padding\":12.0"))
         assertTrue("Should contain cornerRadius", json.contains("\"cornerRadius\":4.0"))
     }
@@ -410,7 +427,8 @@ class VelaEventTest {
     @Test
     fun testVelaVDOMComplexDeserialization() {
         // Given: Complex VDOM JSON with nested nodes
-        val complexJson = """
+        val complexJson =
+                """
         {
             "text": "Root Text",
             "style": {
@@ -445,13 +463,14 @@ class VelaEventTest {
     @Test
     fun testModifierDataToComposeModifier() {
         // Given: ModifierData
-        val modifierData = ModifierData(
-            width = 100f,
-            height = 50f,
-            padding = 8f,
-            backgroundColor = "#FF0000",
-            cornerRadius = 4f
-        )
+        val modifierData =
+                ModifierData(
+                        width = 100f,
+                        height = 50f,
+                        padding = 8f,
+                        backgroundColor = "#FF0000",
+                        cornerRadius = 4f
+                )
 
         // When: Convert to Compose Modifier
         val modifier = modifierData.toComposeModifier()
@@ -464,12 +483,13 @@ class VelaEventTest {
     @Test
     fun testTextStyleDataToComposeStyle() {
         // Given: TextStyleData
-        val styleData = TextStyleData(
-            fontSize = 24f,
-            fontWeight = "Bold",
-            color = "#00FF00",
-            textAlign = "Center"
-        )
+        val styleData =
+                TextStyleData(
+                        fontSize = 24f,
+                        fontWeight = "Bold",
+                        color = "#00FF00",
+                        textAlign = "Center"
+                )
 
         // When: Convert to Compose TextStyle
         val textStyle = styleData.toComposeStyle()
@@ -482,10 +502,7 @@ class VelaEventTest {
     @Test
     fun testButtonStyleDataToButtonColors() {
         // Given: ButtonStyleData
-        val buttonStyle = ButtonStyleData(
-            backgroundColor = "#6200EE",
-            contentColor = "#FFFFFF"
-        )
+        val buttonStyle = ButtonStyleData(backgroundColor = "#6200EE", contentColor = "#FFFFFF")
 
         // When: Convert to ButtonColors
         val buttonColors = buttonStyle.toButtonColors()
