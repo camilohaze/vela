@@ -779,13 +779,132 @@ impl IROptimizer {
         }
     }
 
-    /// Dead code elimination: eliminar código inalcanzable después de Return
-    fn dead_code_elimination(&self, function: &mut IRFunction) {
-        for i in 0..function.body.len() {
-            if matches!(function.body[i], IRInstruction::Return) {
-                // Eliminar todo después del Return
-                function.body.truncate(i + 1);
-                break;
+    /// Dead code elimination: eliminar código inalcanzable y no utilizado
+    pub fn dead_code_elimination(&self, function: &mut IRFunction) {
+        // Fase 1: Eliminar código inalcanzable después de Return/Break/Continue
+        self.eliminate_unreachable_code(function);
+
+        // Fase 2: Eliminar variables no utilizadas
+        self.eliminate_unused_variables(function);
+
+        // Fase 3: Eliminar instrucciones dead (efectos secundarios mínimos)
+        self.eliminate_dead_instructions(function);
+    }
+
+    /// Eliminar código inalcanzable después de Return/Break/Continue
+    fn eliminate_unreachable_code(&self, function: &mut IRFunction) {
+        let mut i = 0;
+        while i < function.body.len() {
+            match function.body[i] {
+                IRInstruction::Return => {
+                    // Eliminar todo después del Return
+                    function.body.truncate(i + 1);
+                    break;
+                }
+                IRInstruction::Jump(_) => {
+                    // Para saltos incondicionales, marcar como potencialmente unreachable
+                    // pero por ahora conservamos (análisis de flujo más complejo)
+                    i += 1;
+                }
+                IRInstruction::JumpIf(_) => {
+                    // Ramas condicionales - por ahora conservamos
+                    i += 1;
+                }
+                _ => {
+                    i += 1;
+                }
+            }
+        }
+    }
+
+    /// Eliminar variables no utilizadas
+    fn eliminate_unused_variables(&self, function: &mut IRFunction) {
+        use std::collections::HashSet;
+
+        // Paso 1: Identificar variables definidas
+        let mut defined_vars = HashSet::new();
+        let mut used_vars = HashSet::new();
+
+        // Paso 2: Recopilar todas las variables definidas y usadas
+        for instruction in &function.body {
+            match instruction {
+                IRInstruction::AssignVar { name, .. } => {
+                    defined_vars.insert(name.clone());
+                }
+                IRInstruction::LoadVar(name) => {
+                    used_vars.insert(name.clone());
+                }
+                IRInstruction::BinaryOp(_) | IRInstruction::UnaryOp(_) => {
+                    // Estas instrucciones usan los valores de la pila, no variables nombradas
+                }
+                IRInstruction::Call { .. } => {
+                    // Las llamadas pueden usar variables, pero por simplicidad las conservamos
+                }
+                IRInstruction::Return => {
+                    // Return puede devolver una variable
+                }
+                IRInstruction::Jump(_) | IRInstruction::JumpIf(_) => {
+                    // Control flow - conservamos
+                }
+                IRInstruction::LoadConst(_) => {
+                    // Constantes - no afectan variables
+                }
+                IRInstruction::Label(_) => {
+                    // Labels - no afectan variables
+                }
+                _ => {
+                    // Otros casos - conservamos por simplicidad
+                }
+            }
+        }
+
+        // Paso 3: Identificar variables no utilizadas
+        let unused_vars: HashSet<_> = defined_vars.difference(&used_vars).cloned().collect();
+
+        // Paso 4: Eliminar asignaciones a variables no utilizadas y sus instrucciones precedentes
+        let mut instructions_to_remove = HashSet::new();
+        
+        for (i, instruction) in function.body.iter().enumerate() {
+            if let IRInstruction::AssignVar { name, .. } = instruction {
+                if unused_vars.contains(name) {
+                    // Marcar esta asignación para eliminación
+                    instructions_to_remove.insert(i);
+                    
+                    // Si la instrucción anterior es LoadConst, también marcarla
+                    if i > 0 {
+                        if let IRInstruction::LoadConst(_) = &function.body[i - 1] {
+                            instructions_to_remove.insert(i - 1);
+                        }
+                    }
+                }
+            }
+        }
+        
+        // Eliminar las instrucciones marcadas (en orden inverso para no afectar índices)
+        let mut indices_to_remove: Vec<_> = instructions_to_remove.into_iter().collect();
+        indices_to_remove.sort_by(|a, b| b.cmp(a)); // Ordenar en reversa
+        
+        for index in indices_to_remove {
+            function.body.remove(index);
+        }
+    }
+
+    /// Eliminar instrucciones dead con efectos secundarios mínimos
+    fn eliminate_dead_instructions(&self, function: &mut IRFunction) {
+        // Por ahora, solo eliminamos LoadConst seguidos de otros LoadConst sin uso
+        // Esto es conservador para evitar eliminar código con efectos secundarios
+
+        let mut i = 0;
+        while i < function.body.len().saturating_sub(1) {
+            match (&function.body[i], &function.body[i + 1]) {
+                (IRInstruction::LoadConst(_), IRInstruction::LoadConst(_)) => {
+                    // Si hay dos LoadConst seguidos, el primero es potencialmente dead
+                    // Pero conservamos por ahora para evitar errores
+                    i += 1;
+                }
+                _ => {
+                    i += 1;
+                }
             }
         }
     }
