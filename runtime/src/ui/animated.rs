@@ -7,6 +7,8 @@ use std::time::{Duration, Instant};
 use std::collections::HashMap;
 use crate::signals::{Signal, SignalValue};
 
+use crate::ui::curves::EasingCurve;
+
 /// Animation curve functions for different easing behaviors
 #[derive(Debug, Clone, Copy)]
 pub enum Curve {
@@ -16,46 +18,19 @@ pub enum Curve {
     EaseInOut,
     Bounce,
     Elastic,
+    // Legacy support - these map to EasingCurve
 }
 
 impl Curve {
     /// Transform a linear progress (0.0 to 1.0) using the curve
     pub fn transform(&self, t: f32) -> f32 {
         match self {
-            Curve::Linear => t,
-            Curve::EaseIn => t * t,
-            Curve::EaseOut => 1.0 - (1.0 - t) * (1.0 - t),
-            Curve::EaseInOut => {
-                if t < 0.5 {
-                    2.0 * t * t
-                } else {
-                    1.0 - (-2.0 * t + 2.0).powi(2) / 2.0
-                }
-            }
-            Curve::Bounce => {
-                if t < 1.0 / 2.75 {
-                    7.5625 * t * t
-                } else if t < 2.0 / 2.75 {
-                    let t = t - 1.5 / 2.75;
-                    7.5625 * t * t + 0.75
-                } else if t < 2.5 / 2.75 {
-                    let t = t - 2.25 / 2.75;
-                    7.5625 * t * t + 0.9375
-                } else {
-                    let t = t - 2.625 / 2.75;
-                    7.5625 * t * t + 0.984375
-                }
-            }
-            Curve::Elastic => {
-                if t == 0.0 {
-                    0.0
-                } else if t == 1.0 {
-                    1.0
-                } else {
-                    let c4 = (2.0 * std::f32::consts::PI) / 3.0;
-                    -(2.0_f32.powf(10.0 * t - 10.0)) * ((t * 10.0 - 10.75) * c4).sin()
-                }
-            }
+            Curve::Linear => EasingCurve::Linear.transform(t),
+            Curve::EaseIn => EasingCurve::CubicIn.transform(t),
+            Curve::EaseOut => EasingCurve::CubicOut.transform(t),
+            Curve::EaseInOut => EasingCurve::CubicInOut.transform(t),
+            Curve::Bounce => EasingCurve::BounceOut.transform(t),
+            Curve::Elastic => EasingCurve::ElasticOut.transform(t),
         }
     }
 }

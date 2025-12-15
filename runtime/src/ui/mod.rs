@@ -3,6 +3,7 @@
 //! This module contains the core UI components and animation system for Vela.
 
 pub mod animated;
+pub mod curves;
 
 pub use animated::{
     Animated, AnimationController, Curve, Tween, AnimatedBuilder, Widget,
@@ -10,3 +11,4 @@ pub use animated::{
     Animation, AnimationSequence, AnimationParallel,
     AnimationControllerWrapper, AdvancedAnimationControllerWrapper
 };
+pub use curves::{EasingCurve, CubicBezier, interpolation, curves};
