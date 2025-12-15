@@ -7,7 +7,6 @@ members = [
     "packages/lsp",
     "packages/devtools",
     "runtime",
-    "runtime/desktop",
     "packages/ui",
     "packages/testing",
     "tooling",

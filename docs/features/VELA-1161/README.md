@@ -18,12 +18,12 @@ Como desarrollador, quiero desplegar apps en iOS para poder crear aplicaciones m
 
 ## 🔨 Implementación
 Ver archivos en:
-- `runtime/src/mobile/ios/` - Arquitectura iOS completa implementada
+- `runtime/ios/` - Arquitectura iOS completa implementada
 - `docs/architecture/ADR-152-ios-render-engine.md` - Decisión arquitectónica
 - `docs/features/VELA-1161/TASK-152.md` - Documentación técnica completa
-- `runtime/src/mobile/ios/bridge/ffi.rs` - Implementación FFI completa
-- `runtime/src/mobile/ios/swift/VelaBridge.swift` - Swift API wrappers
-- `runtime/src/mobile/ios/swift/VelaBridge.h` - C header declarations
+- `runtime/ios/bridge/ffi.rs` - Implementación FFI completa
+- `runtime/ios/swift/VelaBridge.swift` - Swift API wrappers
+- `runtime/ios/swift/VelaBridge.h` - C header declarations
 
 ## 📊 Métricas
 ### TASK-152 (iOS Render Engine)

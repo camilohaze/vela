@@ -72,7 +72,7 @@ Implementar una arquitectura de **Widget Bridge** con los siguientes componentes
 - **Razón de rechazo**: Necesitamos soporte amplio de versiones iOS
 
 ## Implementación
-Ver código en: `runtime/src/mobile/ios/`
+Ver código en: `runtime/ios/`
 
 ## Referencias
 - Jira: [VELA-1161](https://velalang.atlassian.net/browse/VELA-1161)

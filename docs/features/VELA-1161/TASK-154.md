@@ -24,7 +24,7 @@ Implementar el motor de renderizado iOS real, traduciendo widgets Vela a compone
 #### 2. **Componentes Implementados** ✅
 
 ##### **IOSWidgetRenderer** ✅
-- **Ubicación**: `runtime/src/mobile/ios/renderer/renderer.rs`
+- **Ubicación**: `runtime/ios/renderer/renderer.rs`
 - **Funcionalidad**: Implementación concreta del renderer con bindings reales
 - **Características**:
   - Factory pattern para creación de componentes

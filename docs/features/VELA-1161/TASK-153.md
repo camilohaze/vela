@@ -14,7 +14,7 @@ Implementar el sistema de bridging FFI (Foreign Function Interface) entre el run
 ### Arquitectura del Bridging
 
 #### 1. **VelaIOSBridge** (Rust → Swift)
-- **Ubicación:** `runtime/src/mobile/ios/bridge/`
+- **Ubicación:** `runtime/ios/bridge/`
 - **Propósito:** Punto de entrada FFI desde Swift hacia Vela
 - **Funciones principales:**
   - `vela_ios_create_runtime()` - Inicializar runtime Vela
@@ -24,7 +24,7 @@ Implementar el sistema de bridging FFI (Foreign Function Interface) entre el run
   - `vela_ios_handle_event()` - Procesar eventos desde iOS
 
 #### 2. **Swift Bridging Layer**
-- **Ubicación:** `runtime/src/mobile/ios/swift/` (nuevo)
+- **Ubicación:** `runtime/ios/swift/` (nuevo)
 - **Propósito:** Wrappers Swift para consumir FFI de Vela
 - **Componentes:**
   - `VelaRuntime.swift` - Wrapper para runtime Vela
@@ -40,7 +40,7 @@ Implementar el sistema de bridging FFI (Foreign Function Interface) entre el run
 ### Funciones FFI Implementadas
 
 ```rust
-// runtime/src/mobile/ios/bridge/ffi.rs
+// runtime/ios/bridge/ffi.rs
 #[no_mangle]
 pub extern "C" fn vela_ios_create_runtime(config: *const IOSRuntimeConfig) -> *mut VelaIOSRuntime {
     // Crear runtime con configuración
@@ -68,7 +68,7 @@ pub extern "C" fn vela_ios_handle_touch_event(
 ### Swift API
 
 ```swift
-// runtime/src/mobile/ios/swift/VelaBridge.swift
+// runtime/ios/swift/VelaBridge.swift
 public class VelaBridge {
     private let runtime: OpaquePointer
     

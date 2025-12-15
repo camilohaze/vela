@@ -29,22 +29,22 @@ Diseñar la arquitectura del motor de renderizado iOS para Vela, definiendo cóm
 #### 2. **Componentes Principales Implementados** ✅
 
 ##### **VelaWidgetRenderer** ✅
-- **Ubicación**: `runtime/src/mobile/ios/renderer/mod.rs`
+- **Ubicación**: `runtime/ios/renderer/mod.rs`
 - **Funcionalidad**: Traduce widgets Vela a UIView/UIViewController
 - **Características**: Factory pattern con registro de mapeos widget->UIView
 
 ##### **VelaStateManager** ✅
-- **Ubicación**: `runtime/src/mobile/ios/renderer/mod.rs`
+- **Ubicación**: `runtime/ios/renderer/mod.rs`
 - **Funcionalidad**: Gestiona estado reactivo entre Vela y iOS
 - **Características**: Sincronización bidireccional de señales
 
 ##### **VelaEventBridge** ✅
-- **Ubicación**: `runtime/src/mobile/ios/events/mod.rs`
+- **Ubicación**: `runtime/ios/events/mod.rs`
 - **Funcionalidad**: Traduce eventos táctiles/gestuales
 - **Características**: Adapter pattern para gesture recognizers
 
 ##### **VelaLayoutEngine** ✅
-- **Ubicación**: `runtime/src/mobile/ios/layout/mod.rs`
+- **Ubicación**: `runtime/ios/layout/mod.rs`
 - **Funcionalidad**: Implementa layout system (Flexbox-like)
 - **Características**: Yoga layout engine integration preparada
 
@@ -91,7 +91,7 @@ Diseñar la arquitectura del motor de renderizado iOS para Vela, definiendo cóm
 - [x] Modelo de memoria diseñado
 - [x] Modelo de threading definido
 - [x] ADR creado en docs/architecture/
-- [x] Código base implementado en runtime/src/mobile/ios/
+- [x] Código base implementado en runtime/ios/
 - [x] Tests unitarios incluidos
 
 ## 🔗 Referencias
