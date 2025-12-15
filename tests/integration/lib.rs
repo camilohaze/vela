@@ -4,3 +4,4 @@
 //! between different Vela components.
 
 mod resilience;
+mod test_ios_build_pipeline;

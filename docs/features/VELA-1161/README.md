@@ -14,7 +14,7 @@ Como desarrollador, quiero desplegar apps en iOS para poder crear aplicaciones m
 2. **TASK-153**: Implementar bridging Swift/Vela ✅ COMPLETADO
 3. **TASK-154**: Implementar iOS renderer ✅ COMPLETADO
 4. **TASK-155**: Implementar vela build --target=ios ✅ COMPLETADO
-5. **TASK-156**: Tests en iOS ⏳ PENDIENTE
+5. **TASK-156**: Tests en iOS ✅ COMPLETADO
 
 ## 🔨 Implementación
 Ver archivos en:
@@ -64,7 +64,7 @@ Ver archivos en:
 - [x] TASK-153 completado (Bridging Swift/Vela implementado)
 - [x] TASK-154 completado (iOS renderer funcional)
 - [x] TASK-155 completado (Pipeline vela build --target=ios)
-- [ ] TASK-156 completado (Tests iOS pasando)
+- [x] TASK-156 completado (Tests iOS pasando)
 - [x] Todas las Subtasks completadas
 - [x] Código funcional
 - [x] Tests pasando (>= 80% cobertura)

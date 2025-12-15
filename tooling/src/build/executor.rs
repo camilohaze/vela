@@ -292,7 +292,7 @@ impl BuildExecutor {
     }
 
     /// Generate iOS-specific build artifacts
-    fn generate_ios_artifacts(&self) -> Result<()> {
+    pub fn generate_ios_artifacts(&self) -> Result<()> {
         use std::fs;
         use std::path::Path;
 
@@ -317,7 +317,7 @@ impl BuildExecutor {
     }
 
     /// Generate Package.swift for Swift Package Manager
-    fn generate_package_swift(&self, output_dir: &Path) -> Result<()> {
+    pub fn generate_package_swift(&self, output_dir: &Path) -> Result<()> {
         let package_swift = r#"// swift-tools-version:5.7
 import PackageDescription
 
@@ -496,7 +496,7 @@ void vela_ios_handle_touch_event(void *runtime, const char *event_json);
     }
 
     /// Copy compiled bytecode to iOS output
-    fn copy_compiled_bytecode(&self, ios_output_dir: &Path) -> Result<()> {
+    pub fn copy_compiled_bytecode(&self, ios_output_dir: &Path) -> Result<()> {
         use std::fs;
 
         let bytecode_dir = ios_output_dir.join("Bytecode");
