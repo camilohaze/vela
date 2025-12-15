@@ -48,6 +48,7 @@ pub mod gc;
 pub mod error;
 pub mod loader;
 pub mod module_resolver;
+pub mod jit;
 
 /// Re-export main types
 pub use bytecode::{Bytecode, Instruction, Value, CodeObject, Constant};
