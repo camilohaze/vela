@@ -13,6 +13,7 @@ Implementar el comando `vela deploy` para habilitar el despliegue de aplicacione
 1. **TASK-176**: Implementar comando 'vela deploy' ✅
 2. **TASK-177**: Integración con AWS Lambda ✅
 3. **TASK-178**: Integración con Vercel/Netlify ✅
+4. **TASK-179**: Tests de deployment ✅
 
 ## 🔨 Implementación
 
@@ -84,11 +85,11 @@ Options:
 - **Epic:** [VELA-39](https://velalang.atlassian.net/browse/VELA-39)
 
 ## 📊 Métricas
-- **Subtasks completadas:** 3/3
-- **Archivos creados:** 8
+- **Subtasks completadas:** 4/4 ✅
+- **Archivos creados:** 11
   - ADRs: 1
-  - Código fuente: 6 (deployers + CLI)
-  - Tests: 1
-  - Documentación: 3
-- **Tests escritos:** 15+ (por deployer)
-- **Commits realizados:** 3 (uno por subtask)
+  - Código fuente: 8 (deployers + CLI)
+  - Tests: 4 (unit tests)
+  - Documentación: 4
+- **Tests escritos:** 25+ unitarios
+- **Commits realizados:** 4 (uno por subtask)
