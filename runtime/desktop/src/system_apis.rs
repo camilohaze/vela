@@ -10,21 +10,26 @@ use std::collections::HashMap;
 use anyhow::Result;
 use tokio::sync::mpsc;
 use crate::bridge::safe;
+use reqwest::Client as ReqwestClient;
+use futures::{SinkExt, StreamExt};
+use tokio_tungstenite::{connect_async, tungstenite::protocol::Message};
+use sysinfo::{System, CpuRefreshKind, MemoryRefreshKind, Disks, Networks};
 
 /// File system operations
 pub mod fs {
     use super::*;
+    use tokio::fs as async_fs;
 
-    /// Read entire file content
+    /// Read entire file content asynchronously
     pub async fn read_file<P: AsRef<Path>>(path: P) -> Result<Vec<u8>> {
-        let path_str = path.as_ref().to_string_lossy();
-        safe::read_file(&path_str).map_err(|e| anyhow::anyhow!(e))
+        let content = async_fs::read(path).await?;
+        Ok(content)
     }
 
-    /// Write data to file
+    /// Write data to file asynchronously
     pub async fn write_file<P: AsRef<Path>>(path: P, data: &[u8]) -> Result<()> {
-        let path_str = path.as_ref().to_string_lossy();
-        safe::write_file(&path_str, data).map_err(|e| anyhow::anyhow!(e))
+        async_fs::write(path, data).await?;
+        Ok(())
     }
 
     /// Check if path exists
@@ -33,23 +38,26 @@ pub mod fs {
     }
 
     /// Create directory recursively
-    pub fn create_dir_all<P: AsRef<Path>>(path: P) -> Result<()> {
-        std::fs::create_dir_all(path)?;
+    pub async fn create_dir_all<P: AsRef<Path>>(path: P) -> Result<()> {
+        async_fs::create_dir_all(path).await?;
         Ok(())
     }
 
     /// Read directory contents
-    pub fn read_dir<P: AsRef<Path>>(path: P) -> Result<Vec<PathBuf>> {
+    pub async fn read_dir<P: AsRef<Path>>(path: P) -> Result<Vec<PathBuf>> {
         let mut entries = Vec::new();
-        for entry in std::fs::read_dir(path)? {
-            entries.push(entry?.path());
+        let mut dir = async_fs::read_dir(path).await?;
+
+        while let Some(entry) = dir.next_entry().await? {
+            entries.push(entry.path());
         }
+
         Ok(entries)
     }
 
     /// Get file metadata
-    pub fn metadata<P: AsRef<Path>>(path: P) -> Result<FileMetadata> {
-        let metadata = std::fs::metadata(path)?;
+    pub async fn metadata<P: AsRef<Path>>(path: P) -> Result<FileMetadata> {
+        let metadata = async_fs::metadata(path).await?;
         Ok(FileMetadata {
             size: metadata.len(),
             is_dir: metadata.is_dir(),
@@ -73,15 +81,25 @@ pub mod fs {
 /// Process management
 pub mod process {
     use super::*;
+    use tokio::process::{Child, Command};
 
     /// Spawn a new process
     pub async fn spawn(cmd: &str, args: &[&str]) -> Result<ChildProcess> {
-        let pid = safe::spawn_process(cmd, args).map_err(|e| anyhow::anyhow!(e))?;
-        Ok(ChildProcess { pid })
+        let mut command = Command::new(cmd);
+        command.args(args);
+
+        let child = command.spawn()?;
+        let pid = child.id().unwrap_or(0);
+
+        Ok(ChildProcess {
+            child: Some(child),
+            pid,
+        })
     }
 
     /// Child process handle
     pub struct ChildProcess {
+        child: Option<Child>,
         pid: u32,
     }
 
@@ -92,13 +110,48 @@ pub mod process {
         }
 
         /// Kill the process
-        pub async fn kill(&self) -> Result<()> {
-            safe::kill_process(self.pid).map_err(|e| anyhow::anyhow!(e))
+        pub async fn kill(&mut self) -> Result<()> {
+            if let Some(child) = &mut self.child {
+                child.kill().await?;
+                Ok(())
+            } else {
+                Err(anyhow::anyhow!("Process already finished"))
+            }
         }
 
         /// Wait for process to finish
-        pub async fn wait(&self) -> Result<i32> {
-            safe::wait_process(self.pid).map_err(|e| anyhow::anyhow!(e))
+        pub async fn wait(&mut self) -> Result<i32> {
+            if let Some(mut child) = self.child.take() {
+                let status = child.wait().await?;
+                Ok(status.code().unwrap_or(-1))
+            } else {
+                Err(anyhow::anyhow!("Process already waited"))
+            }
+        }
+
+        /// Send input to process stdin
+        pub async fn write_stdin(&mut self, data: &[u8]) -> Result<()> {
+            if let Some(child) = &mut self.child {
+                if let Some(stdin) = child.stdin.as_mut() {
+                    use tokio::io::AsyncWriteExt;
+                    stdin.write_all(data).await?;
+                    stdin.flush().await?;
+                }
+            }
+            Ok(())
+        }
+
+        /// Read output from process stdout
+        pub async fn read_stdout(&mut self) -> Result<Vec<u8>> {
+            if let Some(child) = &mut self.child {
+                if let Some(stdout) = child.stdout.as_mut() {
+                    use tokio::io::AsyncReadExt;
+                    let mut buffer = Vec::new();
+                    stdout.read_to_end(&mut buffer).await?;
+                    return Ok(buffer);
+                }
+            }
+            Ok(Vec::new())
         }
     }
 }
@@ -106,57 +159,198 @@ pub mod process {
 /// Network operations
 pub mod net {
     use super::*;
+    use reqwest::Client as ReqwestClient;
+    use futures::{SinkExt, StreamExt};
+    use tokio_tungstenite::{connect_async, tungstenite::protocol::Message};
 
     /// HTTP client for making requests
     pub struct HttpClient {
-        // Placeholder for HTTP client implementation
+        client: ReqwestClient,
     }
 
     impl HttpClient {
         pub fn new() -> Self {
-            Self {}
+            Self {
+                client: ReqwestClient::new(),
+            }
         }
 
         /// Make GET request
         pub async fn get(&self, url: &str) -> Result<HttpResponse> {
-            // TODO: Implement HTTP GET
-            Err(anyhow::anyhow!("HTTP GET not implemented"))
+            let response = self.client.get(url).send().await?;
+            let status = response.status().as_u16();
+            let headers = response.headers()
+                .iter()
+                .map(|(k, v)| (k.to_string(), v.to_str().unwrap_or("").to_string()))
+                .collect();
+            let body = response.bytes().await?.to_vec();
+
+            Ok(HttpResponse {
+                status,
+                headers,
+                body,
+            })
         }
 
         /// Make POST request
         pub async fn post(&self, url: &str, body: &[u8]) -> Result<HttpResponse> {
-            // TODO: Implement HTTP POST
-            Err(anyhow::anyhow!("HTTP POST not implemented"))
+            let response = self.client
+                .post(url)
+                .body(body.to_vec())
+                .send()
+                .await?;
+            let status = response.status().as_u16();
+            let headers = response.headers()
+                .iter()
+                .map(|(k, v)| (k.to_string(), v.to_str().unwrap_or("").to_string()))
+                .collect();
+            let body = response.bytes().await?.to_vec();
+
+            Ok(HttpResponse {
+                status,
+                headers,
+                body,
+            })
+        }
+
+        /// Make PUT request
+        pub async fn put(&self, url: &str, body: &[u8]) -> Result<HttpResponse> {
+            let response = self.client
+                .put(url)
+                .body(body.to_vec())
+                .send()
+                .await?;
+            let status = response.status().as_u16();
+            let headers = response.headers()
+                .iter()
+                .map(|(k, v)| (k.to_string(), v.to_str().unwrap_or("").to_string()))
+                .collect();
+            let body = response.bytes().await?.to_vec();
+
+            Ok(HttpResponse {
+                status,
+                headers,
+                body,
+            })
+        }
+
+        /// Make DELETE request
+        pub async fn delete(&self, url: &str) -> Result<HttpResponse> {
+            let response = self.client.delete(url).send().await?;
+            let status = response.status().as_u16();
+            let headers = response.headers()
+                .iter()
+                .map(|(k, v)| (k.to_string(), v.to_str().unwrap_or("").to_string()))
+                .collect();
+            let body = response.bytes().await?.to_vec();
+
+            Ok(HttpResponse {
+                status,
+                headers,
+                body,
+            })
         }
     }
 
     /// HTTP response
+    #[derive(Debug)]
     pub struct HttpResponse {
         pub status: u16,
         pub headers: HashMap<String, String>,
         pub body: Vec<u8>,
     }
 
+    impl HttpResponse {
+        /// Get response body as string
+        pub fn text(&self) -> Result<String> {
+            String::from_utf8(self.body.clone())
+                .map_err(|e| anyhow::anyhow!("Invalid UTF-8: {}", e))
+        }
+
+        /// Get response body as JSON
+        pub fn json<T: serde::de::DeserializeOwned>(&self) -> Result<T> {
+            serde_json::from_slice(&self.body)
+                .map_err(|e| anyhow::anyhow!("Invalid JSON: {}", e))
+        }
+    }
+
     /// WebSocket client
     pub struct WebSocketClient {
-        // Placeholder for WebSocket implementation
+        sender: futures::channel::mpsc::UnboundedSender<Message>,
+        receiver: futures::channel::mpsc::UnboundedReceiver<Message>,
     }
 
     impl WebSocketClient {
-        pub fn connect(url: &str) -> Result<Self> {
-            // TODO: Implement WebSocket connection
-            Err(anyhow::anyhow!("WebSocket not implemented"))
+        pub async fn connect(url: &str) -> Result<Self> {
+            let (ws_stream, _) = connect_async(url).await?;
+            let (sink, stream) = ws_stream.split();
+            let (sender_tx, sender_rx) = futures::channel::mpsc::unbounded();
+            let (receiver_tx, receiver_rx) = futures::channel::mpsc::unbounded();
+
+            // Spawn task to handle sending
+            tokio::spawn(async move {
+                let mut sink = sink;
+                let mut sender_rx = sender_rx;
+                while let Some(msg) = sender_rx.next().await {
+                    if sink.send(msg).await.is_err() {
+                        break;
+                    }
+                }
+            });
+
+            // Spawn task to handle receiving
+            tokio::spawn(async move {
+                let mut stream = stream;
+                let mut receiver_tx = receiver_tx;
+                while let Some(msg) = stream.next().await {
+                    match msg {
+                        Ok(msg) => {
+                            if receiver_tx.unbounded_send(msg).is_err() {
+                                break;
+                            }
+                        }
+                        Err(_) => break,
+                    }
+                }
+            });
+
+            Ok(Self {
+                sender: sender_tx,
+                receiver: receiver_rx,
+            })
         }
 
-        pub async fn send(&mut self, message: &[u8]) -> Result<()> {
-            // TODO: Implement WebSocket send
-            Err(anyhow::anyhow!("WebSocket send not implemented"))
+        /// Send text message
+        pub async fn send_text(&mut self, text: &str) -> Result<()> {
+            self.sender.unbounded_send(Message::Text(text.to_string()))?;
+            Ok(())
         }
 
-        pub async fn receive(&mut self) -> Result<Vec<u8>> {
-            // TODO: Implement WebSocket receive
-            Err(anyhow::anyhow!("WebSocket receive not implemented"))
+        /// Send binary message
+        pub async fn send_binary(&mut self, data: &[u8]) -> Result<()> {
+            self.sender.unbounded_send(Message::Binary(data.to_vec()))?;
+            Ok(())
         }
+
+        /// Receive next message
+        pub async fn receive(&mut self) -> Result<WebSocketMessage> {
+            match self.receiver.next().await {
+                Some(Message::Text(text)) => Ok(WebSocketMessage::Text(text)),
+                Some(Message::Binary(data)) => Ok(WebSocketMessage::Binary(data)),
+                Some(Message::Close(_)) => Ok(WebSocketMessage::Close),
+                Some(_) => Ok(WebSocketMessage::Ping),
+                None => Err(anyhow::anyhow!("WebSocket connection closed")),
+            }
+        }
+    }
+
+    /// WebSocket message types
+    #[derive(Debug)]
+    pub enum WebSocketMessage {
+        Text(String),
+        Binary(Vec<u8>),
+        Close,
+        Ping,
     }
 }
 
@@ -328,5 +522,115 @@ pub mod events {
         pub async fn recv(&mut self) -> Option<SystemEvent> {
             self.receiver.recv().await
         }
+    }
+}
+
+/// System information
+pub mod sys {
+    use super::*;
+
+    /// System information
+    pub struct SystemInfo {
+        pub os_name: String,
+        pub os_version: String,
+        pub hostname: String,
+        pub cpu_count: usize,
+        pub total_memory: u64,
+        pub available_memory: u64,
+        pub used_memory: u64,
+        pub disks: Vec<DiskInfo>,
+        pub networks: Vec<NetworkInfo>,
+    }
+
+    /// Disk information
+    #[derive(Debug, Clone)]
+    pub struct DiskInfo {
+        pub name: String,
+        pub mount_point: String,
+        pub total_space: u64,
+        pub available_space: u64,
+        pub file_system: String,
+    }
+
+    /// Network interface information
+    #[derive(Debug, Clone)]
+    pub struct NetworkInfo {
+        pub name: String,
+        pub mac_address: Option<String>,
+        pub ip_addresses: Vec<String>,
+    }
+
+    /// Get system information
+    pub fn get_system_info() -> Result<SystemInfo> {
+        let mut sys = System::new();
+
+        // Refresh system information
+        sys.refresh_cpu();
+        sys.refresh_memory();
+
+        let disks = Disks::new_with_refreshed_list().iter().map(|disk| {
+            DiskInfo {
+                name: disk.name().to_string_lossy().to_string(),
+                mount_point: disk.mount_point().to_string_lossy().to_string(),
+                total_space: disk.total_space(),
+                available_space: disk.available_space(),
+                file_system: disk.file_system().to_string_lossy().to_string(),
+            }
+        }).collect();
+
+        let networks = Networks::new_with_refreshed_list().iter().map(|(name, network)| {
+            NetworkInfo {
+                name: name.clone(),
+                mac_address: Some(format!("{:02x}:{:02x}:{:02x}:{:02x}:{:02x}:{:02x}",
+                    network.mac_address().0[0], network.mac_address().0[1],
+                    network.mac_address().0[2], network.mac_address().0[3],
+                    network.mac_address().0[4], network.mac_address().0[5])),
+                ip_addresses: vec![], // Simplified for now
+            }
+        }).collect();
+
+        Ok(SystemInfo {
+            os_name: System::name().unwrap_or_else(|| "Unknown".to_string()),
+            os_version: System::os_version().unwrap_or_else(|| "Unknown".to_string()),
+            hostname: System::host_name().unwrap_or_else(|| "Unknown".to_string()),
+            cpu_count: sys.cpus().len(),
+            total_memory: sys.total_memory(),
+            available_memory: sys.available_memory(),
+            used_memory: sys.used_memory(),
+            disks,
+            networks,
+        })
+    }
+
+    /// Get CPU usage percentage
+    pub fn get_cpu_usage() -> Result<f32> {
+        let mut sys = System::new();
+        sys.refresh_cpu();
+        std::thread::sleep(std::time::Duration::from_millis(100));
+        sys.refresh_cpu();
+
+        let usage: f32 = sys.cpus().iter().map(|cpu| cpu.cpu_usage()).sum();
+        Ok(usage / sys.cpus().len() as f32)
+    }
+
+    /// Get memory usage information
+    pub fn get_memory_info() -> Result<(u64, u64, u64)> {
+        let mut sys = System::new();
+        sys.refresh_memory();
+
+        Ok((sys.total_memory(), sys.used_memory(), sys.available_memory()))
+    }
+
+    /// Get disk usage for a specific mount point
+    pub fn get_disk_usage(mount_point: &str) -> Result<Option<(u64, u64)>> {
+        let disks = Disks::new_with_refreshed_list();
+
+        for disk in disks.iter() {
+            if disk.mount_point().to_string_lossy() == mount_point {
+                return Ok(Some((disk.total_space(), disk.available_space())));
+            }
+        }
+
+        Ok(None)
     }
 }
