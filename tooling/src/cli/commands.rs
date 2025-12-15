@@ -43,8 +43,27 @@ pub fn execute_build(release: bool, target: Option<&str>, jobs: Option<usize>) -
     }
 
     if let Some(t) = target {
-        // TODO: Implementar soporte para diferentes targets
-        println!("⚠️  Target specification not yet implemented, using default");
+        config = config.with_target(t);
+        println!("   Target: {}", t);
+        
+        // Validar target soportado
+        match t {
+            "ios" => {
+                println!("📱 Building for iOS target");
+            }
+            "android" => {
+                println!("🤖 Building for Android target");
+            }
+            "web" => {
+                println!("🌐 Building for Web target");
+            }
+            "desktop" => {
+                println!("🖥️  Building for Desktop target");
+            }
+            _ => {
+                println!("⚠️  Unknown target '{}', using default", t);
+            }
+        }
     }
 
     // Crear y ejecutar el build executor

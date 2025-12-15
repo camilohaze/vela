@@ -5,7 +5,7 @@ Build executor with parallel compilation
 use crate::build::{BuildCache, BuildConfig, BuildGraph};
 use crate::common::Result;
 use rayon::prelude::*;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 /// Build result
 #[derive(Debug, Clone)]
@@ -134,7 +134,41 @@ impl BuildExecutor {
         }
 
         let duration = start.elapsed().as_millis();
-        Ok(BuildResult::success(compiled, cached, duration))
+        let mut result = BuildResult::success(compiled, cached, duration);
+
+        // Post-processing para targets específicos
+        if let Some(target) = &self.config.target {
+            match target.as_str() {
+                "ios" => {
+                    println!("📱 Generating iOS build artifacts...");
+                    if let Err(e) = self.generate_ios_artifacts() {
+                        eprintln!("❌ iOS build failed: {}", e);
+                        return Ok(BuildResult::failed(duration));
+                    }
+                    println!("✅ iOS build artifacts generated successfully");
+                }
+                "android" => {
+                    println!("🤖 Generating Android build artifacts...");
+                    // TODO: Implement Android build
+                    println!("⚠️  Android target not yet implemented");
+                }
+                "web" => {
+                    println!("🌐 Generating Web build artifacts...");
+                    // TODO: Implement Web build
+                    println!("⚠️  Web target not yet implemented");
+                }
+                "desktop" => {
+                    println!("🖥️  Generating Desktop build artifacts...");
+                    // TODO: Implement Desktop build
+                    println!("⚠️  Desktop target not yet implemented");
+                }
+                _ => {
+                    println!("⚠️  Unknown target '{}', skipping post-processing", target);
+                }
+            }
+        }
+
+        Ok(result)
     }
 
     /// Compile a single module
@@ -256,6 +290,235 @@ impl BuildExecutor {
     pub fn cache_mut(&mut self) -> &mut BuildCache {
         &mut self.cache
     }
+
+    /// Generate iOS-specific build artifacts
+    fn generate_ios_artifacts(&self) -> Result<()> {
+        use std::fs;
+        use std::path::Path;
+
+        // Crear directorio de output para iOS
+        let ios_output_dir = self.config.output_dir.join("ios");
+        fs::create_dir_all(&ios_output_dir)?;
+
+        // Generar Package.swift para Swift Package Manager
+        self.generate_package_swift(&ios_output_dir)?;
+
+        // Generar código Swift/Objective-C wrapper
+        self.generate_ios_wrapper(&ios_output_dir)?;
+
+        // Generar AppDelegate y ViewController base
+        self.generate_ios_app_structure(&ios_output_dir)?;
+
+        // Copiar bytecode compilado
+        self.copy_compiled_bytecode(&ios_output_dir)?;
+
+        println!("📱 iOS artifacts generated in: {}", ios_output_dir.display());
+        Ok(())
+    }
+
+    /// Generate Package.swift for Swift Package Manager
+    fn generate_package_swift(&self, output_dir: &Path) -> Result<()> {
+        let package_swift = r#"// swift-tools-version:5.7
+import PackageDescription
+
+let package = Package(
+    name: "VelaApp",
+    platforms: [
+        .iOS(.v14)
+    ],
+    products: [
+        .executable(name: "VelaApp", targets: ["VelaApp"])
+    ],
+    dependencies: [
+        // Add any external dependencies here
+    ],
+    targets: [
+        .executableTarget(
+            name: "VelaApp",
+            dependencies: [],
+            path: "Sources"
+        )
+    ]
+)
+"#;
+
+        let package_path = output_dir.join("Package.swift");
+        std::fs::write(package_path, package_swift)?;
+        println!("📄 Generated Package.swift");
+        Ok(())
+    }
+
+    /// Generate iOS wrapper code
+    fn generate_ios_wrapper(&self, output_dir: &Path) -> Result<()> {
+        let sources_dir = output_dir.join("Sources");
+        std::fs::create_dir_all(&sources_dir)?;
+
+        // Generar main.swift
+        let main_swift = r#"import Foundation
+import UIKit
+
+// Import Vela runtime (would be linked)
+// extern func vela_ios_create_runtime() -> UnsafeMutableRawPointer?
+
+@main
+struct VelaApp {
+    static func main() {
+        UIApplicationMain(
+            CommandLine.argc,
+            CommandLine.unsafeArgv,
+            nil,
+            NSStringFromClass(AppDelegate.self)
+        )
+    }
+}
+
+class AppDelegate: UIResponder, UIApplicationDelegate {
+    var window: UIWindow?
+
+    func application(
+        _ application: UIApplication,
+        didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
+    ) -> Bool {
+        window = UIWindow(frame: UIScreen.main.bounds)
+        window?.rootViewController = VelaViewController()
+        window?.makeKeyAndVisible()
+        return true
+    }
+}
+
+class VelaViewController: UIViewController {
+    private var velaRuntime: UnsafeMutableRawPointer?
+
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        view.backgroundColor = .white
+
+        // Initialize Vela runtime
+        // velaRuntime = vela_ios_create_runtime()
+
+        // Create root widget and render
+        // This would integrate with the Vela renderer
+        setupVelaUI()
+    }
+
+    private func setupVelaUI() {
+        // Placeholder for Vela UI setup
+        let label = UILabel()
+        label.text = "Hello from Vela!"
+        label.textAlignment = .center
+        label.frame = view.bounds
+        view.addSubview(label)
+    }
+
+    override func viewDidLayoutSubviews() {
+        super.viewDidLayoutSubviews()
+        // Update Vela layout if needed
+    }
+}
+"#;
+
+        let main_path = sources_dir.join("main.swift");
+        std::fs::write(main_path, main_swift)?;
+        println!("📄 Generated main.swift");
+
+        // Generar bridging header si es necesario
+        let bridging_header = r#"//
+//  VelaApp-Bridging-Header.h
+//  VelaApp
+//
+//  This file is automatically generated. Do not edit.
+//
+
+#ifndef VelaApp_Bridging_Header_h
+#define VelaApp_Bridging_Header_h
+
+// Vela runtime declarations
+void *vela_ios_create_runtime(void);
+void vela_ios_destroy_runtime(void *runtime);
+void vela_ios_render_widget(void *runtime, const char *widget_json);
+void vela_ios_handle_touch_event(void *runtime, const char *event_json);
+
+#endif /* VelaApp_Bridging_Header_h */
+"#;
+
+        let bridging_path = sources_dir.join("VelaApp-Bridging-Header.h");
+        std::fs::write(bridging_path, bridging_header)?;
+        println!("📄 Generated VelaApp-Bridging-Header.h");
+
+        Ok(())
+    }
+
+    /// Generate basic iOS app structure
+    fn generate_ios_app_structure(&self, output_dir: &Path) -> Result<()> {
+        let sources_dir = output_dir.join("Sources");
+        std::fs::create_dir_all(&sources_dir)?;
+
+        // Generar Info.plist básico
+        let info_plist = r#"<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleDevelopmentRegion</key>
+    <string>en</string>
+    <key>CFBundleExecutable</key>
+    <string>VelaApp</string>
+    <key>CFBundleIdentifier</key>
+    <string>com.vela.app</string>
+    <key>CFBundleInfoDictionaryVersion</key>
+    <string>6.0</string>
+    <key>CFBundleName</key>
+    <string>VelaApp</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+    <key>CFBundleShortVersionString</key>
+    <string>1.0</string>
+    <key>CFBundleVersion</key>
+    <string>1</string>
+    <key>LSRequiresIPhoneOS</key>
+    <true/>
+    <key>UIRequiredDeviceCapabilities</key>
+    <array>
+        <string>armv7</string>
+    </array>
+    <key>UISupportedInterfaceOrientations</key>
+    <array>
+        <string>UIInterfaceOrientationPortrait</string>
+    </array>
+</dict>
+</plist>
+"#;
+
+        let plist_path = output_dir.join("Info.plist");
+        std::fs::write(plist_path, info_plist)?;
+        println!("📄 Generated Info.plist");
+
+        Ok(())
+    }
+
+    /// Copy compiled bytecode to iOS output
+    fn copy_compiled_bytecode(&self, ios_output_dir: &Path) -> Result<()> {
+        use std::fs;
+
+        let bytecode_dir = ios_output_dir.join("Bytecode");
+        fs::create_dir_all(&bytecode_dir)?;
+
+        // Copy all .velac files from target/vela to ios/Bytecode
+        let vela_output_dir = self.config.output_dir.join("vela");
+        if vela_output_dir.exists() {
+            for entry in fs::read_dir(vela_output_dir)? {
+                let entry = entry?;
+                let path = entry.path();
+                if path.extension().and_then(|s| s.to_str()) == Some("velac") {
+                    let file_name = path.file_name().unwrap();
+                    let dest = bytecode_dir.join(file_name);
+                    fs::copy(&path, &dest)?;
+                    println!("📋 Copied bytecode: {}", file_name.to_string_lossy());
+                }
+            }
+        }
+
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -338,5 +601,120 @@ mod tests {
 
         executor.cache_mut().clear();
         assert!(executor.cache.is_empty());
+    }
+
+    #[test]
+    fn test_generate_ios_artifacts_creates_directory_structure() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let output_dir = temp_dir.path().join("output");
+        let ios_dir = output_dir.join("ios");
+
+        let config = BuildConfig::new(PathBuf::from("/tmp/project")).with_output_dir(&output_dir);
+        let executor = BuildExecutor::new(config);
+
+        // Ejecutar generación de artifacts iOS
+        let result = executor.generate_ios_artifacts();
+        assert!(result.is_ok(), "generate_ios_artifacts should succeed");
+
+        // Verificar que se creó el directorio ios
+        assert!(ios_dir.exists(), "iOS output directory should be created");
+
+        // Verificar archivos generados
+        assert!(ios_dir.join("Package.swift").exists(), "Package.swift should be generated");
+        assert!(ios_dir.join("Sources").exists(), "Sources directory should be created");
+        assert!(ios_dir.join("Sources").join("main.swift").exists(), "main.swift should be generated");
+        assert!(ios_dir.join("Sources").join("VelaApp-Bridging-Header.h").exists(), "Bridging header should be generated");
+        assert!(ios_dir.join("Info.plist").exists(), "Info.plist should be generated");
+    }
+
+    #[test]
+    fn test_generate_package_swift_content() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let ios_dir = temp_dir.path().join("ios");
+
+        let config = BuildConfig::default();
+        let executor = BuildExecutor::new(config);
+
+        let result = executor.generate_package_swift(&ios_dir);
+        assert!(result.is_ok(), "generate_package_swift should succeed");
+
+        let package_path = ios_dir.join("Package.swift");
+        assert!(package_path.exists(), "Package.swift should exist");
+
+        let content = std::fs::read_to_string(package_path).unwrap();
+        assert!(content.contains("name: \"VelaApp\""), "Package name should be VelaApp");
+        assert!(content.contains("platforms: [.iOS(.v14)]"), "Should target iOS 14+");
+        assert!(content.contains("executableTarget"), "Should be executable target");
+    }
+
+    #[test]
+    fn test_generate_ios_wrapper_content() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let ios_dir = temp_dir.path().join("ios");
+
+        let config = BuildConfig::default();
+        let executor = BuildExecutor::new(config);
+
+        let result = executor.generate_ios_wrapper(&ios_dir);
+        assert!(result.is_ok(), "generate_ios_wrapper should succeed");
+
+        let sources_dir = ios_dir.join("Sources");
+        let main_swift = sources_dir.join("main.swift");
+        let bridging_header = sources_dir.join("VelaApp-Bridging-Header.h");
+
+        assert!(main_swift.exists(), "main.swift should exist");
+        assert!(bridging_header.exists(), "Bridging header should exist");
+
+        let main_content = std::fs::read_to_string(main_swift).unwrap();
+        assert!(main_content.contains("@main"), "Should have @main attribute");
+        assert!(main_content.contains("UIApplicationMain"), "Should call UIApplicationMain");
+        assert!(main_content.contains("VelaViewController"), "Should reference VelaViewController");
+
+        let header_content = std::fs::read_to_string(bridging_header).unwrap();
+        assert!(header_content.contains("vela_ios_create_runtime"), "Should declare runtime function");
+        assert!(header_content.contains("vela_ios_render_widget"), "Should declare render function");
+    }
+
+    #[test]
+    fn test_generate_ios_app_structure() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let ios_dir = temp_dir.path().join("ios");
+
+        let config = BuildConfig::default();
+        let executor = BuildExecutor::new(config);
+
+        let result = executor.generate_ios_app_structure(&ios_dir);
+        assert!(result.is_ok(), "generate_ios_app_structure should succeed");
+
+        let plist_path = ios_dir.join("Info.plist");
+        assert!(plist_path.exists(), "Info.plist should exist");
+
+        let plist_content = std::fs::read_to_string(plist_path).unwrap();
+        assert!(plist_content.contains("VelaApp"), "Should contain app name");
+        assert!(plist_content.contains("com.vela.app"), "Should contain bundle identifier");
+        assert!(plist_content.contains("UIRequiredDeviceCapabilities"), "Should specify device capabilities");
+    }
+
+    #[test]
+    fn test_copy_compiled_bytecode() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let output_dir = temp_dir.path().join("output");
+        let ios_dir = output_dir.join("ios");
+        let vela_dir = output_dir.join("vela");
+
+        // Crear directorio vela y archivo bytecode de prueba
+        std::fs::create_dir_all(&vela_dir).unwrap();
+        let bytecode_file = vela_dir.join("test.velac");
+        std::fs::write(&bytecode_file, "fake bytecode").unwrap();
+
+        let config = BuildConfig::new(output_dir);
+        let executor = BuildExecutor::new(config);
+
+        let result = executor.copy_compiled_bytecode(&ios_dir);
+        assert!(result.is_ok(), "copy_compiled_bytecode should succeed");
+
+        let copied_file = ios_dir.join("Bytecode").join("test.velac");
+        assert!(copied_file.exists(), "Bytecode file should be copied");
+        assert_eq!(std::fs::read_to_string(copied_file).unwrap(), "fake bytecode", "Content should match");
     }
 }
