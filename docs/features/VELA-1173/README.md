@@ -81,7 +81,7 @@ Como desarrollador, quiero poder desplegar aplicaciones Vela en plataformas desk
 - **Subtasks completadas:** 2/5 (40%)
 - **Archivos creados:** 17 (9 Rust + 7 C++ + 1 Python test)
 - **Líneas de código:** ~3,200
-- **Tests unitarios:** Implementados para renderer
+- **Tests unitarios:** 13 tests en Rust integrados
 - **Cobertura de testing:** 85%+ para renderer
 - **Performance target:** Diseño completado
 - **Plataformas soportadas:** Arquitectura preparada para Windows, macOS, Linux

@@ -337,3 +337,248 @@ impl Color {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json;
+
+    #[test]
+    fn test_color_creation() {
+        let color = Color::rgb(255, 128, 64);
+        assert_eq!(color.r, 255);
+        assert_eq!(color.g, 128);
+        assert_eq!(color.b, 64);
+        assert_eq!(color.a, 255);
+    }
+
+    #[test]
+    fn test_color_constants() {
+        assert_eq!(Color::red(), Color::rgb(255, 0, 0));
+        assert_eq!(Color::green(), Color::rgb(0, 255, 0));
+        assert_eq!(Color::blue(), Color::rgb(0, 0, 255));
+    }
+
+    #[test]
+    fn test_color_to_skia() {
+        let color = Color::rgb(255, 128, 64);
+        let skia_color = color.to_skia();
+        // Skia uses ARGB format
+        assert_eq!(skia_color.a(), 255);
+        assert_eq!(skia_color.r(), 255);
+        assert_eq!(skia_color.g(), 128);
+        assert_eq!(skia_color.b(), 64);
+    }
+
+    #[test]
+    fn test_vdom_serialization() {
+        let widget = WidgetNode {
+            widget_type: WidgetType::Container(ContainerProps {
+                children: vec![WidgetNode {
+                    widget_type: WidgetType::Text(TextProps {
+                        text: "Hello Vela!".to_string(),
+                    }),
+                    layout: Layout {
+                        x: 10.0,
+                        y: 10.0,
+                        width: 200.0,
+                        height: 50.0,
+                    },
+                    style: Style {
+                        background_color: Some(Color::white()),
+                        color: Some(Color::black()),
+                        font_size: Some(16.0),
+                        font_family: Some("Arial".to_string()),
+                    },
+                    properties: serde_json::Value::Null,
+                }],
+            }),
+            layout: Layout {
+                x: 0.0,
+                y: 0.0,
+                width: 800.0,
+                height: 600.0,
+            },
+            style: Style {
+                background_color: Some(Color::white()),
+                color: None,
+                font_size: None,
+                font_family: None,
+            },
+            properties: serde_json::Value::Null,
+        };
+
+        let json = serialize_vdom(&widget).unwrap();
+        let deserialized = deserialize_vdom(&json).unwrap();
+
+        // Verificar estructura básica
+        match deserialized.widget_type {
+            WidgetType::Container(container) => {
+                assert_eq!(container.children.len(), 1);
+                match &container.children[0].widget_type {
+                    WidgetType::Text(text) => {
+                        assert_eq!(text.text, "Hello Vela!");
+                    }
+                    _ => panic!("Expected Text widget"),
+                }
+            }
+            _ => panic!("Expected Container widget"),
+        }
+    }
+
+    #[test]
+    fn test_widget_types() {
+        // Test Container
+        let container = WidgetNode {
+            widget_type: WidgetType::Container(ContainerProps { children: vec![] }),
+            layout: Layout::default(),
+            style: Style::default(),
+            properties: serde_json::Value::Null,
+        };
+        assert!(matches!(container.widget_type, WidgetType::Container(_)));
+
+        // Test Text
+        let text = WidgetNode {
+            widget_type: WidgetType::Text(TextProps { text: "Test".to_string() }),
+            layout: Layout::default(),
+            style: Style::default(),
+            properties: serde_json::Value::Null,
+        };
+        assert!(matches!(text.widget_type, WidgetType::Text(_)));
+
+        // Test Button
+        let button = WidgetNode {
+            widget_type: WidgetType::Button(ButtonProps {
+                text: "Click".to_string(),
+                enabled: true,
+            }),
+            layout: Layout::default(),
+            style: Style::default(),
+            properties: serde_json::Value::Null,
+        };
+        assert!(matches!(button.widget_type, WidgetType::Button(_)));
+
+        // Test Image
+        let image = WidgetNode {
+            widget_type: WidgetType::Image(ImageProps {
+                image_data: ImageData {
+                    width: 100,
+                    height: 100,
+                    pixels: vec![255; 100 * 100 * 4],
+                },
+            }),
+            layout: Layout::default(),
+            style: Style::default(),
+            properties: serde_json::Value::Null,
+        };
+        assert!(matches!(image.widget_type, WidgetType::Image(_)));
+    }
+
+    #[test]
+    fn test_layout_properties() {
+        let layout = Layout {
+            x: 10.5,
+            y: 20.5,
+            width: 300.0,
+            height: 200.0,
+        };
+
+        assert_eq!(layout.x, 10.5);
+        assert_eq!(layout.y, 20.5);
+        assert_eq!(layout.width, 300.0);
+        assert_eq!(layout.height, 200.0);
+
+        // Dimensiones positivas
+        assert!(layout.width > 0.0);
+        assert!(layout.height > 0.0);
+    }
+
+    #[test]
+    fn test_nested_widgets() {
+        let nested = WidgetNode {
+            widget_type: WidgetType::Container(ContainerProps {
+                children: vec![
+                    WidgetNode {
+                        widget_type: WidgetType::Container(ContainerProps {
+                            children: vec![
+                                WidgetNode {
+                                    widget_type: WidgetType::Text(TextProps {
+                                        text: "Deep".to_string(),
+                                    }),
+                                    layout: Layout::default(),
+                                    style: Style::default(),
+                                    properties: serde_json::Value::Null,
+                                }
+                            ],
+                        }),
+                        layout: Layout::default(),
+                        style: Style::default(),
+                        properties: serde_json::Value::Null,
+                    }
+                ],
+            }),
+            layout: Layout::default(),
+            style: Style::default(),
+            properties: serde_json::Value::Null,
+        };
+
+        // Contar profundidad
+        fn count_depth(widget: &WidgetNode) -> usize {
+            match &widget.widget_type {
+                WidgetType::Container(container) => {
+                    1 + container.children.iter().map(count_depth).max().unwrap_or(0)
+                }
+                _ => 1,
+            }
+        }
+
+        assert_eq!(count_depth(&nested), 3);
+    }
+
+    #[test]
+    fn test_button_properties() {
+        let button_props = ButtonProps {
+            text: "Click me".to_string(),
+            enabled: true,
+        };
+
+        assert_eq!(button_props.text, "Click me");
+        assert_eq!(button_props.enabled, true);
+    }
+
+    #[test]
+    fn test_image_properties() {
+        let image_data = ImageData {
+            width: 200,
+            height: 150,
+            pixels: vec![255; 200 * 150 * 4],
+        };
+
+        assert_eq!(image_data.width, 200);
+        assert_eq!(image_data.height, 150);
+        assert_eq!(image_data.pixels.len(), 200 * 150 * 4);
+    }
+
+    #[test]
+    fn test_color_validation() {
+        // Colores válidos
+        let valid_color = Color::rgb(255, 128, 64);
+        assert!(valid_color.r <= 255 && valid_color.g <= 255 && valid_color.b <= 255 && valid_color.a <= 255);
+
+        // Nota: En Rust no podemos crear colores inválidos fácilmente debido a los tipos u8
+    }
+
+    #[test]
+    fn test_font_properties() {
+        let style = Style {
+            background_color: None,
+            color: Some(Color::black()),
+            font_size: Some(16.0),
+            font_family: Some("Arial".to_string()),
+        };
+
+        assert_eq!(style.font_size, Some(16.0));
+        assert_eq!(style.font_family, Some("Arial".to_string()));
+        assert!(style.font_size.unwrap() > 0.0);
+    }
+}
+

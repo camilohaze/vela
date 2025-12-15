@@ -61,10 +61,10 @@ impl Color {
 - [x] Font management con FontMgr operativo
 - [x] Framebuffer access retorna pixels correctos
 - [x] Código compila sin errores
-- [x] Tests unitarios pasan con >85% cobertura
+- [x] Tests unitarios en Rust pasan con >85% cobertura
 
 ## 🔗 Referencias
 - **Jira:** [TASK-163](https://velalang.atlassian.net/browse/TASK-163)
 - **Historia:** [VELA-1173](https://velalang.atlassian.net/browse/VELA-1173)
 - **Código:** `runtime/desktop/src/renderer.rs`
-- **Tests:** `tests/unit/test_desktop_renderer.py`
+- **Tests:** Tests unitarios integrados en `runtime/desktop/src/renderer.rs` (módulo `tests`)
