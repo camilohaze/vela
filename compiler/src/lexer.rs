@@ -18,7 +18,7 @@ pub enum TokenKind {
     Class, Abstract, Extends, Implements, Override, Overload,
     Constructor, This, Super, Static, Get, Set,
     Try, Catch, Throw, New, True, False,
-    Global, Mixin, As, Show, Hide,
+    Global, Mixin, As, Show, Hide, Extern,
 
     // Keywords - Business Logic
     Service, Repository, Controller, UseCase, Entity, ValueObject, Dto, Model,
@@ -576,6 +576,7 @@ impl Lexer {
             "as" => TokenKind::As,
             "show" => TokenKind::Show,
             "hide" => TokenKind::Hide,
+            "extern" => TokenKind::Extern,
 
             // Keywords - Business Logic
             "service" => TokenKind::Service,

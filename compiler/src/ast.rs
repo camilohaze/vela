@@ -198,6 +198,8 @@ pub enum Declaration {
     Mapper(MapperDeclaration),
     Serializer(SerializerDeclaration),
     Module(ModuleDeclaration),
+    Extern(ExternDeclaration),
+    ExternStruct(ExternStructDeclaration),
 }
 
 /// Declaración de función.
@@ -1557,6 +1559,80 @@ impl ModuleDeclaration {
             exports,
             providers,
             imports,
+        }
+    }
+}
+
+// ===================================================================
+// EXTERN DECLARATIONS (FFI)
+// ===================================================================
+
+/// Declaración de función externa (FFI).
+/// Representa funciones C que pueden ser llamadas desde Vela.
+/// Ejemplo en Vela:
+/// ```vela
+/// extern "C" fn strlen(s: *const u8) -> usize;
+/// extern "C" from "mylib.so" fn my_func(x: i32) -> i32;
+/// ```
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ExternDeclaration {
+    pub node: ASTNode,
+    pub abi: String,                    // "C", "C++", etc.
+    pub library: Option<String>,        // Librería específica (opcional)
+    pub function_name: String,          // Nombre de la función externa
+    pub parameters: Vec<Parameter>,     // Parámetros de la función
+    pub return_type: Option<TypeAnnotation>, // Tipo de retorno
+}
+
+impl ExternDeclaration {
+    pub fn new(
+        range: Range,
+        abi: String,
+        library: Option<String>,
+        function_name: String,
+        parameters: Vec<Parameter>,
+        return_type: Option<TypeAnnotation>,
+    ) -> Self {
+        Self {
+            node: ASTNode::new(range),
+            abi,
+            library,
+            function_name,
+            parameters,
+            return_type,
+        }
+    }
+}
+
+/// Declaración de struct externa.
+/// Representa structs C que pueden ser usados desde Vela.
+/// Ejemplo en Vela:
+/// ```vela
+/// extern "C" struct File {
+///   fd: Number,
+///   flags: Number,
+/// }
+/// ```
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ExternStructDeclaration {
+    pub node: ASTNode,
+    pub abi: String,
+    pub name: String,
+    pub fields: Vec<StructField>,
+}
+
+impl ExternStructDeclaration {
+    pub fn new(
+        range: Range,
+        abi: String,
+        name: String,
+        fields: Vec<StructField>,
+    ) -> Self {
+        Self {
+            node: ASTNode::new(range),
+            abi,
+            name,
+            fields,
         }
     }
 }

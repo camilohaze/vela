@@ -9,9 +9,11 @@
 ## 🎯 Descripción
 Como desarrollador, quiero poder llamar código C desde Vela para acceder a librerías nativas del sistema, mejorar performance en operaciones críticas, e integrar con el vasto ecosistema de código C existente.
 
+## 📦 Subtasks Completadas
+1. **TASK-167**: Diseñar FFI system - Sistema de FFI con C ✅
+2. **TASK-168**: Implementar extern declarations - Sintaxis para funciones externas ✅
+
 ## 📦 Subtasks Pendientes
-1. **TASK-167**: Diseñar FFI system - Sistema de FFI con C
-2. **TASK-168**: Implementar extern declarations - Sintaxis para funciones externas
 3. **TASK-169**: Implementar C FFI bridge - Bridge entre Vela y C
 4. **TASK-170**: Tests de FFI - Tests de correctness del FFI
 
@@ -97,17 +99,19 @@ service MatrixOps {
 ```
 
 ## 📊 Métricas
-- **Subtasks:** 4 pendientes
+- **Subtasks:** 2 completadas, 2 pendientes (50% completado)
+- **Archivos creados:** 6 (ADR, documentación, lexer, AST, parser, tests)
 - **Archivos a crear:** ~8 (FFI system, bridge, tests)
-- **Líneas de código:** ~600 líneas
+- **Líneas de código:** ~300 líneas implementadas
 - **Complejidad:** Alta (safety crítica)
 
 ## ✅ Definición de Hecho
+- [x] TASK-167: FFI system diseñado con arquitectura de 3 capas
+- [x] TASK-168: Sintaxis extern implementada y funcional
+- [ ] TASK-169: Bridge C implementado y probado
+- [ ] TASK-170: Tests completos con cobertura >90%
 - [ ] Todas las Subtasks completadas (4/4)
 - [ ] Sistema FFI funcional con tipos seguros
-- [ ] Sintaxis extern implementada
-- [ ] Bridge C funcional
-- [ ] Tests completos con cobertura >90%
 - [ ] Documentación técnica completa
 - [ ] Ejemplos de integración con librerías C populares
 

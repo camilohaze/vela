@@ -176,6 +176,10 @@ impl Parser {
         } else if self.check(TokenKind::Module) {
             self.parse_module_declaration(is_public, decorators)
 
+        // Extern declarations (FFI)
+        } else if self.check(TokenKind::Extern) {
+            self.parse_extern_declaration(is_public)
+
         } else {
             println!("🔧 No valid declaration token found, current token: {:?}", self.current_token());
             Err(CompileError::Parse(self.error("Expected declaration")))
@@ -1543,6 +1547,103 @@ impl Parser {
         let range = Range::new(start_pos, end_pos);
         let module_decl = ModuleDeclaration::new(range, is_public, name, decorators, body, Vec::new(), Vec::new(), Vec::new(), Vec::new());
         Ok(Declaration::Module(module_decl))
+    }
+
+    /// Parsea una declaración extern (FFI).
+    /// Sintaxis: extern "ABI" [from "library"] fn name(params) -> return_type;
+    /// O: extern "ABI" struct Name { fields };
+    fn parse_extern_declaration(&mut self, is_public: bool) -> CompileResult<Declaration> {
+        let start_pos = self.current_token().range.start.clone();
+
+        self.consume(TokenKind::Extern)?;
+
+        // Parse ABI string (e.g., "C", "C++")
+        let abi = self.consume_string()?;
+
+        // Optional library specification: from "library.so"
+        let library = if matches!(self.current_token().kind, TokenKind::Identifier(ref lex)) && lex == "from" {
+            self.advance(); // consume 'from'
+            Some(self.consume_string()?)
+        } else {
+            None
+        };
+
+        // Parse extern function or struct
+        if self.check(TokenKind::Fn) {
+            self.parse_extern_function_declaration(start_pos, abi, library)
+        } else if self.check(TokenKind::Struct) {
+            self.parse_extern_struct_declaration(start_pos, abi, library)
+        } else {
+            Err(CompileError::Parse(self.error("Expected 'fn' or 'struct' after extern declaration")))
+        }
+    }
+
+    /// Parsea una función externa.
+    fn parse_extern_function_declaration(
+        &mut self,
+        start_pos: crate::ast::Position,
+        abi: String,
+        library: Option<String>,
+    ) -> CompileResult<Declaration> {
+        self.consume(TokenKind::Fn)?;
+        let function_name = self.consume_identifier()?;
+
+        // Parse parameters
+        self.consume(TokenKind::LeftParen)?;
+        let parameters = self.parse_parameters()?;
+        self.consume(TokenKind::RightParen)?;
+
+        // Parse return type
+        let return_type = if self.check(TokenKind::Arrow) {
+            self.advance();
+            Some(self.parse_type_annotation()?)
+        } else {
+            None
+        };
+
+        self.consume(TokenKind::Semicolon)?;
+
+        let end_pos = self.previous_token().range.end.clone();
+        let range = Range::new(start_pos, end_pos);
+
+        let extern_decl = ExternDeclaration::new(
+            range,
+            abi,
+            library,
+            function_name,
+            parameters,
+            return_type,
+        );
+
+        Ok(Declaration::Extern(extern_decl))
+    }
+
+    /// Parsea un struct externo.
+    fn parse_extern_struct_declaration(
+        &mut self,
+        start_pos: crate::ast::Position,
+        abi: String,
+        library: Option<String>,
+    ) -> CompileResult<Declaration> {
+        self.consume(TokenKind::Struct)?;
+        let struct_name = self.consume_identifier()?;
+
+        // Parse struct fields
+        self.consume(TokenKind::LeftBrace)?;
+        let fields = self.parse_struct_fields()?;
+        self.consume(TokenKind::RightBrace)?;
+
+        let end_pos = self.previous_token().range.end.clone();
+        let range = Range::new(start_pos, end_pos);
+
+        let extern_struct_decl = ExternStructDeclaration::new(
+            range,
+            abi,
+            struct_name,
+            fields,
+        );
+
+        Ok(Declaration::ExternStruct(extern_struct_decl))
     }
 
     /// Parsea una lista de expresiones separadas por comas hasta encontrar el delimitador final.
