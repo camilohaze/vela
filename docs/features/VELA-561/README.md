@@ -17,6 +17,7 @@ Implementar un Language Server Protocol (LSP) básico para Vela que proporcione 
 5. **TASK-112**: Implementar textDocument/rename ✅
 6. **TASK-113**: Tests de LSP ✅
 7. **TASK-164**: Implementar APIs de sistema nativo para desktop ✅
+8. **TASK-166**: Tests en desktop ✅
 
 ## 🔨 Implementación
 
@@ -60,19 +61,20 @@ Implementar un Language Server Protocol (LSP) básico para Vela que proporcione 
 - Tests de manejo de errores y operaciones concurrentes
 
 ## 📊 Métricas
-- **Subtasks completadas:** 6/6
-- **Archivos creados:** 9 (código + tests + docs)
+- **Subtasks completadas:** 8/8
+- **Archivos creados:** 11 (código + tests + docs)
 - **Tests unitarios:** 8 tests pasando
-- **Tests de integración:** 10 tests pasando
-- **Líneas de código:** ~600 líneas
+- **Tests de integración:** 16 tests pasando (10 LSP + 6 desktop)
+- **Líneas de código:** ~700 líneas
 
 ## ✅ Definición de Hecho
-- [x] Todas las Subtasks completadas (6/6)
+- [x] Todas las Subtasks completadas (8/8)
 - [x] LSP server funcional con 5 características principales
 - [x] Tests unitarios con cobertura completa (8/8 tests)
-- [x] Tests de integración completos (10/10 tests)
+- [x] Tests de integración completos (16/16 tests)
 - [x] Documentación técnica completa
 - [x] Integración completa con protocolo LSP
+- [x] Suite completa de tests desktop (6/6 tests pasando)
 - [x] Pull Request merged a main
 
 ## 🔗 Referencias
