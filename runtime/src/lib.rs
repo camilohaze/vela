@@ -38,6 +38,9 @@ pub mod streams;
 // UI Framework
 pub mod ui;
 
+// FFI Bridge for C interoperability
+pub mod ffi;
+
 // Modules
 // pub mod store;  // Movido a packages/state-management
 // pub mod action; // Movido a packages/state-management
