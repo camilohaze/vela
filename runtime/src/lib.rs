@@ -8,6 +8,7 @@
 //! - DI container
 //! - HTTP framework
 //! - Event system
+//! - UI Framework
 
 pub use concurrency as concurrency;
 pub use reactive as reactive;
@@ -15,6 +16,7 @@ pub use http as http;
 pub use events as events;
 pub use di as di;
 pub use state_management as state_management;
+pub use ui as ui;
 
 // Re-export channels and async from concurrency module
 pub use concurrency::channels;
@@ -33,6 +35,9 @@ pub mod observability;
 
 // Stream API for asynchronous data processing
 pub mod streams;
+
+// UI Framework
+pub mod ui;
 
 // Modules
 // pub mod store;  // Movido a packages/state-management
