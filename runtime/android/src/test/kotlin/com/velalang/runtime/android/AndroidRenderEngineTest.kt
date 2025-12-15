@@ -1,7 +1,7 @@
 /*
 Tests unitarios para Android Render Engine
 
-Jira: TASK-157
+Jira: TASK-159
 Historia: VELA-1167
 Fecha: 2025-12-15
 
@@ -10,6 +10,9 @@ Cobertura de testing:
 - Manejo de eventos
 - Serialización VDOM
 - Gestión de ciclo de vida
+- Renderizado de nodos Vela
+- Deserialización JSON
+- Performance y memoria
 */
 
 package com.velalang.runtime.android
@@ -299,5 +302,195 @@ class VelaEventTest {
         } catch (e: Exception) {
             fail("Event JSON should be parseable: ${e.message}")
         }
+    }
+
+    @Test
+    fun testTextNodeSerialization() {
+        // Given: TextNode instance
+        val textNode = TextNode(
+            text = "Hello Vela",
+            style = TextStyleData(fontSize = 18f, fontWeight = "Bold", color = "#FF0000"),
+            modifier = ModifierData(width = 200f, height = 50f, padding = 8f)
+        )
+
+        // When: Serialize
+        val json = textNode.serialize()
+
+        // Then: Should contain all data
+        assertTrue("Should contain text", json.contains("\"text\":\"Hello Vela\""))
+        assertTrue("Should contain fontSize", json.contains("\"fontSize\":18.0"))
+        assertTrue("Should contain fontWeight", json.contains("\"fontWeight\":\"Bold\""))
+        assertTrue("Should contain color", json.contains("\"color\":\"#FF0000\""))
+        assertTrue("Should contain width", json.contains("\"width\":200.0"))
+        assertTrue("Should contain height", json.contains("\"height\":50.0"))
+        assertTrue("Should contain padding", json.contains("\"padding\":8.0"))
+    }
+
+    @Test
+    fun testContainerNodeSerialization() {
+        // Given: ContainerNode with children
+        val childNode = TextNode(text = "Child")
+        val containerNode = ContainerNode(
+            children = listOf(childNode),
+            layout = LayoutType.Column,
+            modifier = ModifierData(padding = 16f, backgroundColor = "#FFFFFF")
+        )
+
+        // When: Serialize
+        val json = containerNode.serialize()
+
+        // Then: Should contain layout and children
+        assertTrue("Should contain layout", json.contains("\"layout\":\"Column\""))
+        assertTrue("Should contain children", json.contains("\"children\""))
+        assertTrue("Should contain child text", json.contains("\"text\":\"Child\""))
+        assertTrue("Should contain padding", json.contains("\"padding\":16.0"))
+        assertTrue("Should contain backgroundColor", json.contains("\"backgroundColor\":\"#FFFFFF\""))
+    }
+
+    @Test
+    fun testButtonNodeSerialization() {
+        // Given: ButtonNode
+        val buttonNode = ButtonNode(
+            text = "Click Me",
+            onClick = "button_click_event",
+            style = ButtonStyleData(backgroundColor = "#6200EE", contentColor = "#FFFFFF"),
+            modifier = ModifierData(width = 120f, height = 40f, cornerRadius = 8f)
+        )
+
+        // When: Serialize
+        val json = buttonNode.serialize()
+
+        // Then: Should contain button data
+        assertTrue("Should contain text", json.contains("\"text\":\"Click Me\""))
+        assertTrue("Should contain onClick", json.contains("\"onClick\":\"button_click_event\""))
+        assertTrue("Should contain backgroundColor", json.contains("\"backgroundColor\":\"#6200EE\""))
+        assertTrue("Should contain contentColor", json.contains("\"contentColor\":\"#FFFFFF\""))
+        assertTrue("Should contain cornerRadius", json.contains("\"cornerRadius\":8.0"))
+    }
+
+    @Test
+    fun testImageNodeSerialization() {
+        // Given: ImageNode
+        val imageNode = ImageNode(
+            url = "https://example.com/image.png",
+            contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+            modifier = ModifierData(width = 300f, height = 200f)
+        )
+
+        // When: Serialize
+        val json = imageNode.serialize()
+
+        // Then: Should contain image data
+        assertTrue("Should contain url", json.contains("\"url\":\"https://example.com/image.png\""))
+        assertTrue("Should contain width", json.contains("\"width\":300.0"))
+        assertTrue("Should contain height", json.contains("\"height\":200.0"))
+    }
+
+    @Test
+    fun testTextFieldNodeSerialization() {
+        // Given: TextFieldNode
+        val textFieldNode = TextFieldNode(
+            value = "Initial text",
+            placeholder = "Enter text here",
+            onValueChange = "text_change_event",
+            modifier = ModifierData(padding = 12f, cornerRadius = 4f)
+        )
+
+        // When: Serialize
+        val json = textFieldNode.serialize()
+
+        // Then: Should contain text field data
+        assertTrue("Should contain value", json.contains("\"value\":\"Initial text\""))
+        assertTrue("Should contain placeholder", json.contains("\"placeholder\":\"Enter text here\""))
+        assertTrue("Should contain onValueChange", json.contains("\"onValueChange\":\"text_change_event\""))
+        assertTrue("Should contain padding", json.contains("\"padding\":12.0"))
+        assertTrue("Should contain cornerRadius", json.contains("\"cornerRadius\":4.0"))
+    }
+
+    @Test
+    fun testVelaVDOMComplexDeserialization() {
+        // Given: Complex VDOM JSON with nested nodes
+        val complexJson = """
+        {
+            "text": "Root Text",
+            "style": {
+                "fontSize": 20.0,
+                "fontWeight": "Bold",
+                "color": "#000000",
+                "textAlign": "Center"
+            },
+            "modifier": {
+                "padding": 16.0,
+                "backgroundColor": "#F0F0F0"
+            }
+        }
+        """.trimIndent()
+
+        // When: Deserialize
+        val vdom = VelaVDOM.deserialize(complexJson)
+
+        // Then: Should parse correctly
+        assertNotNull("VDOM should not be null", vdom)
+        assertTrue("Root should be TextNode", vdom?.root is TextNode)
+
+        val textNode = vdom?.root as TextNode
+        assertEquals("Text should match", "Root Text", textNode.text)
+        assertEquals("Font size should match", 20f, textNode.style.fontSize)
+        assertEquals("Font weight should match", "Bold", textNode.style.fontWeight)
+        assertEquals("Color should match", "#000000", textNode.style.color)
+        assertEquals("Padding should match", 16f, textNode.modifier.padding)
+        assertEquals("Background color should match", "#F0F0F0", textNode.modifier.backgroundColor)
+    }
+
+    @Test
+    fun testModifierDataToComposeModifier() {
+        // Given: ModifierData
+        val modifierData = ModifierData(
+            width = 100f,
+            height = 50f,
+            padding = 8f,
+            backgroundColor = "#FF0000",
+            cornerRadius = 4f
+        )
+
+        // When: Convert to Compose Modifier
+        val modifier = modifierData.toComposeModifier()
+
+        // Then: Modifier should be created (basic validation)
+        assertNotNull("Modifier should not be null", modifier)
+        // Note: Detailed Compose modifier testing would require Compose testing framework
+    }
+
+    @Test
+    fun testTextStyleDataToComposeStyle() {
+        // Given: TextStyleData
+        val styleData = TextStyleData(
+            fontSize = 24f,
+            fontWeight = "Bold",
+            color = "#00FF00",
+            textAlign = "Center"
+        )
+
+        // When: Convert to Compose TextStyle
+        val textStyle = styleData.toComposeStyle()
+
+        // Then: TextStyle should be created (basic validation)
+        assertNotNull("TextStyle should not be null", textStyle)
+        // Note: Detailed styling validation would require more complex testing
+    }
+
+    @Test
+    fun testButtonStyleDataToButtonColors() {
+        // Given: ButtonStyleData
+        val buttonStyle = ButtonStyleData(
+            backgroundColor = "#6200EE",
+            contentColor = "#FFFFFF"
+        )
+
+        // When: Convert to ButtonColors
+        val buttonColors = buttonStyle.toButtonColors()
+
+        // Then: ButtonColors should be created
+        assertNotNull("ButtonColors should not be null", buttonColors)
     }
 }

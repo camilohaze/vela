@@ -18,7 +18,6 @@ Arquitectura:
 
 package com.velalang.runtime.android
 
-import android.content.Context
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
@@ -35,6 +34,8 @@ import androidx.compose.runtime.rememberCoroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.nio.charset.StandardCharsets
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonObject
 
 /**
  * Motor principal de renderizado para Android.
@@ -181,15 +182,54 @@ data class VelaVDOM(
     val root: VelaNode
 ) {
     fun serialize(): String = root.serialize()
+
+    @Composable
     fun render() = root.render()
 
     companion object {
-        fun deserialize(json: String): VelaVDOM? {
+        private val json = Json {
+            ignoreUnknownKeys = true
+            isLenient = true
+        }
+
+        fun deserialize(jsonString: String): VelaVDOM? {
             return try {
-                // TODO: Implementar deserialización desde JSON
-                null
+                // Parsear el JSON y crear el árbol de nodos
+                val jsonElement = json.parseToJsonElement(jsonString)
+                val rootNode = parseNode(jsonElement)
+                rootNode?.let { VelaVDOM(it) }
             } catch (e: Exception) {
                 android.util.Log.e("VelaVDOM", "Deserialization error", e)
+                null
+            }
+        }
+
+        private fun parseNode(element: kotlinx.serialization.json.JsonElement): VelaNode? {
+            return try {
+                when {
+                    // Detectar tipo de nodo por campos presentes
+                    element.jsonObject.containsKey("text") && !element.jsonObject.containsKey("children") ->
+                        json.decodeFromJsonElement(TextNode.serializer(), element)
+
+                    element.jsonObject.containsKey("children") ->
+                        json.decodeFromJsonElement(ContainerNode.serializer(), element)
+
+                    element.jsonObject.containsKey("onClick") ->
+                        json.decodeFromJsonElement(ButtonNode.serializer(), element)
+
+                    element.jsonObject.containsKey("url") ->
+                        json.decodeFromJsonElement(ImageNode.serializer(), element)
+
+                    element.jsonObject.containsKey("onValueChange") ->
+                        json.decodeFromJsonElement(TextFieldNode.serializer(), element)
+
+                    else -> {
+                        android.util.Log.w("VelaVDOM", "Unknown node type: ${element}")
+                        null
+                    }
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("VelaVDOM", "Node parsing error", e)
                 null
             }
         }
