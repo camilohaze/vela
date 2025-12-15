@@ -162,8 +162,11 @@ impl BuildExecutor {
                 }
                 "desktop" => {
                     println!("🖥️  Generating Desktop build artifacts...");
-                    // TODO: Implement Desktop build
-                    println!("⚠️  Desktop target not yet implemented");
+                    if let Err(e) = self.generate_desktop_artifacts() {
+                        eprintln!("❌ Desktop build failed: {}", e);
+                        return Ok(BuildResult::failed(duration));
+                    }
+                    println!("✅ Desktop build artifacts generated successfully");
                 }
                 _ => {
                     println!("⚠️  Unknown target '{}', skipping post-processing", target);
@@ -891,6 +894,113 @@ void vela_ios_handle_touch_event(void *runtime, const char *event_json);
                 fs::copy(&entry_path, &dest_path)?;
             }
         }
+
+        Ok(())
+    }
+
+    /// Generate desktop build artifacts
+    pub fn generate_desktop_artifacts(&self) -> Result<()> {
+        use std::process::Command;
+
+        println!("🖥️  Building desktop application...");
+
+        // Determinar directorio de salida para desktop
+        let desktop_output_dir = self.config.output_dir.join("desktop");
+        std::fs::create_dir_all(&desktop_output_dir)?;
+
+        // Compilar el runtime desktop de Rust
+        println!("🔨 Compiling Rust desktop runtime...");
+        let runtime_path = PathBuf::from("runtime").join("desktop");
+
+        // Ejecutar cargo build para el runtime desktop
+        let mut cargo_cmd = Command::new("cargo");
+        cargo_cmd.arg("build");
+
+        if self.config.release {
+            cargo_cmd.arg("--release");
+        }
+
+        cargo_cmd.arg("--manifest-path").arg(runtime_path.join("Cargo.toml"));
+        cargo_cmd.current_dir(&self.config.project_root);
+
+        println!("🚀 Running: cargo build --manifest-path {} {}",
+                 runtime_path.join("Cargo.toml").display(),
+                 if self.config.release { "--release" } else { "" });
+
+        let cargo_output = cargo_cmd.output()
+            .map_err(|e| crate::common::Error::BuildFailed {
+                message: format!("Failed to run cargo build: {}", e)
+            })?;
+
+        if !cargo_output.status.success() {
+            let stderr = String::from_utf8_lossy(&cargo_output.stderr);
+            return Err(crate::common::Error::BuildFailed {
+                message: format!("Cargo build failed:\n{}", stderr)
+            });
+        }
+
+        println!("✅ Rust desktop runtime compiled successfully");
+
+        // Copiar el ejecutable compilado
+        println!("📋 Copying desktop executable...");
+        let target_dir = if self.config.release { "release" } else { "debug" };
+        let executable_name = if cfg!(windows) { "vela-desktop.exe" } else { "vela-desktop" };
+        let source_exe = runtime_path.join("target").join(target_dir).join(executable_name);
+        let dest_exe = desktop_output_dir.join(executable_name);
+
+        if source_exe.exists() {
+            std::fs::copy(&source_exe, &dest_exe)?;
+            println!("✅ Executable copied to: {}", dest_exe.display());
+
+            // En Unix, hacer el ejecutable ejecutable
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                let mut perms = std::fs::metadata(&dest_exe)?.permissions();
+                perms.set_mode(0o755);
+                std::fs::set_permissions(&dest_exe, perms)?;
+                println!("✅ Executable permissions set");
+            }
+        } else {
+            println!("⚠️  Executable not found at: {}", source_exe.display());
+        }
+
+        // Copiar bytecode compilado de Vela
+        println!("📋 Copying compiled Vela bytecode...");
+        self.copy_compiled_bytecode(&desktop_output_dir)?;
+        println!("✅ Vela bytecode copied");
+
+        // Crear archivo de configuración básico para desktop
+        println!("📋 Creating desktop app configuration...");
+        self.create_desktop_app_config(&desktop_output_dir)?;
+        println!("✅ Desktop app configuration created");
+
+        println!("🖥️  Desktop application built successfully in: {}", desktop_output_dir.display());
+        println!("🚀 To run: {}", dest_exe.display());
+
+        Ok(())
+    }
+
+    /// Create basic desktop app configuration
+    fn create_desktop_app_config(&self, output_dir: &Path) -> Result<()> {
+        // Crear archivo de configuración JSON básico
+        let config = r#"{
+    "name": "VelaApp",
+    "version": "1.0.0",
+    "description": "Vela Desktop Application",
+    "main": "vela-desktop",
+    "bytecode_dir": "bytecode",
+    "window": {
+        "width": 1024,
+        "height": 768,
+        "title": "Vela App",
+        "resizable": true
+    }
+}"#;
+
+        let config_path = output_dir.join("app.json");
+        std::fs::write(config_path, config)?;
+        println!("📄 Created app.json configuration file");
 
         Ok(())
     }
