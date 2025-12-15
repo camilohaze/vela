@@ -348,6 +348,10 @@ impl IROptimizer {
 
     /// Aplicar optimizaciones básicas al módulo IR
     pub fn optimize_module(&self, module: &mut IRModule) {
+        // Function inlining primero (necesita ver todas las funciones)
+        self.function_inlining(module);
+
+        // Luego optimizar cada función individualmente
         for function in &mut module.functions {
             self.optimize_function(function);
         }
@@ -907,5 +911,80 @@ impl IROptimizer {
                 }
             }
         }
+    }
+
+    /// Function inlining: reemplazar llamadas a funciones pequeñas con su cuerpo inlineado
+    pub fn function_inlining(&self, module: &mut IRModule) {
+        use std::collections::HashMap;
+
+        // Crear mapa de funciones por nombre para lookup rápido
+        let mut function_map = HashMap::new();
+        for function in &module.functions {
+            function_map.insert(function.name.clone(), function.clone());
+        }
+
+        // Para cada función, intentar inlinear llamadas
+        for function in &mut module.functions {
+            self.inline_calls_in_function(function, &function_map);
+        }
+    }
+
+    /// Inlinear llamadas dentro de una función específica
+    fn inline_calls_in_function(&self, function: &mut IRFunction, function_map: &HashMap<String, IRFunction>) {
+        let mut i = 0;
+        while i < function.body.len() {
+            if let IRInstruction::Call { function: callee_name, arg_count } = &function.body[i] {
+                // Verificar si la función llamada es candidata para inlining
+                if let Some(callee) = function_map.get(callee_name) {
+                    if self.is_inline_candidate(callee) && !self.has_recursion(&function.name, callee_name, function_map) {
+                        // Generar instrucciones inlineadas
+                        let inlined_instructions = self.generate_inlined_body(callee, *arg_count);
+                        
+                        // Reemplazar la llamada con las instrucciones inlineadas
+                        function.body.splice(i..=i, inlined_instructions);
+                        
+                        // No incrementar i porque insertamos múltiples instrucciones
+                        continue;
+                    }
+                }
+            }
+            i += 1;
+        }
+    }
+
+    /// Verificar si una función es candidata para inlining (pequeña y simple)
+    fn is_inline_candidate(&self, function: &IRFunction) -> bool {
+        // Candidatos: funciones con ≤5 instrucciones, sin llamadas recursivas complejas
+        function.body.len() <= 5 && 
+        !function.body.iter().any(|instr| matches!(instr, IRInstruction::Call { .. }))
+    }
+
+    /// Verificar si hay recursión directa o indirecta
+    fn has_recursion(&self, caller: &str, callee: &str, function_map: &HashMap<String, IRFunction>) -> bool {
+        // Verificación simple: recursión directa
+        caller == callee
+    }
+
+    /// Generar el cuerpo inlineado de una función con sustitución de parámetros
+    fn generate_inlined_body(&self, callee: &IRFunction, arg_count: usize) -> Vec<IRInstruction> {
+        let mut inlined = Vec::new();
+        
+        // Para simplificar, asumimos que los parámetros se pasan en la pila
+        // y las instrucciones del callee operan sobre la pila directamente
+        
+        // Copiar el cuerpo del callee
+        for instruction in &callee.body {
+            match instruction {
+                IRInstruction::Return => {
+                    // En inlining, el Return se convierte en dejar el valor en la pila
+                    // No agregamos nada especial aquí
+                }
+                other => {
+                    inlined.push(other.clone());
+                }
+            }
+        }
+        
+        inlined
     }
 }

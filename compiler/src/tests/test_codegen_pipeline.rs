@@ -12,7 +12,7 @@ Estos tests validan las optimizaciones de constant folding en el pipeline de IR.
 mod tests {
     use crate::*;
     use crate::ast::*;
-    use crate::ir::{IRExpr, Value, BinaryOp, UnaryOp, IRInstruction, IRFunction, IRType};
+    use crate::ir::{IRExpr, Value, BinaryOp, UnaryOp, IRInstruction, IRFunction, IRType, IRModule};
     use crate::codegen::ir_to_bytecode::IROptimizer;
     use std::collections::HashMap;
 
@@ -264,5 +264,81 @@ mod tests {
 
         // No debería cambiar nada
         assert_eq!(function.body.len(), original_len);
+    }
+
+    #[test]
+    fn test_function_inlining_simple() {
+        let mut module = IRModule::new("test_module".to_string());
+
+        // Función pequeña para inlinear
+        let mut small_func = IRFunction::new("small_func".to_string(), IRType::Int);
+        small_func.body.push(IRInstruction::LoadConst(Value::Int(10)));
+        small_func.body.push(IRInstruction::Return);
+        module.functions.push(small_func);
+
+        // Función que llama a small_func
+        let mut caller_func = IRFunction::new("caller".to_string(), IRType::Void);
+        caller_func.body.push(IRInstruction::Call {
+            function: "small_func".to_string(),
+            arg_count: 0,
+        });
+        caller_func.body.push(IRInstruction::Return);
+        module.functions.push(caller_func);
+
+        let optimizer = IROptimizer::new();
+        optimizer.function_inlining(&mut module);
+
+        // Verificar que la llamada fue inlineada
+        let caller = module.functions.iter().find(|f| f.name == "caller").unwrap();
+        // Debería tener LoadConst(10) en lugar de Call
+        assert!(caller.body.iter().any(|instr| matches!(instr, IRInstruction::LoadConst(Value::Int(10)))));
+        assert!(!caller.body.iter().any(|instr| matches!(instr, IRInstruction::Call { .. })));
+    }
+
+    #[test]
+    fn test_function_inlining_not_candidate() {
+        let mut module = IRModule::new("test_module".to_string());
+
+        // Función grande (no candidata para inlining)
+        let mut large_func = IRFunction::new("large_func".to_string(), IRType::Int);
+        for _ in 0..10 {
+            large_func.body.push(IRInstruction::LoadConst(Value::Int(1)));
+        }
+        large_func.body.push(IRInstruction::Return);
+        module.functions.push(large_func);
+
+        // Función que llama a large_func
+        let mut caller_func = IRFunction::new("caller".to_string(), IRType::Void);
+        caller_func.body.push(IRInstruction::Call {
+            function: "large_func".to_string(),
+            arg_count: 0,
+        });
+        caller_func.body.push(IRInstruction::Return);
+        module.functions.push(caller_func);
+
+        let optimizer = IROptimizer::new();
+        optimizer.function_inlining(&mut module);
+
+        // Verificar que la llamada NO fue inlineada
+        let caller = module.functions.iter().find(|f| f.name == "caller").unwrap();
+        assert!(caller.body.iter().any(|instr| matches!(instr, IRInstruction::Call { function, .. } if function == "large_func")));
+    }
+
+    #[test]
+    fn test_function_inlining_no_changes() {
+        let mut module = IRModule::new("test_module".to_string());
+
+        // Función sin llamadas
+        let mut func = IRFunction::new("no_calls".to_string(), IRType::Void);
+        func.body.push(IRInstruction::LoadConst(Value::Int(42)));
+        func.body.push(IRInstruction::Return);
+        module.functions.push(func);
+
+        let optimizer = IROptimizer::new();
+        optimizer.function_inlining(&mut module);
+
+        // No debería cambiar nada
+        let func = module.functions.iter().find(|f| f.name == "no_calls").unwrap();
+        assert_eq!(func.body.len(), 2);
     }
 }
