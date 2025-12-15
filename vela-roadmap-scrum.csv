@@ -344,10 +344,10 @@ EPIC-17: Desktop Runtimes,"US-36: Como desarrollador, quiero apps desktop nativa
 EPIC-17: Desktop Runtimes,"US-36: Como desarrollador, quiero apps desktop nativas","TASK-164: Implementar system APIs (file, process, etc.)",Integración con APIs del OS,Desktop,80,TASK-163,P2,Not Started,,Vela 3.0
 EPIC-17: Desktop Runtimes,"US-36: Como desarrollador, quiero apps desktop nativas",TASK-165: Implementar vela build --target=desktop,Pipeline para apps de escritorio,Tooling,48,TASK-164,P2,Not Started,,Vela 3.0
 EPIC-17: Desktop Runtimes,"US-36: Como desarrollador, quiero apps desktop nativas",TASK-166: Tests en desktop,Tests multiplataforma (Win/Mac/Linux),QA,56,TASK-165,P2,Not Started,,Vela 3.0
-EPIC-18: FFI & Interop,"US-37: Como desarrollador, quiero llamar código C desde Vela",TASK-167: Diseñar FFI system,Sistema de FFI con C,Language Design,32,,P2,Not Started,,Vela 3.0
-EPIC-18: FFI & Interop,"US-37: Como desarrollador, quiero llamar código C desde Vela",TASK-168: Implementar extern declarations,Sintaxis para funciones externas,Compiler Frontend,40,TASK-167,P2,Not Started,,Vela 3.0
-EPIC-18: FFI & Interop,"US-37: Como desarrollador, quiero llamar código C desde Vela",TASK-169: Implementar C FFI bridge,Bridge entre Vela y C,Runtime,64,TASK-168,P2,Not Started,,Vela 3.0
-EPIC-18: FFI & Interop,"US-37: Como desarrollador, quiero llamar código C desde Vela",TASK-170: Tests de FFI,Tests de correctness del FFI,QA,32,TASK-169,P2,Not Started,,Vela 3.0
+EPIC-18: FFI & Interop,"US-37: Como desarrollador, quiero llamar código C desde Vela",TASK-167: Diseñar FFI system,Sistema de FFI con C,Language Design,32,,P2,Completed,2025-12-15,Vela 3.0
+EPIC-18: FFI & Interop,"US-37: Como desarrollador, quiero llamar código C desde Vela",TASK-168: Implementar extern declarations,Sintaxis para funciones externas,Compiler Frontend,40,TASK-167,P2,Completed,2025-12-15,Vela 3.0
+EPIC-18: FFI & Interop,"US-37: Como desarrollador, quiero llamar código C desde Vela",TASK-169: Implementar C FFI bridge,Bridge entre Vela y C,Runtime,64,TASK-168,P2,Completed,2025-12-15,Vela 3.0
+EPIC-18: FFI & Interop,"US-37: Como desarrollador, quiero llamar código C desde Vela",TASK-170: Tests de FFI,Tests de correctness del FFI,QA,32,TASK-169,P2,Completed,2025-12-15,Vela 3.0
 EPIC-19: Optimizations,"US-38: Como desarrollador, quiero código optimizado para mejor performance",TASK-171: Implementar constant folding,Optimización: evaluar constantes en compile-time,Compiler Backend,32,TASK-010,P2,Not Started,,Vela 3.0
 EPIC-19: Optimizations,"US-38: Como desarrollador, quiero código optimizado para mejor performance",TASK-172: Implementar dead code elimination,Eliminar código inalcanzable,Compiler Backend,40,TASK-171,P2,Not Started,,Vela 3.0
 EPIC-19: Optimizations,"US-38: Como desarrollador, quiero código optimizado para mejor performance",TASK-173: Implementar function inlining,Inline de funciones pequeñas,Compiler Backend,48,TASK-172,P2,Not Started,,Vela 3.0
