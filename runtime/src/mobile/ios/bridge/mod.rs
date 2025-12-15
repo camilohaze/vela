@@ -6,6 +6,10 @@
 use std::ffi::{CStr, CString};
 use std::os::raw::{c_char, c_void};
 
+pub mod ffi;
+#[cfg(test)]
+mod tests;
+
 /// iOS bridge for widget rendering
 pub struct VelaIOSBridge {
     /// Pointer to iOS UIViewController
@@ -153,6 +157,63 @@ pub enum BridgeError {
     HierarchyFailed,
 }
 
+/// Opaque pointer to Vela iOS runtime
+pub type VelaIOSRuntime = c_void;
+
+/// iOS runtime configuration
+#[repr(C)]
+pub struct IOSRuntimeConfig {
+    /// Enable debug logging
+    pub debug_logging: bool,
+    /// Maximum UIView pool size
+    pub max_view_pool_size: u32,
+    /// Enable gesture recognition
+    pub enable_gestures: bool,
+}
+
+/// iOS touch event data
+#[repr(C)]
+pub struct IOSTouchEvent {
+    /// Event type (0=touch_began, 1=touch_moved, 2=touch_ended)
+    pub event_type: u32,
+    /// Touch X coordinate
+    pub x: f32,
+    /// Touch Y coordinate
+    pub y: f32,
+    /// Touch pressure (0.0-1.0)
+    pub pressure: f32,
+    /// Timestamp
+    pub timestamp: u64,
+}
+
+/// iOS gesture event data
+#[repr(C)]
+pub struct IOSGestureEvent {
+    /// Gesture type (0=pinch, 1=rotate, 2=pan, 3=long_press)
+    pub gesture_type: u32,
+    /// Gesture scale (for pinch)
+    pub scale: f32,
+    /// Gesture rotation in radians (for rotate)
+    pub rotation: f32,
+    /// Gesture velocity X (for pan)
+    pub velocity_x: f32,
+    /// Gesture velocity Y (for pan)
+    pub velocity_y: f32,
+}
+
+/// iOS rectangle structure
+#[repr(C)]
+pub struct IOSRect {
+    /// Origin X
+    pub x: f32,
+    /// Origin Y
+    pub y: f32,
+    /// Width
+    pub width: f32,
+    /// Height
+    pub height: f32,
+}
+
 // FFI declarations for iOS functions
 extern "C" {
     /// Initialize iOS bridge
@@ -179,6 +240,53 @@ extern "C" {
 
     /// Cleanup iOS bridge
     fn vela_ios_cleanup(view_controller: *mut c_void);
+
+    /// Create Vela runtime instance (returns opaque pointer)
+    fn vela_ios_create_runtime(config: *const IOSRuntimeConfig) -> *mut VelaIOSRuntime;
+
+    /// Destroy Vela runtime instance
+    fn vela_ios_destroy_runtime(runtime: *mut VelaIOSRuntime);
+
+    /// Render widget and return UIView pointer
+    fn vela_ios_render_widget(
+        runtime: *mut VelaIOSRuntime,
+        widget_json: *const c_char,
+        parent_view: *mut c_void
+    ) -> *mut c_void;
+
+    /// Update existing widget
+    fn vela_ios_update_widget(
+        runtime: *mut VelaIOSRuntime,
+        widget_id: u64,
+        updates_json: *const c_char
+    ) -> i32;
+
+    /// Destroy widget and free resources
+    fn vela_ios_destroy_widget(
+        runtime: *mut VelaIOSRuntime,
+        widget_id: u64
+    ) -> i32;
+
+    /// Handle touch event
+    fn vela_ios_handle_touch_event(
+        runtime: *mut VelaIOSRuntime,
+        widget_id: u64,
+        event: *const IOSTouchEvent
+    ) -> bool;
+
+    /// Handle gesture event
+    fn vela_ios_handle_gesture_event(
+        runtime: *mut VelaIOSRuntime,
+        widget_id: u64,
+        event: *const IOSGestureEvent
+    ) -> bool;
+
+    /// Get widget bounds
+    fn vela_ios_get_widget_bounds(
+        runtime: *mut VelaIOSRuntime,
+        widget_id: u64,
+        bounds: *mut IOSRect
+    ) -> bool;
 }
 
 /// iOS event types

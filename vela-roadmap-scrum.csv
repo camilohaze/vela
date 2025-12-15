@@ -329,8 +329,8 @@ EPIC-15: Advanced UI,"US-32: Como desarrollador, quiero gestures avanzados",TASK
 EPIC-15: Advanced UI,"US-33: Como desarrollador, quiero listas virtualizadas eficientes",TASK-149: Implementar ListView virtualizado,Virtualización para listas largas,UI Framework,64,TASK-062,P2,Not Started,,Vela 2.0
 EPIC-15: Advanced UI,"US-33: Como desarrollador, quiero listas virtualizadas eficientes",TASK-150: Implementar GridView virtualizado,Virtualización para grids,UI Framework,56,TASK-149,P2,Not Started,,Vela 2.0
 EPIC-15: Advanced UI,"US-33: Como desarrollador, quiero listas virtualizadas eficientes",TASK-151: Tests de virtualización,Tests de performance y correctness,QA,32,TASK-150,P2,Not Started,,Vela 2.0
-EPIC-16: Mobile Runtimes,"US-34: Como desarrollador, quiero desplegar apps en iOS",TASK-152: Diseñar iOS render engine,Arquitectura de renderer nativo iOS,Mobile,48,,P2,Completed,59,Vela 3.0
-EPIC-16: Mobile Runtimes,"US-34: Como desarrollador, quiero desplegar apps en iOS",TASK-153: Implementar bridging Swift/Vela,FFI entre Vela y Swift,Mobile,80,TASK-152,P2,Completed,59,Vela 3.0
+EPIC-16: Mobile Runtimes,"US-34: Como desarrollador, quiero desplegar apps en iOS",TASK-152: Diseñar iOS render engine,Arquitectura de renderer nativo iOS,Mobile,48,,P2,Not Started,,Vela 3.0
+EPIC-16: Mobile Runtimes,"US-34: Como desarrollador, quiero desplegar apps en iOS",TASK-153: Implementar bridging Swift/Vela,FFI entre Vela y Swift,Mobile,80,TASK-152,P2,Not Started,,Vela 3.0
 EPIC-16: Mobile Runtimes,"US-34: Como desarrollador, quiero desplegar apps en iOS",TASK-154: Implementar iOS renderer,Rendering de widgets con UIKit/SwiftUI,Mobile,120,TASK-153,P2,Not Started,,Vela 3.0
 EPIC-16: Mobile Runtimes,"US-34: Como desarrollador, quiero desplegar apps en iOS",TASK-155: Implementar vela build --target=ios,Pipeline de compilación iOS,Tooling,56,TASK-154,P2,Not Started,,Vela 3.0
 EPIC-16: Mobile Runtimes,"US-34: Como desarrollador, quiero desplegar apps en iOS",TASK-156: Tests en iOS,Tests de apps iOS,QA,48,TASK-155,P2,Not Started,,Vela 3.0
