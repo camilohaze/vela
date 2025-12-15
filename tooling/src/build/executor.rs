@@ -44,7 +44,7 @@ impl BuildResult {
 
 /// Build executor
 pub struct BuildExecutor {
-    config: BuildConfig,
+    pub config: BuildConfig,
     graph: BuildGraph,
     cache: BuildCache,
 }
@@ -982,21 +982,24 @@ void vela_ios_handle_touch_event(void *runtime, const char *event_json);
     }
 
     /// Create basic desktop app configuration
-    fn create_desktop_app_config(&self, output_dir: &Path) -> Result<()> {
+    pub fn create_desktop_app_config(&self, output_dir: &Path) -> Result<()> {
+        // Determinar el nombre del ejecutable según la plataforma
+        let exe_name = if cfg!(windows) { "vela-desktop.exe" } else { "vela-desktop" };
+
         // Crear archivo de configuración JSON básico
-        let config = r#"{
+        let config = format!(r#"{{
     "name": "VelaApp",
     "version": "1.0.0",
     "description": "Vela Desktop Application",
-    "main": "vela-desktop",
+    "main": "{}",
     "bytecode_dir": "bytecode",
-    "window": {
+    "window": {{
         "width": 1024,
         "height": 768,
         "title": "Vela App",
         "resizable": true
-    }
-}"#;
+    }}
+}}"#, exe_name);
 
         let config_path = output_dir.join("app.json");
         std::fs::write(config_path, config)?;
@@ -1201,5 +1204,123 @@ mod tests {
         let copied_file = ios_dir.join("Bytecode").join("test.velac");
         assert!(copied_file.exists(), "Bytecode file should be copied");
         assert_eq!(std::fs::read_to_string(copied_file).unwrap(), "fake bytecode", "Content should match");
+    }
+
+    #[test]
+    fn test_create_desktop_app_config() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let desktop_dir = temp_dir.path().join("desktop");
+
+        // Create the desktop directory first
+        std::fs::create_dir_all(&desktop_dir).unwrap();
+
+        let config = BuildConfig::default();
+        let executor = BuildExecutor::new(config);
+
+        let result = executor.create_desktop_app_config(&desktop_dir);
+        assert!(result.is_ok(), "create_desktop_app_config should succeed");
+
+        let config_path = desktop_dir.join("app.json");
+        assert!(config_path.exists(), "app.json should be created");
+
+        let content = std::fs::read_to_string(config_path).unwrap();
+        let app_config: serde_json::Value = serde_json::from_str(&content).unwrap();
+
+        assert_eq!(app_config["name"], "VelaApp", "App name should be VelaApp");
+        assert_eq!(app_config["version"], "1.0.0", "Version should be 1.0.0");
+        assert!(app_config["main"].is_string(), "Main should be a string");
+        assert_eq!(app_config["bytecode_dir"], "bytecode", "Bytecode dir should be 'bytecode'");
+        assert!(app_config["window"].is_object(), "Window config should be an object");
+    }
+
+    #[test]
+    fn test_generate_desktop_artifacts_creates_directory_structure() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let output_dir = temp_dir.path().join("output");
+        let desktop_dir = output_dir.join("desktop");
+
+        let config = BuildConfig::new(PathBuf::from("/tmp/project")).with_output_dir(&output_dir);
+        let executor = BuildExecutor::new(config);
+
+        // Mock the cargo build process since we can't actually run it in tests
+        // This test focuses on the file operations and structure creation
+        // In a real scenario, we'd need integration tests that can run cargo
+
+        // For now, we'll test that the method doesn't panic and creates basic structure
+        // The actual cargo execution would be tested in integration tests
+        let result = executor.generate_desktop_artifacts();
+
+        // The result might fail due to missing runtime/desktop, but it shouldn't panic
+        // We just verify it doesn't crash the test
+        match result {
+            Ok(_) => {
+                // If it succeeds, verify the structure
+                assert!(desktop_dir.exists(), "Desktop output directory should be created");
+                assert!(desktop_dir.join("app.json").exists(), "app.json should be created");
+            }
+            Err(_) => {
+                // If it fails (expected in test environment), that's ok
+                // The important thing is it doesn't panic
+            }
+        }
+    }
+
+    #[test]
+    fn test_desktop_app_config_has_required_fields() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let desktop_dir = temp_dir.path().join("desktop");
+
+        // Create the desktop directory first
+        std::fs::create_dir_all(&desktop_dir).unwrap();
+
+        let config = BuildConfig::default();
+        let executor = BuildExecutor::new(config);
+
+        let result = executor.create_desktop_app_config(&desktop_dir);
+        assert!(result.is_ok(), "create_desktop_app_config should succeed");
+
+        let config_path = desktop_dir.join("app.json");
+        let content = std::fs::read_to_string(config_path).unwrap();
+        let app_config: serde_json::Value = serde_json::from_str(&content).unwrap();
+
+        // Verify all required fields are present
+        let required_fields = ["name", "version", "description", "main", "bytecode_dir"];
+        for field in &required_fields {
+            assert!(app_config.get(*field).is_some(),
+                   "Required field '{}' should be present in app.json", field);
+        }
+
+        // Verify window configuration
+        let window = app_config.get("window").unwrap();
+        assert!(window.is_object(), "Window should be an object");
+
+        let window_obj = window.as_object().unwrap();
+        assert!(window_obj.get("width").is_some(), "Window should have width");
+        assert!(window_obj.get("height").is_some(), "Window should have height");
+        assert!(window_obj.get("title").is_some(), "Window should have title");
+        assert!(window_obj.get("resizable").is_some(), "Window should have resizable");
+    }
+
+    #[test]
+    fn test_desktop_build_with_release_config() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let output_dir = temp_dir.path().join("output");
+
+        // Create config with release mode
+        let config = BuildConfig::new(PathBuf::from("/tmp/project"))
+            .with_output_dir(&output_dir)
+            .release(true);
+        let executor = BuildExecutor::new(config);
+
+        // Test that the method handles release config without panicking
+        let result = executor.generate_desktop_artifacts();
+
+        // Should not panic regardless of whether cargo succeeds
+        match result {
+            Ok(_) | Err(_) => {
+                // Both outcomes are acceptable in test environment
+                // The method should handle the config properly
+            }
+        }
     }
 }

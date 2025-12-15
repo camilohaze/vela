@@ -10,6 +10,8 @@ pub mod cache;
 pub mod tests_ios_integration;
 #[cfg(test)]
 pub mod tests_android_integration;
+#[cfg(test)]
+pub mod tests_desktop_integration;
 
 // Re-export main types
 pub use config::BuildConfig;
