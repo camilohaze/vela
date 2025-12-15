@@ -334,7 +334,7 @@ EPIC-16: Mobile Runtimes,"US-34: Como desarrollador, quiero desplegar apps en iO
 EPIC-16: Mobile Runtimes,"US-34: Como desarrollador, quiero desplegar apps en iOS",TASK-154: Implementar iOS renderer,Rendering de widgets con UIKit/SwiftUI,Mobile,120,TASK-153,P2,Not Started,,Vela 3.0
 EPIC-16: Mobile Runtimes,"US-34: Como desarrollador, quiero desplegar apps en iOS",TASK-155: Implementar vela build --target=ios,Pipeline de compilación iOS,Tooling,56,TASK-154,P2,Not Started,,Vela 3.0
 EPIC-16: Mobile Runtimes,"US-34: Como desarrollador, quiero desplegar apps en iOS",TASK-156: Tests en iOS,Tests de apps iOS,QA,48,TASK-155,P2,Not Started,,Vela 3.0
-EPIC-16: Mobile Runtimes,"US-35: Como desarrollador, quiero desplegar apps en Android",TASK-157: Diseñar Android render engine,Arquitectura de renderer nativo Android,Mobile,48,,P2,Not Started,,Vela 3.0
+EPIC-16: Mobile Runtimes,"US-35: Como desarrollador, quiero desplegar apps en Android",TASK-157: Implementar Android Render Engine,Render engine completo con Jetpack Compose + JNI bridge,Mobile,48,,P2,Completed,60,Vela 3.0
 EPIC-16: Mobile Runtimes,"US-35: Como desarrollador, quiero desplegar apps en Android",TASK-158: Implementar bridging Java/Kotlin/Vela,FFI entre Vela y JVM,Mobile,80,TASK-157,P2,Not Started,,Vela 3.0
 EPIC-16: Mobile Runtimes,"US-35: Como desarrollador, quiero desplegar apps en Android",TASK-159: Implementar Android renderer,Rendering con Jetpack Compose,Mobile,120,TASK-158,P2,Not Started,,Vela 3.0
 EPIC-16: Mobile Runtimes,"US-35: Como desarrollador, quiero desplegar apps en Android",TASK-160: Implementar vela build --target=android,Pipeline de compilación Android,Tooling,56,TASK-159,P2,Not Started,,Vela 3.0

@@ -1,0 +1,34 @@
+[package]
+name = "vela-android-runtime"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "vela_android_runtime"
+crate-type = ["cdylib"]
+
+[dependencies]
+# Runtime core de Vela
+vela-runtime = { path = "../../.." }
+
+# Serialización
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# Logging para Android
+android_logger = "0.13"
+log = "0.4"
+
+# Utilidades
+lazy_static = "1.4"
+
+[dependencies.jni]
+version = "0.21"
+default-features = false
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true

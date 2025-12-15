@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="com.velalang.runtime.android">
+
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
+    <application>
+        <meta-data
+            android:name="vela.runtime.version"
+            android:value="1.0.0" />
+        <meta-data
+            android:name="vela.target.platform"
+            android:value="android" />
+    </application>
+
+</manifest>
