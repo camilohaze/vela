@@ -123,6 +123,25 @@ pub enum Commands {
 
     /// Show project information
     Info,
+
+    /// Deploy the project to cloud platforms
+    Deploy {
+        /// Target platform (aws-lambda, vercel, netlify, azure-functions)
+        #[arg(short, long, default_value = "aws-lambda")]
+        platform: String,
+
+        /// Environment (dev, staging, prod)
+        #[arg(short, long, default_value = "dev")]
+        env: String,
+
+        /// Build in release mode
+        #[arg(short, long)]
+        release: bool,
+
+        /// Skip build step
+        #[arg(long)]
+        no_build: bool,
+    },
 }
 
 impl Cli {
@@ -186,5 +205,16 @@ mod tests {
     fn test_cli_verbose_flag() {
         let cli = Cli::try_parse_from(&["vela", "--verbose", "build"]).unwrap();
         assert!(cli.verbose);
+    }
+
+    #[test]
+    fn test_cli_parsing_deploy() {
+        let cli = Cli::try_parse_from(&["vela", "deploy", "--platform", "vercel", "--env", "prod"]).unwrap();
+        assert!(matches!(cli.command, Commands::Deploy { .. }));
+
+        if let Commands::Deploy { platform, env, .. } = cli.command {
+            assert_eq!(platform, "vercel");
+            assert_eq!(env, "prod");
+        }
     }
 }

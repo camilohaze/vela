@@ -73,6 +73,21 @@ enum Commands {
     Install,
     /// Format source code
     Fmt,
+    /// Deploy the project to cloud platforms
+    Deploy {
+        /// Target platform (aws-lambda, vercel, netlify, azure-functions)
+        #[arg(short, long, default_value = "aws-lambda")]
+        platform: String,
+        /// Environment (dev, staging, prod)
+        #[arg(short, long, default_value = "dev")]
+        env: String,
+        /// Build in release mode
+        #[arg(long)]
+        release: bool,
+        /// Skip build step
+        #[arg(long)]
+        no_build: bool,
+    },
 }
 
 fn main() {
@@ -103,6 +118,9 @@ fn main() {
         Commands::Fmt => {
             println!("Format command not implemented yet");
             Ok(())
+        }
+        Commands::Deploy { platform, env, release, no_build } => {
+            vela_tooling::cli::commands::execute_deploy(&platform, &env, release, no_build)
         }
     };
 
