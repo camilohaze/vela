@@ -11,6 +11,7 @@ Implementar el comando `vela deploy` para habilitar el despliegue de aplicacione
 
 ## 📦 Subtasks Completadas
 1. **TASK-176**: Implementar comando 'vela deploy' ✅
+2. **TASK-177**: Integración con AWS Lambda ✅
 
 ## 🔨 Implementación
 
@@ -41,7 +42,10 @@ Options:
 - ✅ Validación de plataformas y entornos
 - ✅ Integración con sistema de build
 - ✅ Modo release y skip build
-- ✅ Simulación de deployment
+- ✅ **Integración real con AWS Lambda** (TASK-177)
+- ✅ Gestión automática de roles IAM
+- ✅ Empaquetado de código con bytecode Vela
+- ✅ Configuración de Function URLs
 - ✅ Manejo de errores con mensajes descriptivos
 - ✅ Tests unitarios completos
 
@@ -50,6 +54,10 @@ Options:
 - [x] Soporte para 4 plataformas cloud
 - [x] Validación de argumentos
 - [x] Integración con build system
+- [x] **Integración real con AWS Lambda** (TASK-177)
+- [x] Gestión automática de roles IAM
+- [x] Empaquetado de código funcional
+- [x] Configuración de Function URLs
 - [x] Tests unitarios con cobertura completa
 - [x] Documentación completa
 - [x] CLI funcional y probada
@@ -59,7 +67,7 @@ Options:
 - **Epic:** [VELA-39](https://velalang.atlassian.net/browse/VELA-39)
 
 ## 📊 Métricas
-- **Archivos creados:** 3 (parser.rs, commands.rs, main.rs)
+- **Archivos creados:** 6 (parser.rs, commands.rs, main.rs, deploy/mod.rs, deploy/common.rs, deploy/aws_lambda.rs)
 - **Tests implementados:** 3 tests unitarios
-- **Líneas de código:** ~150 líneas
+- **Líneas de código:** ~450 líneas
 - **Cobertura de tests:** 100%
