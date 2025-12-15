@@ -5,6 +5,10 @@
 pub mod animated;
 pub mod curves;
 pub mod gestures;
+pub mod virtualization;
+
+#[cfg(test)]
+pub mod virtualization_tests;
 
 pub use animated::{
     Animated, Curve, Tween, AnimatedBuilder, Widget,
