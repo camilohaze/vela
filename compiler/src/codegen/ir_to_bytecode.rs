@@ -10,7 +10,7 @@ genera código eficiente.
 */
 
 use std::collections::HashMap;
-use crate::ir::{IRModule, IRFunction, IRInstruction, IRType, Value as IRValue, BinaryOp, UnaryOp, Label};
+use crate::ir::{IRModule, IRFunction, IRInstruction, IRExpr, IRType, Value as IRValue, BinaryOp, UnaryOp, Label};
 use crate::bytecode::{BytecodeProgram, BytecodeFunction, Value as BytecodeValue, Opcode};
 use crate::debug_info::{DebugInfoGenerator, SourceLocation};
 use crate::error::{CompileError, CompileResult, CodegenError};
@@ -368,6 +368,10 @@ impl IROptimizer {
 
     /// Constant folding: simplificar expresiones constantes
     fn constant_folding(&self, function: &mut IRFunction) {
+        // Primero, optimizar expresiones en asignaciones
+        self.optimize_assignments(function);
+
+        // Luego, optimizar instrucciones secuenciales (implementación original mejorada)
         let mut i = 0;
         while i < function.body.len() {
             match &function.body[i] {
@@ -399,6 +403,348 @@ impl IROptimizer {
                 _ => {}
             }
             i += 1;
+        }
+    }
+
+    /// Optimizar asignaciones constantes reemplazando expresiones con valores constantes
+    fn optimize_assignments(&self, function: &mut IRFunction) {
+        for instruction in &mut function.body {
+            if let IRInstruction::AssignVar { name, value } = instruction {
+                if let Some(constant_value) = self.evaluate_constant_expr(value) {
+                    // Reemplazar la asignación con una asignación constante
+                    *value = IRExpr::Const(constant_value);
+                } else {
+                    // Intentar simplificar la expresión parcialmente
+                    self.simplify_expr(value);
+                }
+            }
+        }
+    }
+
+    /// Evaluar si una expresión IRExpr es constante y devolver su valor
+    /// Evaluar expresión constante en compile-time
+    pub fn evaluate_constant_expr(&self, expr: &IRExpr) -> Option<IRValue> {
+        match expr {
+            IRExpr::Const(val) => Some(val.clone()),
+            IRExpr::BinaryOp(op, left, right) => {
+                let left_val = self.evaluate_constant_expr(left)?;
+                let right_val = self.evaluate_constant_expr(right)?;
+                self.fold_binary_op_expr(op.clone(), left_val, right_val)
+            }
+            IRExpr::UnaryOp(op, operand) => {
+                let operand_val = self.evaluate_constant_expr(operand)?;
+                self.fold_unary_op_expr(op.clone(), operand_val)
+            }
+            IRExpr::Call { function, args } => {
+                self.evaluate_constant_call(function, args)
+            }
+            // No podemos evaluar variables, accesos a arrays, o propiedades en compile-time
+            IRExpr::Var(_) | IRExpr::ArrayAccess { .. } | IRExpr::PropertyAccess { .. } => None,
+        }
+    }
+
+    /// Simplificar expresión parcialmente (no completamente constante pero optimizable)
+    pub fn simplify_expr(&self, expr: &mut IRExpr) {
+        match expr {
+            IRExpr::BinaryOp(op, left, right) => {
+                // Simplificar subexpresiones
+                self.simplify_expr(left);
+                self.simplify_expr(right);
+
+                // Aplicar reglas algebraicas simples
+                self.apply_algebraic_simplification(expr);
+            }
+            IRExpr::UnaryOp(op, operand) => {
+                self.simplify_expr(operand);
+
+                // Simplificar operaciones unarias dobles
+                if let IRExpr::UnaryOp(inner_op, inner_operand) = operand.as_ref() {
+                    if op == inner_op && matches!(op, UnaryOp::Not | UnaryOp::Neg) {
+                        // !!x -> x, --x -> x (para booleanos y números)
+                        *expr = (**inner_operand).clone();
+                    }
+                }
+            }
+            IRExpr::Call { args, .. } => {
+                // Simplificar argumentos de llamadas
+                for arg in args {
+                    self.simplify_expr(arg);
+                }
+            }
+            IRExpr::ArrayAccess { array, index } => {
+                self.simplify_expr(array);
+                self.simplify_expr(index);
+            }
+            IRExpr::PropertyAccess { object, .. } => {
+                self.simplify_expr(object);
+            }
+            // No simplificar constantes o variables
+            IRExpr::Const(_) | IRExpr::Var(_) => {}
+        }
+    }
+
+    /// Aplicar simplificaciones algebraicas a expresiones binarias
+    fn apply_algebraic_simplification(&self, expr: &mut IRExpr) {
+        if let IRExpr::BinaryOp(op, left, right) = expr {
+            // x * 0 -> 0, x * 1 -> x
+            if *op == BinaryOp::Mul {
+                if let IRExpr::Const(IRValue::Int(0)) = **right {
+                    *expr = IRExpr::Const(IRValue::Int(0));
+                    return;
+                }
+                if let IRExpr::Const(IRValue::Int(1)) = **right {
+                    *expr = (**left).clone();
+                    return;
+                }
+                if let IRExpr::Const(IRValue::Int(0)) = **left {
+                    *expr = IRExpr::Const(IRValue::Int(0));
+                    return;
+                }
+                if let IRExpr::Const(IRValue::Int(1)) = **left {
+                    *expr = (**right).clone();
+                    return;
+                }
+            }
+
+            // x + 0 -> x, x - 0 -> x
+            if matches!(op, BinaryOp::Add | BinaryOp::Sub) {
+                if let IRExpr::Const(IRValue::Int(0)) = **right {
+                    *expr = (**left).clone();
+                    return;
+                }
+            }
+
+            // x / 1 -> x
+            if *op == BinaryOp::Div {
+                if let IRExpr::Const(IRValue::Int(1)) = **right {
+                    *expr = (**left).clone();
+                    return;
+                }
+            }
+
+            // x * 0 -> 0, x * 1 -> x para floats también
+            if *op == BinaryOp::Mul {
+                if let IRExpr::Const(IRValue::Float(0.0)) = **right {
+                    *expr = IRExpr::Const(IRValue::Float(0.0));
+                    return;
+                }
+                if let IRExpr::Const(IRValue::Float(1.0)) = **right {
+                    *expr = (**left).clone();
+                    return;
+                }
+                if let IRExpr::Const(IRValue::Float(0.0)) = **left {
+                    *expr = IRExpr::Const(IRValue::Float(0.0));
+                    return;
+                }
+                if let IRExpr::Const(IRValue::Float(1.0)) = **left {
+                    *expr = (**right).clone();
+                    return;
+                }
+            }
+
+            // x + 0 -> x, x - 0 -> x para floats
+            if matches!(op, BinaryOp::Add | BinaryOp::Sub) {
+                if let IRExpr::Const(IRValue::Float(0.0)) = **right {
+                    *expr = (**left).clone();
+                    return;
+                }
+            }
+
+            // x / 1 -> x para floats
+            if *op == BinaryOp::Div {
+                if let IRExpr::Const(IRValue::Float(1.0)) = **right {
+                    *expr = (**left).clone();
+                    return;
+                }
+            }
+
+            // Optimizaciones booleanas
+            if *op == BinaryOp::And {
+                // true && x -> x, false && x -> false
+                if let IRExpr::Const(IRValue::Bool(true)) = **left {
+                    *expr = (**right).clone();
+                    return;
+                }
+                if let IRExpr::Const(IRValue::Bool(false)) = **left {
+                    *expr = IRExpr::Const(IRValue::Bool(false));
+                    return;
+                }
+                if let IRExpr::Const(IRValue::Bool(true)) = **right {
+                    *expr = (**left).clone();
+                    return;
+                }
+                if let IRExpr::Const(IRValue::Bool(false)) = **right {
+                    *expr = IRExpr::Const(IRValue::Bool(false));
+                    return;
+                }
+            }
+
+            if *op == BinaryOp::Or {
+                // true || x -> true, false || x -> x
+                if let IRExpr::Const(IRValue::Bool(true)) = **left {
+                    *expr = IRExpr::Const(IRValue::Bool(true));
+                    return;
+                }
+                if let IRExpr::Const(IRValue::Bool(false)) = **left {
+                    *expr = (**right).clone();
+                    return;
+                }
+                if let IRExpr::Const(IRValue::Bool(true)) = **right {
+                    *expr = IRExpr::Const(IRValue::Bool(true));
+                    return;
+                }
+                if let IRExpr::Const(IRValue::Bool(false)) = **right {
+                    *expr = (**left).clone();
+                    return;
+                }
+            }
+        }
+    }
+
+    /// Evaluar llamada a función constante (funciones puras conocidas)
+    fn evaluate_constant_call(&self, function: &str, args: &[IRExpr]) -> Option<IRValue> {
+        // Solo evaluar funciones puras que no tienen efectos secundarios
+        match function {
+            "len" | "length" => {
+                // len(string) -> longitud de string constante
+                if args.len() == 1 {
+                    if let Some(IRValue::String(s)) = self.evaluate_constant_expr(&args[0]) {
+                        return Some(IRValue::Int(s.len() as i64));
+                    }
+                }
+                None
+            }
+            "is_empty" => {
+                // is_empty(string) -> verificar si string está vacío
+                if args.len() == 1 {
+                    if let Some(IRValue::String(s)) = self.evaluate_constant_expr(&args[0]) {
+                        return Some(IRValue::Bool(s.is_empty()));
+                    }
+                }
+                None
+            }
+            "abs" => {
+                // abs(number) -> valor absoluto
+                if args.len() == 1 {
+                    match self.evaluate_constant_expr(&args[0]) {
+                        Some(IRValue::Int(x)) => Some(IRValue::Int(x.abs())),
+                        Some(IRValue::Float(x)) => Some(IRValue::Float(x.abs())),
+                        _ => None,
+                    }
+                } else {
+                    None
+                }
+            }
+            "min" => {
+                // min(a, b) -> mínimo de dos números
+                if args.len() == 2 {
+                    let a = self.evaluate_constant_expr(&args[0])?;
+                    let b = self.evaluate_constant_expr(&args[1])?;
+                    match (a, b) {
+                        (IRValue::Int(x), IRValue::Int(y)) => Some(IRValue::Int(x.min(y))),
+                        (IRValue::Float(x), IRValue::Float(y)) => Some(IRValue::Float(x.min(y))),
+                        _ => None,
+                    }
+                } else {
+                    None
+                }
+            }
+            "max" => {
+                // max(a, b) -> máximo de dos números
+                if args.len() == 2 {
+                    let a = self.evaluate_constant_expr(&args[0])?;
+                    let b = self.evaluate_constant_expr(&args[1])?;
+                    match (a, b) {
+                        (IRValue::Int(x), IRValue::Int(y)) => Some(IRValue::Int(x.max(y))),
+                        (IRValue::Float(x), IRValue::Float(y)) => Some(IRValue::Float(x.max(y))),
+                        _ => None,
+                    }
+                } else {
+                    None
+                }
+            }
+            "pow" => {
+                // pow(base, exp) -> base^exp para enteros pequeños
+                if args.len() == 2 {
+                    let base = self.evaluate_constant_expr(&args[0])?;
+                    let exp = self.evaluate_constant_expr(&args[1])?;
+                    match (base, exp) {
+                        (IRValue::Int(b), IRValue::Int(e)) if e >= 0 && e <= 10 => {
+                            Some(IRValue::Int(b.pow(e as u32)))
+                        }
+                        (IRValue::Float(b), IRValue::Float(e)) => Some(IRValue::Float(b.powf(e))),
+                        _ => None,
+                    }
+                } else {
+                    None
+                }
+            }
+            _ => None, // No evaluar funciones desconocidas o con efectos secundarios
+        }
+    }
+
+    /// Aplicar operación binaria a valores constantes (versión para expresiones)
+    fn fold_binary_op_expr(&self, op: BinaryOp, a: IRValue, b: IRValue) -> Option<IRValue> {
+        match (op, a, b) {
+            // Operaciones aritméticas enteras
+            (BinaryOp::Add, IRValue::Int(x), IRValue::Int(y)) => Some(IRValue::Int(x + y)),
+            (BinaryOp::Sub, IRValue::Int(x), IRValue::Int(y)) => Some(IRValue::Int(x - y)),
+            (BinaryOp::Mul, IRValue::Int(x), IRValue::Int(y)) => Some(IRValue::Int(x * y)),
+            (BinaryOp::Div, IRValue::Int(x), IRValue::Int(y)) if y != 0 => Some(IRValue::Int(x / y)),
+            (BinaryOp::Mod, IRValue::Int(x), IRValue::Int(y)) if y != 0 => Some(IRValue::Int(x % y)),
+
+            // Operaciones aritméticas flotantes
+            (BinaryOp::Add, IRValue::Float(x), IRValue::Float(y)) => Some(IRValue::Float(x + y)),
+            (BinaryOp::Sub, IRValue::Float(x), IRValue::Float(y)) => Some(IRValue::Float(x - y)),
+            (BinaryOp::Mul, IRValue::Float(x), IRValue::Float(y)) => Some(IRValue::Float(x * y)),
+            (BinaryOp::Div, IRValue::Float(x), IRValue::Float(y)) if y != 0.0 => Some(IRValue::Float(x / y)),
+
+            // Comparaciones enteras
+            (BinaryOp::Eq, IRValue::Int(x), IRValue::Int(y)) => Some(IRValue::Bool(x == y)),
+            (BinaryOp::Ne, IRValue::Int(x), IRValue::Int(y)) => Some(IRValue::Bool(x != y)),
+            (BinaryOp::Lt, IRValue::Int(x), IRValue::Int(y)) => Some(IRValue::Bool(x < y)),
+            (BinaryOp::Le, IRValue::Int(x), IRValue::Int(y)) => Some(IRValue::Bool(x <= y)),
+            (BinaryOp::Gt, IRValue::Int(x), IRValue::Int(y)) => Some(IRValue::Bool(x > y)),
+            (BinaryOp::Ge, IRValue::Int(x), IRValue::Int(y)) => Some(IRValue::Bool(x >= y)),
+
+            // Comparaciones flotantes
+            (BinaryOp::Eq, IRValue::Float(x), IRValue::Float(y)) => Some(IRValue::Bool(x == y)),
+            (BinaryOp::Ne, IRValue::Float(x), IRValue::Float(y)) => Some(IRValue::Bool(x != y)),
+            (BinaryOp::Lt, IRValue::Float(x), IRValue::Float(y)) => Some(IRValue::Bool(x < y)),
+            (BinaryOp::Le, IRValue::Float(x), IRValue::Float(y)) => Some(IRValue::Bool(x <= y)),
+            (BinaryOp::Gt, IRValue::Float(x), IRValue::Float(y)) => Some(IRValue::Bool(x > y)),
+            (BinaryOp::Ge, IRValue::Float(x), IRValue::Float(y)) => Some(IRValue::Bool(x >= y)),
+
+            // Comparaciones booleanas
+            (BinaryOp::Eq, IRValue::Bool(x), IRValue::Bool(y)) => Some(IRValue::Bool(x == y)),
+            (BinaryOp::Ne, IRValue::Bool(x), IRValue::Bool(y)) => Some(IRValue::Bool(x != y)),
+
+            // Comparaciones de strings
+            (BinaryOp::Eq, IRValue::String(x), IRValue::String(y)) => Some(IRValue::Bool(x == y)),
+            (BinaryOp::Ne, IRValue::String(x), IRValue::String(y)) => Some(IRValue::Bool(x != y)),
+            (BinaryOp::Lt, IRValue::String(x), IRValue::String(y)) => Some(IRValue::Bool(x < y)),
+            (BinaryOp::Le, IRValue::String(x), IRValue::String(y)) => Some(IRValue::Bool(x <= y)),
+            (BinaryOp::Gt, IRValue::String(x), IRValue::String(y)) => Some(IRValue::Bool(x > y)),
+            (BinaryOp::Ge, IRValue::String(x), IRValue::String(y)) => Some(IRValue::Bool(x >= y)),
+
+            // Operaciones lógicas booleanas
+            (BinaryOp::And, IRValue::Bool(x), IRValue::Bool(y)) => Some(IRValue::Bool(x && y)),
+            (BinaryOp::Or, IRValue::Bool(x), IRValue::Bool(y)) => Some(IRValue::Bool(x || y)),
+
+            // Concatenación de strings
+            (BinaryOp::Add, IRValue::String(x), IRValue::String(y)) => Some(IRValue::String(x + &y)),
+
+            _ => None,
+        }
+    }
+
+    /// Aplicar operación unaria a valor constante (versión para expresiones)
+    fn fold_unary_op_expr(&self, op: UnaryOp, val: IRValue) -> Option<IRValue> {
+        match (op, val) {
+            (UnaryOp::Neg, IRValue::Int(x)) => Some(IRValue::Int(-x)),
+            (UnaryOp::Neg, IRValue::Float(x)) => Some(IRValue::Float(-x)),
+            (UnaryOp::Not, IRValue::Bool(x)) => Some(IRValue::Bool(!x)),
+            _ => None,
         }
     }
 
