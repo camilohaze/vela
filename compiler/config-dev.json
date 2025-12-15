@@ -1,5 +1,0 @@
-{
-            "app.debug": false,
-            "database.host": "dev-db.local",
-            "dev.secret": "dev_key"
-        }

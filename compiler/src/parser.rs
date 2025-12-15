@@ -1561,9 +1561,13 @@ impl Parser {
         let abi = self.consume_string()?;
 
         // Optional library specification: from "library.so"
-        let library = if matches!(self.current_token().kind, TokenKind::Identifier(ref lex)) && lex == "from" {
-            self.advance(); // consume 'from'
-            Some(self.consume_string()?)
+        let library = if let TokenKind::Identifier(lex) = &self.current_token().kind {
+            if lex == "from" {
+                self.advance(); // consume 'from'
+                Some(self.consume_string()?)
+            } else {
+                None
+            }
         } else {
             None
         };

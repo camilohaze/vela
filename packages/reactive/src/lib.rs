@@ -16,6 +16,7 @@ pub mod graph;
 pub mod watch;
 pub mod batch;
 pub mod scheduler;
+pub mod optimization;
 
 pub use signal::{Signal, signal};
 pub use computed::Computed;
@@ -24,3 +25,4 @@ pub use watch::{Watch, watch, watch_with_options};
 pub use batch::{Batch, batch, init_global_batch, global_batch};
 pub use graph::{ReactiveGraph, ReactiveNode, NodeType, NodeState};
 pub use scheduler::{ReactiveScheduler, SchedulerPriority};
+pub use optimization::{SignalGraphAnalyzer, OptimizationStats, MemoizedSignal, LazySignal};

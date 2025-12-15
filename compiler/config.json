@@ -1,5 +1,0 @@
-{
-            "app.name": "myapp",
-            "app.debug": true,
-            "database.host": "localhost"
-        }
