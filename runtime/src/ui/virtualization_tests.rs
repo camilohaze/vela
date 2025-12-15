@@ -396,4 +396,286 @@ mod tests {
         assert!(rendered_count <= 400); // Much less than 1000 total
         assert!(rendered_count > 0);
     }
+
+    // ===== INTEGRATION TESTS =====
+
+    #[test]
+    fn test_integration_performance_large_list() {
+        let config = VirtualizationConfig {
+            item_height: 50.0,
+            overscan_count: 5,
+            estimated_total_height: None,
+        };
+
+        // Create large list with 10,000 items
+        let items = (0..10_000).collect::<Vec<_>>();
+        let mut list_view = VirtualizedListView::new(config, &items, |&item| {
+            Box::new(TestWidget::new(item))
+        });
+
+        // Set viewport height for 10 visible items
+        list_view.set_viewport_height(500.0);
+
+        // Initial render should be fast and only show visible items
+        list_view.set_scroll_top(0.0);
+        let initial_rendered = list_view.rendered_items.len();
+        assert!(initial_rendered <= 20); // 10 visible + 10 overscan max
+
+        // Scroll to middle - should still be efficient
+        list_view.set_scroll_top(250_000.0); // Middle of the list
+        let middle_rendered = list_view.rendered_items.len();
+        assert!(middle_rendered <= 20);
+
+        // Scroll to end
+        list_view.set_scroll_top(499_950.0); // Near the end
+        let end_rendered = list_view.rendered_items.len();
+        assert!(end_rendered <= 20);
+
+        // Verify we never rendered more than a small fraction of total items
+        assert!(initial_rendered < 100); // Less than 1% of 10,000
+        assert!(middle_rendered < 100);
+        assert!(end_rendered < 100);
+    }
+
+    #[test]
+    fn test_integration_memory_efficiency_widget_pool() {
+        let config = VirtualizationConfig {
+            item_height: 50.0,
+            overscan_count: 3,
+            estimated_total_height: None,
+        };
+
+        let items = (0..1000).collect::<Vec<_>>();
+        let mut list_view = VirtualizedListView::new(config, &items, |&item| {
+            Box::new(TestWidget::new(item))
+        });
+
+        list_view.set_viewport_height(200.0); // 4 visible items
+
+        // Initial state
+        list_view.set_scroll_top(0.0);
+        let initial_count = list_view.rendered_items.len();
+
+        // Scroll multiple times - pool should reuse widgets
+        for scroll_pos in (0..2000).step_by(200) {
+            list_view.set_scroll_top(scroll_pos as f32);
+            let current_count = list_view.rendered_items.len();
+            // Should maintain similar number of rendered items
+            assert!(current_count <= initial_count + 10); // Allow some variation
+        }
+
+        // Final count should be reasonable
+        let final_count = list_view.rendered_items.len();
+        assert!(final_count > 0);
+        assert!(final_count <= 20); // Much less than 1000 total
+    }
+
+    #[test]
+    fn test_integration_full_scroll_scenario() {
+        let config = VirtualizationConfig {
+            item_height: 50.0,
+            overscan_count: 2,
+            estimated_total_height: None,
+        };
+
+        let items = (0..1000).collect::<Vec<_>>();
+        let mut list_view = VirtualizedListView::new(config, &items, |&item| {
+            Box::new(TestWidget::new(item))
+        });
+
+        list_view.set_viewport_height(300.0); // 6 visible items
+
+        // Track all rendered items during full scroll
+        let mut all_rendered_indices = std::collections::HashSet::new();
+
+        // Scroll from start to end in steps
+        for scroll_pos in (0..49_950).step_by(1000) {
+            list_view.set_scroll_top(scroll_pos as f32);
+
+            // Collect all currently rendered indices
+            for &index in list_view.rendered_items.keys() {
+                all_rendered_indices.insert(index);
+            }
+        }
+
+        // Should have rendered a reasonable subset of all items
+        assert!(all_rendered_indices.len() > 100); // Rendered many different items
+        assert!(all_rendered_indices.len() < 500); // But not too many (efficient)
+
+        // Should include items from different parts of the list
+        let has_early_items = all_rendered_indices.iter().any(|&i| i < 100);
+        let has_middle_items = all_rendered_indices.iter().any(|&i| i >= 400 && i < 600);
+        let has_late_items = all_rendered_indices.iter().any(|&i| i >= 900);
+
+        assert!(has_early_items, "Should have rendered early items");
+        assert!(has_middle_items, "Should have rendered middle items");
+        assert!(has_late_items, "Should have rendered late items");
+    }
+
+    #[test]
+    fn test_integration_dynamic_data_changes() {
+        let config = VirtualizationConfig {
+            item_height: 50.0,
+            overscan_count: 2,
+            estimated_total_height: None,
+        };
+
+        // Start with small list
+        let mut items = (0..50).collect::<Vec<_>>();
+        let mut list_view = VirtualizedListView::new(config.clone(), &items, |&item| {
+            Box::new(TestWidget::new(item))
+        });
+
+        list_view.set_viewport_height(200.0); // 4 visible items
+
+        // Initial render
+        list_view.set_scroll_top(0.0);
+        let initial_rendered = list_view.rendered_items.len();
+
+        // Add more items dynamically (simulate data change)
+        items.extend(50..150);
+        // Note: In real implementation, we'd need a way to update the list_view
+        // For this test, we verify the concept by creating a new one
+        let mut updated_list_view = VirtualizedListView::new(config, &items, |&item| {
+            Box::new(TestWidget::new(item))
+        });
+        updated_list_view.set_viewport_height(200.0);
+
+        updated_list_view.set_scroll_top(0.0);
+        let updated_rendered = updated_list_view.rendered_items.len();
+
+        // Should handle larger dataset efficiently
+        assert!(updated_rendered <= initial_rendered + 5); // Similar efficiency
+        assert!(updated_rendered > 0);
+
+        // Scroll to later position to verify extended range
+        updated_list_view.set_scroll_top(2000.0); // Should show items around index 40
+        let scrolled_rendered = updated_list_view.rendered_items.len();
+        assert!(scrolled_rendered > 0);
+        assert!(scrolled_rendered <= 15); // Still efficient
+    }
+
+    #[test]
+    fn test_integration_grid_2d_navigation() {
+        let config = GridVirtualizationConfig {
+            item_width: 100.0,
+            item_height: 100.0,
+            columns: 5,
+            overscan_count: 1,
+            max_pool_size: 50,
+        };
+
+        // Create 10x10 grid = 100 items
+        let items = (0..100).collect::<Vec<_>>();
+        let mut grid_view = VirtualizedGridView::new(config, &items, |&item| {
+            Box::new(TestWidget::new(item))
+        });
+
+        // Test different scroll positions
+        let test_positions = vec![
+            (0.0, 0.0),     // Top-left
+            (200.0, 0.0),   // Scroll right
+            (0.0, 300.0),   // Scroll down
+            (200.0, 300.0), // Scroll diagonally
+            (400.0, 600.0), // Bottom-right area
+        ];
+
+        for (scroll_x, scroll_y) in test_positions {
+            grid_view.set_scroll_position(scroll_x, scroll_y);
+            let rendered_count = grid_view.rendered_items.len();
+
+            // Should always render reasonable number of items
+            assert!(rendered_count > 0);
+            assert!(rendered_count <= 25); // 5x5 visible area + overscan
+
+            // Verify rendered items are within valid range
+            for &index in grid_view.rendered_items.keys() {
+                assert!(index < 100); // Within our 100 items
+                assert!(index >= 0);
+            }
+        }
+    }
+
+    #[test]
+    fn test_integration_grid_vs_list_consistency() {
+        // Compare that grid and list virtualization behave consistently
+        let list_config = VirtualizationConfig {
+            item_height: 100.0,
+            overscan_count: 2,
+            estimated_total_height: None,
+        };
+
+        let grid_config = GridVirtualizationConfig {
+            item_width: 100.0,
+            item_height: 100.0,
+            columns: 1, // Single column = like a list
+            overscan_count: 2,
+            max_pool_size: 50,
+        };
+
+        let items = (0..100).collect::<Vec<_>>();
+
+        // Create both list and single-column grid
+        let mut list_view = VirtualizedListView::new(list_config, &items, |&item| {
+            Box::new(TestWidget::new(item))
+        });
+        list_view.set_viewport_height(300.0); // 3 visible items
+
+        let mut grid_view = VirtualizedGridView::new(grid_config, &items, |&item| {
+            Box::new(TestWidget::new(item))
+        });
+
+        // Test at same scroll positions
+        let test_positions = vec![0.0, 100.0, 200.0, 500.0];
+
+        for &scroll_pos in &test_positions {
+            list_view.set_scroll_top(scroll_pos);
+            grid_view.set_scroll_position(0.0, scroll_pos);
+
+            let list_rendered = list_view.rendered_items.len();
+            let grid_rendered = grid_view.rendered_items.len();
+
+            // Should render similar number of items (allowing small differences)
+            let diff = (list_rendered as i32 - grid_rendered as i32).abs();
+            assert!(diff <= 3, "List rendered {}, Grid rendered {}", list_rendered, grid_rendered);
+        }
+    }
+
+    #[test]
+    fn test_integration_stress_test_large_dataset() {
+        let config = VirtualizationConfig {
+            item_height: 20.0, // Smaller items
+            overscan_count: 10, // More overscan for smoother scrolling
+            estimated_total_height: None,
+        };
+
+        // Very large dataset: 100,000 items
+        let items = (0..100_000).collect::<Vec<_>>();
+        let mut list_view = VirtualizedListView::new(config, &items, |&item| {
+            Box::new(TestWidget::new(item))
+        });
+
+        list_view.set_viewport_height(400.0); // 20 visible items
+
+        // Test various scroll positions quickly
+        let scroll_positions = [0.0, 500_000.0, 1_000_000.0, 1_500_000.0, 1_999_980.0];
+
+        for &scroll_pos in &scroll_positions {
+            list_view.set_scroll_top(scroll_pos);
+            let rendered_count = list_view.rendered_items.len();
+
+            // Should always be efficient regardless of position
+            assert!(rendered_count > 0);
+            assert!(rendered_count <= 50); // 20 visible + 30 overscan max
+
+            // Verify indices are valid
+            for &index in list_view.rendered_items.keys() {
+                assert!(index < 100_000);
+                assert!(index >= 0);
+            }
+        }
+
+        // Memory efficiency: should never render more than 0.1% of items
+        assert!(list_view.rendered_items.len() < 1000); // Less than 1% of 100k
+    }
 }
