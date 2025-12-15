@@ -32,7 +32,7 @@ aws-sdk-s3 = "1.37"
 tokio = { version = "1.0", features = ["full"] }
 futures = "0.3"
 async-trait = "0.1"
-zip = "2.3"
+zip = "0.6"
 
 [dev-dependencies]
 criterion = "0.5"

@@ -5,6 +5,10 @@
 
 pub mod aws_lambda;
 pub mod common;
+pub mod netlify;
+pub mod vercel;
 
 pub use aws_lambda::AwsLambdaDeployer;
 pub use common::{DeploymentConfig, DeploymentResult, Deployer};
+pub use netlify::NetlifyDeployer;
+pub use vercel::VercelDeployer;

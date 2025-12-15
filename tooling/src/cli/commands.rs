@@ -4,7 +4,7 @@ CLI commands implementation
 
 use crate::common::Result;
 use crate::build::{BuildConfig, BuildExecutor};
-use crate::cli::deploy::{AwsLambdaDeployer, DeploymentConfig};
+use crate::cli::deploy::{AwsLambdaDeployer, NetlifyDeployer, VercelDeployer, DeploymentConfig};
 use std::path::PathBuf;
 use std::collections::HashMap;
 use vela_vm::{VirtualMachine, bytecode::Value};
@@ -1334,20 +1334,104 @@ pub fn execute_deploy(platform: &str, env: &str, release: bool, no_build: bool) 
             println!("📋 Execution Role: {}", result.metadata.get("role_arn").unwrap_or(&"N/A".to_string()));
         }
         "vercel" => {
-            println!("   📋 Creating Vercel project...");
-            println!("   📋 Setting build configuration...");
-            println!("   📋 Deploying functions...");
+            // Create deployment configuration
+            let project_root = std::env::current_dir()
+                .map_err(|e| crate::common::Error::Io(e))?;
+
+            let build_dir = if release {
+                project_root.join("dist") // Vercel typically uses dist/
+            } else {
+                project_root.join("build") // or build/
+            };
+
+            let mut env_vars = HashMap::new();
+            env_vars.insert("VELA_ENV".to_string(), env.to_string());
+            env_vars.insert("VELA_PLATFORM".to_string(), platform.to_string());
+
+            let config = DeploymentConfig {
+                project_root,
+                build_dir,
+                environment: env.to_string(),
+                platform: platform.to_string(),
+                env_vars,
+            };
+
+            // Create Vercel deployer
+            let deployer = VercelDeployer::new()
+                .map_err(|e| crate::common::Error::InvalidProject {
+                    message: format!("Failed to initialize Vercel deployer: {}", e),
+                })?;
+
+            // Validate configuration
+            deployer.validate_config(&config)
+                .map_err(|e| crate::common::Error::InvalidProject {
+                    message: format!("Invalid deployment configuration: {}", e),
+                })?;
+
+            // Perform deployment
+            let result = deployer.deploy(&config).await
+                .map_err(|e| crate::common::Error::InvalidProject {
+                    message: format!("Deployment failed: {}", e),
+                })?;
+
             println!("\n✅ Deployment completed successfully!");
             println!("🌐 Your Vela app is now live on Vercel");
-            println!("🔗 Site URL: https://your-project.vercel.app");
+
+            if let Some(url) = result.url {
+                println!("🔗 Site URL: {}", url);
+            }
+
+            println!("📋 Project ID: {}", result.metadata.get("project_id").unwrap_or(&"N/A".to_string()));
         }
         "netlify" => {
-            println!("   📋 Creating Netlify site...");
-            println!("   📋 Configuring build settings...");
-            println!("   📋 Setting environment variables...");
+            // Create deployment configuration
+            let project_root = std::env::current_dir()
+                .map_err(|e| crate::common::Error::Io(e))?;
+
+            let build_dir = if release {
+                project_root.join("dist") // Netlify typically uses dist/
+            } else {
+                project_root.join("build") // or build/
+            };
+
+            let mut env_vars = HashMap::new();
+            env_vars.insert("VELA_ENV".to_string(), env.to_string());
+            env_vars.insert("VELA_PLATFORM".to_string(), platform.to_string());
+
+            let config = DeploymentConfig {
+                project_root,
+                build_dir,
+                environment: env.to_string(),
+                platform: platform.to_string(),
+                env_vars,
+            };
+
+            // Create Netlify deployer
+            let deployer = NetlifyDeployer::new()
+                .map_err(|e| crate::common::Error::InvalidProject {
+                    message: format!("Failed to initialize Netlify deployer: {}", e),
+                })?;
+
+            // Validate configuration
+            deployer.validate_config(&config)
+                .map_err(|e| crate::common::Error::InvalidProject {
+                    message: format!("Invalid deployment configuration: {}", e),
+                })?;
+
+            // Perform deployment
+            let result = deployer.deploy(&config).await
+                .map_err(|e| crate::common::Error::InvalidProject {
+                    message: format!("Deployment failed: {}", e),
+                })?;
+
             println!("\n✅ Deployment completed successfully!");
             println!("🌐 Your Vela app is now live on Netlify");
-            println!("🔗 Site URL: https://your-project.netlify.app");
+
+            if let Some(url) = result.url {
+                println!("🔗 Site URL: {}", url);
+            }
+
+            println!("📋 Site ID: {}", result.metadata.get("site_id").unwrap_or(&"N/A".to_string()));
         }
         "azure-functions" => {
             println!("   📋 Creating Function App...");

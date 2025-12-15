@@ -12,6 +12,7 @@ Implementar el comando `vela deploy` para habilitar el despliegue de aplicacione
 ## 📦 Subtasks Completadas
 1. **TASK-176**: Implementar comando 'vela deploy' ✅
 2. **TASK-177**: Integración con AWS Lambda ✅
+3. **TASK-178**: Integración con Vercel/Netlify ✅
 
 ## 🔨 Implementación
 
@@ -47,6 +48,14 @@ Options:
 - ✅ Empaquetado de código con bytecode Vela
 - ✅ Configuración de Function URLs
 - ✅ Manejo de errores con mensajes descriptivos
+- ✅ **Integración real con Vercel** (TASK-178)
+- ✅ Gestión automática de proyectos Vercel
+- ✅ Despliegue de assets web con multipart upload
+- ✅ Configuración de environment variables
+- ✅ **Integración real con Netlify** (TASK-178)
+- ✅ Gestión automática de sites Netlify
+- ✅ Despliegue de contenido estático
+- ✅ Configuración de build hooks y redirects
 - ✅ Tests unitarios completos
 
 ## ✅ Criterios de Aceptación
@@ -58,6 +67,14 @@ Options:
 - [x] Gestión automática de roles IAM
 - [x] Empaquetado de código funcional
 - [x] Configuración de Function URLs
+- [x] **Integración real con Vercel** (TASK-178)
+- [x] Gestión automática de proyectos Vercel
+- [x] Despliegue de assets web con multipart upload
+- [x] Configuración de environment variables
+- [x] **Integración real con Netlify** (TASK-178)
+- [x] Gestión automática de sites Netlify
+- [x] Despliegue de contenido estático
+- [x] Configuración de build hooks y redirects
 - [x] Tests unitarios con cobertura completa
 - [x] Documentación completa
 - [x] CLI funcional y probada
@@ -67,7 +84,11 @@ Options:
 - **Epic:** [VELA-39](https://velalang.atlassian.net/browse/VELA-39)
 
 ## 📊 Métricas
-- **Archivos creados:** 6 (parser.rs, commands.rs, main.rs, deploy/mod.rs, deploy/common.rs, deploy/aws_lambda.rs)
-- **Tests implementados:** 3 tests unitarios
-- **Líneas de código:** ~450 líneas
-- **Cobertura de tests:** 100%
+- **Subtasks completadas:** 3/3
+- **Archivos creados:** 8
+  - ADRs: 1
+  - Código fuente: 6 (deployers + CLI)
+  - Tests: 1
+  - Documentación: 3
+- **Tests escritos:** 15+ (por deployer)
+- **Commits realizados:** 3 (uno por subtask)
