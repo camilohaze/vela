@@ -5,6 +5,8 @@ CLI commands implementation
 use crate::common::Result;
 use crate::build::{BuildConfig, BuildExecutor};
 use std::path::PathBuf;
+use vela_vm::{VirtualMachine, bytecode::Value};
+use vela_vm::gc::{GcHeap, GcObject};
 
 /// Execute new command
 pub fn execute_new(name: &str, template: &str, path: Option<&str>) -> Result<()> {
@@ -190,6 +192,81 @@ pub fn execute_run(release: bool, args: &[String]) -> Result<()> {
             )))
         }
     }
+}
+
+/// Execute debug command (starts DAP server)
+pub fn execute_debug(program: &str) -> Result<()> {
+    println!("🐛 Starting Vela DAP Debug Server...");
+    println!("📋 Configuration:");
+    println!("   Program: {}", program);
+
+    // Verify program file exists
+    let program_path = std::path::Path::new(program);
+    if !program_path.exists() {
+        println!("\n❌ Program file not found: {}", program);
+        return Err(crate::common::Error::Io(std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            format!("Program file not found: {}", program)
+        )));
+    }
+
+    println!("\n🔧 Initializing DAP server...");
+
+    // Create DAP server
+    let mut dap_server = crate::dap::DapServer::new();
+
+    // Set up launch arguments for the program
+    let launch_args = crate::dap::LaunchRequestArguments {
+        program: program.to_string(),
+        args: vec![],
+        cwd: None,
+        env: std::collections::HashMap::new(),
+    };
+
+    // Simulate launch request
+    let launch_request = crate::dap::Request {
+        seq: 1,
+        command: "launch".to_string(),
+        arguments: Some(serde_json::to_value(launch_args).unwrap()),
+    };
+
+    println!("🚀 Launching program in debug mode...");
+    match dap_server.handle_request(launch_request) {
+        Ok(response) => {
+            if response.success {
+                println!("✅ Program launched successfully");
+                println!("🎯 DAP server ready for debugger connections");
+                println!("💡 Connect your IDE's debugger to start debugging");
+            } else {
+                println!("❌ Failed to launch program: {:?}", response.message);
+                return Err(crate::common::Error::Io(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    format!("Launch failed: {:?}", response.message)
+                )));
+            }
+        }
+        Err(e) => {
+            println!("❌ Launch error: {}", e);
+            return Err(crate::common::Error::Io(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                format!("Launch error: {}", e)
+            )));
+        }
+    }
+
+    println!("\n🔄 Starting DAP message loop...");
+    println!("💡 Press Ctrl+C to stop the debug server");
+
+    // Start the DAP server message loop
+    if let Err(e) = dap_server.start() {
+        println!("❌ DAP server error: {}", e);
+        return Err(crate::common::Error::Io(std::io::Error::new(
+            std::io::ErrorKind::Other,
+            format!("DAP server error: {}", e)
+        )));
+    }
+
+    Ok(())
 }
 
 /// Execute test command
@@ -875,6 +952,254 @@ fn find_vela_files(dir: &std::path::Path) -> Result<Vec<std::path::PathBuf>> {
 
     visit_dir(dir, &mut files)?;
     Ok(files)
+}
+
+/// Execute inspect-signals command
+pub fn execute_inspect_signals(program: &str, format: &str) -> Result<()> {
+    println!("🔍 Inspecting reactive signals in: {}", program);
+    println!("📋 Configuration:");
+    println!("   Program: {}", program);
+    println!("   Output format: {}", format);
+
+    // Verificar que el archivo existe
+    let program_path = std::path::PathBuf::from(program);
+    if !program_path.exists() {
+        return Err(crate::common::Error::BuildFailed {
+            message: format!("Program file not found: {}", program)
+        });
+    }
+
+    // Compilar el programa usando vela_compiler
+    use vela_compiler::{Compiler, config::Config};
+    use vela_vm::bytecode::Bytecode;
+
+    let mut compiler = Compiler::new(Config::default());
+    let bytecode_bytes = compiler.compile_file(&program_path)
+        .map_err(|e| crate::common::Error::BuildFailed {
+            message: format!("Compilation failed: {:?}", e)
+        })?;
+
+    // Verificar errores de compilación
+    if compiler.has_errors() {
+        let diagnostics = compiler.diagnostics();
+        return Err(crate::common::Error::BuildFailed {
+            message: format!("Compilation errors: {:?}", diagnostics)
+        });
+    }
+
+    // Deserializar bytecode
+    let bytecode = Bytecode::from_bytes(&bytecode_bytes)
+        .map_err(|e| crate::common::Error::BuildFailed {
+            message: format!("Bytecode deserialization failed: {:?}", e)
+        })?;
+
+    println!("\n✅ Compilation successful!");
+    println!("📊 Bytecode statistics:");
+    println!("   - Bytecode size: {} bytes", bytecode_bytes.len());
+
+    // Ejecutar el bytecode en el VM para crear objetos reactivos
+    println!("\n🚀 Executing program to initialize reactive objects...");
+
+    let mut vm = VirtualMachine::new_with_heap();
+
+    // Ejecutar el bytecode
+    let result = vm.execute(&bytecode);
+    if let Err(e) = result {
+        println!("⚠️  Warning: Program execution failed: {:?}", e);
+        println!("   Continuing with signal inspection anyway...");
+    } else {
+        println!("✅ Program execution completed successfully");
+    }
+
+    // Ejecutar el bytecode
+    let result = vm.execute(&bytecode);
+    if let Err(e) = result {
+        println!("⚠️  Warning: Program execution failed: {:?}", e);
+        println!("   Continuing with signal inspection anyway...");
+    } else {
+        println!("✅ Program execution completed successfully");
+    }
+
+    // Inspeccionar objetos reactivos en el heap
+    println!("\n🔍 Inspecting reactive objects...");
+
+    // Obtener objetos reactivos del heap
+    let reactive_objects = vm.get_reactive_objects();
+
+    // Crear estructura de información para mostrar
+    let mut signals = Vec::new();
+    let mut computed = Vec::new();
+
+    for obj in &reactive_objects {
+        match &*obj.borrow() {
+            GcObject::ReactiveSignal(signal_obj) => {
+                let signal = signal_obj.borrow();
+                signals.push(SignalInfo {
+                    id: signal.id.clone(),
+                    value: format!("{:?}", signal.value),
+                    dependents_count: signal.dependents.len(),
+                });
+            }
+            GcObject::ReactiveComputed(computed_obj) => {
+                let computed_val = computed_obj.borrow();
+                computed.push(ComputedInfo {
+                    id: computed_val.id.clone(),
+                    cached_value: computed_val.cached_value.map(|v| format!("{:?}", v)),
+                    dependencies_count: computed_val.dependencies.len(),
+                });
+            }
+            _ => {}
+        }
+    }
+
+    let info = ReactiveObjectsInfo { signals, computed };
+
+    println!("\n📋 Reactive Objects Found:");
+    println!("   - Signals: {}", info.signals.len());
+    println!("   - Computed values: {}", info.computed.len());
+
+    match format {
+        "text" => {
+            print_reactive_objects_text(&info);
+        }
+        "json" => {
+            print_reactive_objects_json(&info);
+        }
+        "graphviz" => {
+            print_reactive_objects_graphviz(&info);
+        }
+        _ => {
+            return Err(crate::common::Error::BuildFailed {
+                message: format!("Unsupported format: {}", format)
+            });
+        }
+    }
+
+    println!("\n✅ Signal inspection completed successfully!");
+    Ok(())
+}
+
+/// Estructura para contener información de objetos reactivos
+#[derive(Debug)]
+struct ReactiveObjectsInfo {
+    signals: Vec<SignalInfo>,
+    computed: Vec<ComputedInfo>,
+}
+
+/// Información de un signal reactivo
+#[derive(Debug)]
+struct SignalInfo {
+    id: String,
+    value: String,
+    dependents_count: usize,
+}
+
+/// Información de un computed reactivo
+#[derive(Debug)]
+struct ComputedInfo {
+    id: String,
+    cached_value: Option<String>,
+    dependencies_count: usize,
+}
+
+/// Imprimir objetos reactivos en formato texto
+fn print_reactive_objects_text(info: &ReactiveObjectsInfo) {
+    println!("📄 Reactive Objects (Text Format)");
+    println!("==================================");
+
+    if info.signals.is_empty() && info.computed.is_empty() {
+        println!("No reactive objects found in the program.");
+        return;
+    }
+
+    if !info.signals.is_empty() {
+        println!("\n🔴 Signals:");
+        for signal in &info.signals {
+            println!("  • {} = {} ({} dependents)",
+                    signal.id, signal.value, signal.dependents_count);
+        }
+    }
+
+    if !info.computed.is_empty() {
+        println!("\n🟡 Computed Values:");
+        for computed in &info.computed {
+            let cached = match &computed.cached_value {
+                Some(val) => format!("cached: {}", val),
+                None => "not cached".to_string(),
+            };
+            println!("  • {} ({}, {} dependencies)",
+                    computed.id, cached, computed.dependencies_count);
+        }
+    }
+}
+
+/// Imprimir objetos reactivos en formato JSON
+fn print_reactive_objects_json(info: &ReactiveObjectsInfo) {
+    println!("📄 Reactive Objects (JSON Format)");
+    println!("===================================");
+
+    println!("{{");
+    println!("  \"signals\": [");
+    for (i, signal) in info.signals.iter().enumerate() {
+        let comma = if i < info.signals.len() - 1 { "," } else { "" };
+        println!("    {{");
+        println!("      \"id\": \"{}\",", signal.id);
+        println!("      \"value\": \"{}\",", signal.value);
+        println!("      \"dependents_count\": {}", signal.dependents_count);
+        println!("    }}{}", comma);
+    }
+    println!("  ],");
+
+    println!("  \"computed\": [");
+    for (i, computed) in info.computed.iter().enumerate() {
+        let comma = if i < info.computed.len() - 1 { "," } else { "" };
+        let cached_value = match &computed.cached_value {
+            Some(val) => format!("\"{}\"", val),
+            None => "null".to_string(),
+        };
+        println!("    {{");
+        println!("      \"id\": \"{}\",", computed.id);
+        println!("      \"cached_value\": {},", cached_value);
+        println!("      \"dependencies_count\": {}", computed.dependencies_count);
+        println!("    }}{}", comma);
+    }
+    println!("  ]");
+    println!("}}");
+}
+
+/// Imprimir objetos reactivos en formato GraphViz
+fn print_reactive_objects_graphviz(info: &ReactiveObjectsInfo) {
+    println!("📄 Reactive Objects (GraphViz Format)");
+    println!("======================================");
+
+    println!("digraph ReactiveGraph {{");
+    println!("  rankdir=LR;");
+    println!("  node [shape=box];");
+
+    // Definir nodos para signals
+    for signal in &info.signals {
+        println!("  \"{}\" [label=\"Signal\\n{}\\n{}\", fillcolor=lightcoral, style=filled];",
+                signal.id, signal.id, signal.value);
+    }
+
+    // Definir nodos para computed
+    for computed in &info.computed {
+        let cached = match &computed.cached_value {
+            Some(val) => format!("\\ncached: {}", val),
+            None => "\\nnot cached".to_string(),
+        };
+        println!("  \"{}\" [label=\"Computed\\n{}{}\", fillcolor=lightyellow, style=filled];",
+                computed.id, computed.id, cached);
+    }
+
+    // Aquí irían las conexiones de dependencias
+    // Por ahora, solo definimos los nodos
+
+    println!("}}");
+
+    if info.signals.is_empty() && info.computed.is_empty() {
+        println!("  // No reactive objects found");
+    }
 }
 
 #[cfg(test)]

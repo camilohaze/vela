@@ -1,0 +1,7 @@
+// Simple example for testing signal inspector
+
+import 'stdlib:test'
+
+fn main() -> void {
+    // Simple arithmetic - no unused variables
+}

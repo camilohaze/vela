@@ -62,6 +62,12 @@ pub enum Commands {
         args: Vec<String>,
     },
 
+    /// Debug the project using DAP
+    Debug {
+        /// Program file to debug
+        program: String,
+    },
+
     /// Run tests
     Test {
         /// Filter tests by pattern

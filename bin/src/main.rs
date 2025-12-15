@@ -56,6 +56,19 @@ enum Commands {
         #[arg(long)]
         release: bool,
     },
+    /// Debug a Vela program
+    Debug {
+        /// Program file to debug
+        program: String,
+    },
+    /// Inspect reactive signals in a Vela program
+    InspectSignals {
+        /// Program file to inspect
+        program: String,
+        /// Output format (text, json, graphviz)
+        #[arg(short, long, default_value = "text")]
+        format: String,
+    },
     /// Install project dependencies
     Install,
     /// Format source code
@@ -74,6 +87,12 @@ fn main() {
         }
         Commands::Run { release, args } => {
             vela_tooling::cli::commands::execute_run(release, &args)
+        }
+        Commands::Debug { program } => {
+            vela_tooling::cli::commands::execute_debug(&program)
+        }
+        Commands::InspectSignals { program, format } => {
+            vela_tooling::cli::commands::execute_inspect_signals(&program, &format)
         }
         Commands::Test { filter, release } => {
             vela_tooling::cli::commands::execute_test(filter.as_deref(), release)

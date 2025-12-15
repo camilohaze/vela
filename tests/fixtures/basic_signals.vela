@@ -1,0 +1,17 @@
+// Fixture: Programa Vela simple con señales básicas
+// Usado para testing de signal inspector
+
+state counter: Number = 0
+state name: String = "Test"
+
+computed doubled: Number {
+  return counter * 2
+}
+
+computed greeting: String {
+  return "Hello, ${name}!"
+}
+
+effect {
+  print("Counter: ${counter}, Doubled: ${doubled}")
+}

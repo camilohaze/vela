@@ -1,0 +1,3 @@
+fn main() -> Number {
+    42 + 8
+}

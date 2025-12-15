@@ -1,0 +1,35 @@
+// Fixture: Programa Vela con señales complejas y dependencias
+// Usado para testing de dependencias circulares y grafos complejos
+
+state a: Number = 1
+state b: Number = 2
+state c: Number = 3
+
+computed sum_ab: Number {
+  return a + b
+}
+
+computed product_bc: Number {
+  return b * c
+}
+
+computed total: Number {
+  return sum_ab + product_bc
+}
+
+computed average: Float {
+  return total / 3.0
+}
+
+computed description: String {
+  return "Sum: ${sum_ab}, Product: ${product_bc}, Total: ${total}, Avg: ${average}"
+}
+
+// Efectos múltiples
+effect {
+  print("A changed: ${a}")
+}
+
+effect {
+  print("Total changed: ${total}")
+}

@@ -53,6 +53,7 @@ assert!(result.is_ok());
 use crate::bytecode::{Bytecode, Constant, CodeObject, Instruction, Value};
 use crate::error::{Error, Result};
 use crate::loader::BytecodeLoader;
+use crate::gc::{GcHeap, GcObject};
 use std::collections::HashMap;
 use std::rc::Rc;
 
@@ -77,6 +78,40 @@ pub struct CallFrame {
     pub stack_base: usize,
     /// Local variables
     pub locals: Vec<Value>,
+}
+
+/// Breakpoint information
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct Breakpoint {
+    /// Code object index
+    pub code_object_idx: usize,
+    /// Instruction offset in the code object
+    pub offset: usize,
+    /// Optional condition (Vela expression as string)
+    pub condition: Option<String>,
+    /// Whether breakpoint is enabled
+    pub enabled: bool,
+}
+
+/// Debugger callback trait
+pub trait DebuggerCallback {
+    /// Called when a breakpoint is hit
+    fn on_breakpoint(&mut self, breakpoint: &Breakpoint, current_frame: &CallFrame, stack: &[Value]) -> Result<DebuggerAction>;
+}
+
+/// Debugger actions
+#[derive(Debug, Clone, PartialEq)]
+pub enum DebuggerAction {
+    /// Continue execution
+    Continue,
+    /// Step to next instruction
+    Step,
+    /// Step into function call
+    StepInto,
+    /// Step over function call
+    StepOver,
+    /// Stop execution
+    Stop,
 }
 
 impl CallFrame {
@@ -306,6 +341,27 @@ pub struct VirtualMachine {
     loader: BytecodeLoader,
     /// Max call depth (prevent stack overflow)
     max_call_depth: usize,
+    /// Active breakpoints
+    breakpoints: Vec<Breakpoint>,
+    /// Map breakpoint IDs to indices in breakpoints vector
+    breakpoint_ids: HashMap<usize, usize>,
+    /// Debugger callback
+    debugger_callback: Option<Box<dyn DebuggerCallback>>,
+    /// Current debugger state
+    debugger_state: DebuggerState,
+    /// Garbage collector heap (optional for reactive object inspection)
+    heap: Option<GcHeap>,
+}
+
+/// Debugger execution state
+#[derive(Debug, Clone, PartialEq)]
+pub enum DebuggerState {
+    /// Normal execution
+    Running,
+    /// Stopped at breakpoint
+    Stopped,
+    /// Single stepping
+    Stepping,
 }
 
 impl VirtualMachine {
@@ -321,6 +377,40 @@ impl VirtualMachine {
             modules: HashMap::new(),
             loader: BytecodeLoader::new(),
             max_call_depth: 1000,
+            breakpoints: Vec::new(),
+            breakpoint_ids: HashMap::new(),
+            debugger_callback: None,
+            debugger_state: DebuggerState::Running,
+            heap: None,
+        }
+    }
+
+    /// Create new VM instance with GC heap for reactive object inspection
+    pub fn new_with_heap() -> Self {
+        Self {
+            frames: Vec::new(),
+            stack: Vec::new(),
+            globals: HashMap::new(),
+            constants: Vec::new(),
+            strings: Vec::new(),
+            code_objects: Vec::new(),
+            modules: HashMap::new(),
+            loader: BytecodeLoader::new(),
+            max_call_depth: 1000,
+            breakpoints: Vec::new(),
+            breakpoint_ids: HashMap::new(),
+            debugger_callback: None,
+            debugger_state: DebuggerState::Running,
+            heap: Some(GcHeap::new()),
+        }
+    }
+
+    /// Get all reactive objects (signals and computed) from the heap
+    pub fn get_reactive_objects(&self) -> Vec<crate::gc::GcPtr<GcObject>> {
+        if let Some(ref heap) = self.heap {
+            heap.get_reactive_objects()
+        } else {
+            Vec::new()
         }
     }
 
@@ -390,10 +480,17 @@ impl VirtualMachine {
                 return Ok(());
             }
 
-            // Fetch and execute instruction
+            // Fetch instruction
             let instruction = frame.fetch()?;
             let is_return = matches!(instruction, Instruction::Return);
+
+            // Execute instruction
             self.execute_instruction(instruction)?;
+
+            // Check for breakpoints after instruction execution
+            if let Some(breakpoint) = self.check_breakpoint() {
+                self.handle_breakpoint(breakpoint)?;
+            }
 
             // Check for Return instruction (handled in execute_instruction)
             if is_return {
@@ -657,7 +754,8 @@ impl VirtualMachine {
 
             Nop => {}
             Breakpoint => {
-                // TODO: Implement debugger breakpoint
+                // Breakpoint instruction is just a marker for potential breakpoint locations
+                // The actual breakpoint checking happens in run_frame after each instruction
             }
         }
 
@@ -758,7 +856,7 @@ impl VirtualMachine {
     }
 
     /// Get string by index
-    fn get_string(&self, idx: u16) -> Result<&str> {
+    pub fn get_string(&self, idx: u16) -> Result<&str> {
         self.strings
             .get(idx as usize)
             .map(|s| s.as_str())
@@ -801,6 +899,135 @@ impl VirtualMachine {
             bytes_allocated: 0,
             bytes_freed: 0,
         }
+    }
+
+    /// Get current call stack frames (for debugging)
+    pub fn get_call_frames(&self) -> &[CallFrame] {
+        &self.frames
+    }
+
+    /// Set debugger state (for DAP control)
+    pub fn set_debugger_state(&mut self, state: DebuggerState) {
+        self.debugger_state = state;
+    }
+
+    // === BREAKPOINT MANAGEMENT ===
+
+    /// Set debugger callback
+    pub fn set_debugger_callback(&mut self, callback: Box<dyn DebuggerCallback>) {
+        self.debugger_callback = Some(callback);
+    }
+
+    /// Add a breakpoint
+    pub fn add_breakpoint(&mut self, breakpoint: Breakpoint) -> usize {
+        let id = self.breakpoints.len();
+        self.breakpoints.push(breakpoint);
+        self.breakpoint_ids.insert(id, self.breakpoints.len() - 1);
+        id
+    }
+
+    /// Remove a breakpoint by ID
+    pub fn remove_breakpoint(&mut self, id: usize) -> bool {
+        if let Some(&idx) = self.breakpoint_ids.get(&id) {
+            self.breakpoints.remove(idx);
+            self.breakpoint_ids.remove(&id);
+            // Update indices for remaining breakpoints
+            for (id_key, idx_val) in self.breakpoint_ids.iter_mut() {
+                if *idx_val > idx {
+                    *idx_val -= 1;
+                }
+            }
+            true
+        } else {
+            false
+        }
+    }
+
+    /// Enable a breakpoint
+    pub fn enable_breakpoint(&mut self, id: usize) -> bool {
+        if let Some(&idx) = self.breakpoint_ids.get(&id) {
+            self.breakpoints[idx].enabled = true;
+            true
+        } else {
+            false
+        }
+    }
+
+    /// Disable a breakpoint
+    pub fn disable_breakpoint(&mut self, id: usize) -> bool {
+        if let Some(&idx) = self.breakpoint_ids.get(&id) {
+            self.breakpoints[idx].enabled = false;
+            true
+        } else {
+            false
+        }
+    }
+
+    /// Get all breakpoints
+    pub fn get_breakpoints(&self) -> Vec<(Breakpoint, usize)> {
+        self.breakpoints.iter().enumerate().map(|(idx, bp)| (bp.clone(), idx)).collect()
+    }
+
+    /// Check if there's a breakpoint at current location
+    fn check_breakpoint(&self) -> Option<Breakpoint> {
+        if let Some(frame) = self.frames.last() {
+            // Find the code object index by comparing pointers
+            let code_ptr = Rc::as_ptr(&frame.code);
+            let code_idx = self.code_objects.iter().position(|co| Rc::as_ptr(co) == code_ptr)?;
+            let offset = frame.ip;
+
+            for bp in &self.breakpoints {
+                if bp.code_object_idx == code_idx && bp.offset == offset && bp.enabled {
+                    // Check condition if present
+                    if let Some(ref condition) = bp.condition {
+                        // TODO: Evaluate condition expression
+                        // For now, assume condition is met
+                        if self.evaluate_breakpoint_condition(condition) {
+                            return Some(bp.clone());
+                        }
+                    } else {
+                        return Some(bp.clone());
+                    }
+                }
+            }
+        }
+        None
+    }
+
+    /// Evaluate breakpoint condition (stub implementation)
+    fn evaluate_breakpoint_condition(&self, _condition: &str) -> bool {
+        // TODO: Implement Vela expression evaluation for breakpoint conditions
+        // For now, always return true
+        true
+    }
+
+    /// Handle breakpoint hit
+    fn handle_breakpoint(&mut self, breakpoint: Breakpoint) -> Result<()> {
+        self.debugger_state = DebuggerState::Stopped;
+
+        if let Some(ref mut callback) = self.debugger_callback {
+            let current_frame = self.frames.last().ok_or(Error::CallStackOverflow)?;
+            let action = callback.on_breakpoint(&breakpoint, current_frame, &self.stack)?;
+            match action {
+                DebuggerAction::Continue => {
+                    self.debugger_state = DebuggerState::Running;
+                }
+                DebuggerAction::Step => {
+                    self.debugger_state = DebuggerState::Stepping;
+                }
+                DebuggerAction::StepInto => {
+                    self.debugger_state = DebuggerState::Stepping;
+                }
+                DebuggerAction::StepOver => {
+                    self.debugger_state = DebuggerState::Stepping;
+                }
+                DebuggerAction::Stop => {
+                    return Err(Error::DebuggerStop);
+                }
+            }
+        }
+
+        Ok(())
     }
 }
 
@@ -900,5 +1127,77 @@ mod tests {
         assert!(vm.is_truthy(Value::int(42)));
         assert!(!vm.is_truthy(Value::float(0.0)));
         assert!(vm.is_truthy(Value::float(3.14)));
+    }
+
+    #[test]
+    fn test_breakpoint_management() {
+        let mut vm = VirtualMachine::new();
+
+        // Add a breakpoint
+        let bp = Breakpoint {
+            code_object_idx: 0,
+            offset: 10,
+            condition: None,
+            enabled: true,
+        };
+
+        let id = vm.add_breakpoint(bp.clone());
+        assert_eq!(id, 0);
+
+        // Check breakpoint was added
+        let breakpoints = vm.get_breakpoints();
+        assert_eq!(breakpoints.len(), 1);
+        assert_eq!(breakpoints[0].0, bp);
+        assert_eq!(breakpoints[0].1, 0);
+
+        // Disable breakpoint
+        assert!(vm.disable_breakpoint(0));
+        let breakpoints = vm.get_breakpoints();
+        assert!(!breakpoints[0].0.enabled);
+
+        // Enable breakpoint
+        assert!(vm.enable_breakpoint(0));
+        let breakpoints = vm.get_breakpoints();
+        assert!(breakpoints[0].0.enabled);
+
+        // Remove breakpoint
+        assert!(vm.remove_breakpoint(0));
+        assert_eq!(vm.get_breakpoints().len(), 0);
+
+        // Try to remove non-existent breakpoint
+        assert!(!vm.remove_breakpoint(0));
+    }
+
+    #[test]
+    fn test_debugger_state() {
+        let mut vm = VirtualMachine::new();
+        assert_eq!(vm.debugger_state, DebuggerState::Running);
+
+        // Add a mock debugger callback
+        struct MockDebugger;
+        impl DebuggerCallback for MockDebugger {
+            fn on_breakpoint(&mut self, _breakpoint: &Breakpoint, _frame: &CallFrame, _stack: &[Value]) -> Result<DebuggerAction> {
+                Ok(DebuggerAction::Continue)
+            }
+        }
+
+        vm.set_debugger_callback(Box::new(MockDebugger));
+
+        // Create a code object and frame for testing
+        let code = Rc::new(CodeObject::new(0, 0));
+        let frame = CallFrame::new(code, 0);
+        vm.frames.push(frame);
+
+        // Create a breakpoint and handle it
+        let bp = Breakpoint {
+            code_object_idx: 0,
+            offset: 0,
+            condition: None,
+            enabled: true,
+        };
+
+        // This should work without panicking
+        let result = vm.handle_breakpoint(bp);
+        assert!(result.is_ok());
     }
 }

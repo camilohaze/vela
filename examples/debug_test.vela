@@ -1,0 +1,11 @@
+fn add_numbers(a: Number, b: Number) -> Number {
+    let result = a + b
+    return result
+}
+
+fn main() -> void {
+    let x = 10
+    let y = 20
+    let sum = add_numbers(x, y)
+    print("Sum: ${sum}")
+}

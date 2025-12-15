@@ -386,6 +386,15 @@ impl GcHeap {
         self.cycle_buffer.len()
     }
 
+    /// Get all reactive objects (signals and computed)
+    pub fn get_reactive_objects(&self) -> Vec<GcPtr<GcObject>> {
+        self.objects
+            .iter()
+            .filter_map(|weak| weak.upgrade())
+            .filter(|obj| matches!(&*obj.borrow(), GcObject::ReactiveSignal(_) | GcObject::ReactiveComputed(_)))
+            .collect()
+    }
+
     /// Clear all objects (for cleanup)
     pub fn clear(&mut self) {
         self.objects.clear();

@@ -119,6 +119,13 @@ pub enum Error {
         help("Failed to import the specified module.")
     )]
     ImportError { module: String, message: String },
+
+    #[error("Debugger stop requested")]
+    #[diagnostic(
+        code(vm::debugger_stop),
+        help("Execution was stopped by the debugger.")
+    )]
+    DebuggerStop,
 }
 
 impl Error {

@@ -89,6 +89,7 @@ cargo bench -p vela-tooling
 pub mod cli;
 pub mod build;
 pub mod lsp;
+pub mod dap;
 pub mod common;
 pub mod package;
 

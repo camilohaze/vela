@@ -1,0 +1,7 @@
+import 'stdlib:test'
+
+// Ejemplo de programa reactivo con señales y valores computados
+fn main() -> void {
+    result: Number = 42
+    print("Reactive program initialized with result: ${result}")
+}

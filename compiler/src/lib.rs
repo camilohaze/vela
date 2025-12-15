@@ -23,6 +23,9 @@ The compiler follows a modular pipeline architecture:
 
 pub mod ast;
 pub mod bytecode;
+pub mod debug_info;
+#[cfg(test)]
+pub mod debug_info_tests;
 pub mod config;
 pub mod error;
 pub mod ir;
@@ -213,6 +216,16 @@ impl Compiler {
             };
             
             bytecode.code_objects.push(code_obj);
+        }
+        
+        // Incluir debug info en metadata si existe
+        if let Some(debug_info) = program.debug_info {
+            let debug_bytes = bincode::serialize(&debug_info)
+                .map_err(|e| CompileError::Codegen(CodegenError {
+                    message: format!("Failed to serialize debug info: {}", e),
+                    location: None,
+                }))?;
+            bytecode.metadata.insert("debug_info".to_string(), debug_bytes);
         }
         
         Ok(bytecode)

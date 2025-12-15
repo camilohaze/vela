@@ -1,0 +1,76 @@
+// Fixture: Programa Vela grande con muchas señales
+// Usado para testing de performance y manejo de programas grandes
+
+// Generar 50 señales básicas
+state signal_0: Number = 0
+state signal_1: Number = 1
+state signal_2: Number = 2
+state signal_3: Number = 3
+state signal_4: Number = 4
+state signal_5: Number = 5
+state signal_6: Number = 6
+state signal_7: Number = 7
+state signal_8: Number = 8
+state signal_9: Number = 9
+state signal_10: Number = 10
+state signal_11: Number = 11
+state signal_12: Number = 12
+state signal_13: Number = 13
+state signal_14: Number = 14
+state signal_15: Number = 15
+state signal_16: Number = 16
+state signal_17: Number = 17
+state signal_18: Number = 18
+state signal_19: Number = 19
+state signal_20: Number = 20
+state signal_21: Number = 21
+state signal_22: Number = 22
+state signal_23: Number = 23
+state signal_24: Number = 24
+state signal_25: Number = 25
+state signal_26: Number = 26
+state signal_27: Number = 27
+state signal_28: Number = 28
+state signal_29: Number = 29
+state signal_30: Number = 30
+state signal_31: Number = 31
+state signal_32: Number = 32
+state signal_33: Number = 33
+state signal_34: Number = 34
+state signal_35: Number = 35
+state signal_36: Number = 36
+state signal_37: Number = 37
+state signal_38: Number = 38
+state signal_39: Number = 39
+state signal_40: Number = 40
+state signal_41: Number = 41
+state signal_42: Number = 42
+state signal_43: Number = 43
+state signal_44: Number = 44
+state signal_45: Number = 45
+state signal_46: Number = 46
+state signal_47: Number = 47
+state signal_48: Number = 48
+state signal_49: Number = 49
+
+// Computed signals que dependen de las anteriores
+computed sum_all: Number {
+  return signal_0 + signal_1 + signal_2 + signal_3 + signal_4 +
+         signal_5 + signal_6 + signal_7 + signal_8 + signal_9 +
+         signal_10 + signal_11 + signal_12 + signal_13 + signal_14 +
+         signal_15 + signal_16 + signal_17 + signal_18 + signal_19 +
+         signal_20 + signal_21 + signal_22 + signal_23 + signal_24 +
+         signal_25 + signal_26 + signal_27 + signal_28 + signal_29 +
+         signal_30 + signal_31 + signal_32 + signal_33 + signal_34 +
+         signal_35 + signal_36 + signal_37 + signal_38 + signal_39 +
+         signal_40 + signal_41 + signal_42 + signal_43 + signal_44 +
+         signal_45 + signal_46 + signal_47 + signal_48 + signal_49
+}
+
+computed average: Float {
+  return sum_all / 50.0
+}
+
+computed status: String {
+  return "Sum: ${sum_all}, Average: ${average}"
+}

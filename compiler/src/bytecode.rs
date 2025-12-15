@@ -18,6 +18,8 @@ pub struct BytecodeProgram {
     pub functions: Vec<BytecodeFunction>,
     /// Constantes del programa
     pub constants: Vec<Value>,
+    /// Información de debug (opcional)
+    pub debug_info: Option<crate::debug_info::DebugInfo>,
 }
 
 impl BytecodeProgram {
@@ -25,12 +27,23 @@ impl BytecodeProgram {
         Self {
             functions: Vec::new(),
             constants: Vec::new(),
+            debug_info: None,
         }
     }
 
     /// Agregar una función al programa
     pub fn add_function(&mut self, function: BytecodeFunction) {
         self.functions.push(function);
+    }
+
+    /// Establecer información de debug
+    pub fn set_debug_info(&mut self, debug_info: crate::debug_info::DebugInfo) {
+        self.debug_info = Some(debug_info);
+    }
+
+    /// Obtener información de debug
+    pub fn get_debug_info(&self) -> Option<&crate::debug_info::DebugInfo> {
+        self.debug_info.as_ref()
     }
 
     /// Serializar el programa a bytes

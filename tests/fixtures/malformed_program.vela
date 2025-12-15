@@ -1,0 +1,11 @@
+// Fixture: Programa Vela malformado
+// Usado para testing de error handling
+
+state x: Number = "string"  // Error de tipos
+computed y { return x }     // Sintaxis incorrecta - falta tipo de retorno
+state z: Number =           // Incompleto
+
+// Código inválido
+fn broken() -> void {
+  return "string"  // Error de tipos
+}

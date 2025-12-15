@@ -12,6 +12,7 @@ genera código eficiente.
 use std::collections::HashMap;
 use crate::ir::{IRModule, IRFunction, IRInstruction, IRType, Value as IRValue, BinaryOp, UnaryOp, Label};
 use crate::bytecode::{BytecodeProgram, BytecodeFunction, Value as BytecodeValue, Opcode};
+use crate::debug_info::{DebugInfoGenerator, SourceLocation};
 use crate::error::{CompileError, CompileResult, CodegenError};
 
 /// Generador de bytecode desde IR
@@ -30,6 +31,10 @@ pub struct IRToBytecodeGenerator {
     labels: HashMap<Label, usize>,
     /// Labels pendientes de resolver
     pending_labels: HashMap<Label, Vec<usize>>,
+    /// Generador de información de debug
+    debug_generator: DebugInfoGenerator,
+    /// Ubicación fuente actual
+    current_source_location: Option<SourceLocation>,
 }
 
 impl IRToBytecodeGenerator {
@@ -42,6 +47,8 @@ impl IRToBytecodeGenerator {
             function_counter: 0,
             labels: HashMap::new(),
             pending_labels: HashMap::new(),
+            debug_generator: DebugInfoGenerator::new(),
+            current_source_location: None,
         }
     }
 
@@ -72,6 +79,10 @@ impl IRToBytecodeGenerator {
         // Agregar constantes
         program.constants = self.constants.clone();
 
+        // Agregar información de debug
+        let debug_info = self.debug_generator.get_debug_info().clone();
+        program.set_debug_info(debug_info);
+
         Ok(program)
     }
 
@@ -82,11 +93,22 @@ impl IRToBytecodeGenerator {
         self.labels.clear();
         self.pending_labels.clear();
 
+        // Iniciar tracking de debug info para esta función
+        let function_start_offset = 0; // Se calculará después
+        self.debug_generator.start_function(function.name.clone(), function_start_offset);
+
         // Registrar parámetros como variables locales
-        for param in &function.params {
+        for (i, param) in function.params.iter().enumerate() {
             let local_index = self.local_counter;
             self.local_symbols.insert(param.name.clone(), local_index);
             self.local_counter += 1;
+
+            // Agregar parámetro a debug info
+            self.debug_generator.add_parameter(
+                param.name.clone(),
+                format!("{:?}", param.ty), // Convertir tipo a string
+                i
+            );
         }
 
         // Registrar otras variables locales
@@ -94,11 +116,20 @@ impl IRToBytecodeGenerator {
             let local_index = self.local_counter;
             self.local_symbols.insert(local.name.clone(), local_index);
             self.local_counter += 1;
+
+            // Agregar variable local a debug info
+            self.debug_generator.add_local(
+                local.name.clone(),
+                format!("{:?}", local.ty), // Convertir tipo a string
+                crate::debug_info::VariableLocation::Stack(local_index)
+            );
         }
 
         let mut bytecode = Vec::new();
 
-        // Primera pasada: generar bytecode y registrar labels
+        // Iniciar tracking de debug info para esta función con offset correcto
+        let function_start_offset = bytecode.len();
+        self.debug_generator.start_function(function.name.clone(), function_start_offset);
         for instruction in &function.body {
             match instruction {
                 IRInstruction::Label(label) => {
@@ -106,8 +137,7 @@ impl IRToBytecodeGenerator {
                     self.labels.insert(label.clone(), position);
                 }
                 _ => {
-                    let instr_bytes = self.generate_instruction(instruction)?;
-                    bytecode.extend(instr_bytes);
+                    self.generate_instruction_with_debug(instruction, &mut bytecode)?;
                 }
             }
         }
@@ -115,7 +145,30 @@ impl IRToBytecodeGenerator {
         // Resolver labels pendientes
         self.resolve_labels(&mut bytecode)?;
 
+        // Finalizar tracking de debug info para esta función
+        let function_end_offset = bytecode.len();
+        self.debug_generator.end_function(function_end_offset);
+
         Ok(bytecode)
+    }
+
+    /// Registrar ubicación fuente actual
+    pub fn set_source_location(&mut self, line: usize, column: usize) {
+        self.current_source_location = Some(SourceLocation::new(line, column));
+    }
+
+    /// Generar bytecode para una instrucción IR con tracking de debug
+    fn generate_instruction_with_debug(&mut self, instruction: &IRInstruction, bytecode: &mut Vec<u8>) -> CompileResult<()> {
+        let instr_bytes = self.generate_instruction(instruction)?;
+        let offset = bytecode.len();
+
+        // Registrar mapeo de línea si hay ubicación fuente
+        if let Some(location) = self.current_source_location {
+            self.debug_generator.record_line_mapping(location.line, location.column, offset);
+        }
+
+        bytecode.extend(instr_bytes);
+        Ok(())
     }
 
     /// Generar bytecode para una instrucción IR
@@ -388,17 +441,6 @@ impl IROptimizer {
                 function.body.truncate(i + 1);
                 break;
             }
-        }
-    }
-
-    /// Convertir valor IR a valor bytecode
-    fn convert_ir_value_to_bytecode(&self, value: &crate::ir::Value) -> BytecodeValue {
-        match value {
-            crate::ir::Value::Bool(b) => BytecodeValue::Bool(*b),
-            crate::ir::Value::Int(i) => BytecodeValue::Int(*i),
-            crate::ir::Value::Float(f) => BytecodeValue::Float(*f),
-            crate::ir::Value::String(s) => BytecodeValue::String(s.clone()),
-            crate::ir::Value::Null => BytecodeValue::Null,
         }
     }
 }
