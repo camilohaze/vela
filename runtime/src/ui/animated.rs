@@ -81,15 +81,392 @@ impl<T> Tween<T> {
     }
 }
 
-/// Controls the playback of an animation
+/// Status of an animation
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum AnimationStatus {
+    Idle,
+    Running,
+    Paused,
+    Completed,
+    Cancelled,
+}
+
+/// Callbacks for animation events
+#[derive(Default)]
+pub struct AnimationCallbacks {
+    pub on_start: Option<Box<dyn Fn() + Send + Sync>>,
+    pub on_update: Option<Box<dyn Fn(f32) + Send + Sync>>,
+    pub on_complete: Option<Box<dyn Fn() + Send + Sync>>,
+    pub on_cancel: Option<Box<dyn Fn() + Send + Sync>>,
+}
+
+/// Advanced Animation Controller with full control features
 #[derive(Debug)]
-pub struct AnimationController {
+pub struct AdvancedAnimationController {
     duration: Duration,
     curve: Curve,
     start_time: Option<Instant>,
-    is_playing: bool,
-    is_completed: bool,
+    pause_time: Option<Instant>,
+    status: AnimationStatus,
     progress_signal: Signal<f32>,
+    callbacks: AnimationCallbacks,
+    repeat_count: Option<u32>,
+    current_repeat: u32,
+    auto_reverse: bool,
+    is_reversing: bool,
+    speed: f32,
+}
+
+impl AdvancedAnimationController {
+    pub fn new(duration: Duration) -> Self {
+        Self {
+            duration,
+            curve: Curve::Linear,
+            start_time: None,
+            pause_time: None,
+            status: AnimationStatus::Idle,
+            progress_signal: Signal::new(0.0),
+            callbacks: AnimationCallbacks::default(),
+            repeat_count: None,
+            current_repeat: 0,
+            auto_reverse: false,
+            is_reversing: false,
+            speed: 1.0,
+        }
+    }
+
+    pub fn with_curve(mut self, curve: Curve) -> Self {
+        self.curve = curve;
+        self
+    }
+
+    pub fn with_callbacks(mut self, callbacks: AnimationCallbacks) -> Self {
+        self.callbacks = callbacks;
+        self
+    }
+
+    pub fn repeat(mut self, count: u32) -> Self {
+        self.repeat_count = Some(count);
+        self
+    }
+
+    pub fn auto_reverse(mut self, auto_reverse: bool) -> Self {
+        self.auto_reverse = auto_reverse;
+        self
+    }
+
+    pub fn speed(mut self, speed: f32) -> Self {
+        self.speed = speed.max(0.1); // Minimum speed to avoid division by zero
+        self
+    }
+
+    pub fn forward(&mut self) {
+        if self.status == AnimationStatus::Idle || self.status == AnimationStatus::Completed {
+            self.start_time = Some(Instant::now());
+            self.pause_time = None;
+            self.status = AnimationStatus::Running;
+            self.current_repeat = 0;
+            self.is_reversing = false;
+            if let Some(ref callback) = self.callbacks.on_start {
+                callback();
+            }
+        } else if self.status == AnimationStatus::Paused {
+            // Resume from pause
+            if let Some(pause_time) = self.pause_time {
+                let paused_duration = Instant::now().duration_since(pause_time);
+                self.start_time = Some(self.start_time.unwrap() + paused_duration);
+            }
+            self.pause_time = None;
+            self.status = AnimationStatus::Running;
+        }
+    }
+
+    pub fn reverse(&mut self) {
+        if self.status == AnimationStatus::Idle || self.status == AnimationStatus::Completed {
+            self.start_time = Some(Instant::now());
+            self.pause_time = None;
+            self.status = AnimationStatus::Running;
+            self.is_reversing = true;
+            if let Some(ref callback) = self.callbacks.on_start {
+                callback();
+            }
+        }
+    }
+
+    pub fn pause(&mut self) {
+        if self.status == AnimationStatus::Running {
+            self.pause_time = Some(Instant::now());
+            self.status = AnimationStatus::Paused;
+        }
+    }
+
+    pub fn stop(&mut self) {
+        self.status = AnimationStatus::Idle;
+        self.start_time = None;
+        self.pause_time = None;
+        self.progress_signal.set(0.0);
+        self.current_repeat = 0;
+        self.is_reversing = false;
+        if let Some(ref callback) = self.callbacks.on_cancel {
+            callback();
+        }
+    }
+
+    pub fn reset(&mut self) {
+        self.stop();
+        self.status = AnimationStatus::Idle;
+    }
+
+    pub fn cancel(&mut self) {
+        self.status = AnimationStatus::Cancelled;
+        if let Some(ref callback) = self.callbacks.on_cancel {
+            callback();
+        }
+    }
+
+    /// Update animation progress and return current value
+    pub fn update(&mut self) -> f32 {
+        if self.status != AnimationStatus::Running || self.start_time.is_none() {
+            return self.progress_signal.get();
+        }
+
+        let elapsed = self.start_time.unwrap().elapsed();
+        let adjusted_duration = self.duration.div_f32(self.speed);
+        let raw_progress = (elapsed.as_secs_f32() / adjusted_duration.as_secs_f32()).min(1.0);
+
+        let progress = if self.is_reversing {
+            1.0 - raw_progress
+        } else {
+            raw_progress
+        };
+
+        let curved_progress = self.curve.transform(progress);
+        self.progress_signal.set(curved_progress);
+
+        if let Some(ref callback) = self.callbacks.on_update {
+            callback(curved_progress);
+        }
+
+        if progress >= 1.0 {
+            self.handle_completion();
+        }
+
+        curved_progress
+    }
+
+    fn handle_completion(&mut self) {
+        if self.auto_reverse && !self.is_reversing {
+            // Start reverse animation
+            self.is_reversing = true;
+            self.start_time = Some(Instant::now());
+        } else if let Some(max_repeats) = self.repeat_count {
+            if self.current_repeat < max_repeats {
+                // Start next repeat
+                self.current_repeat += 1;
+                self.start_time = Some(Instant::now());
+                self.is_reversing = false;
+            } else {
+                // Animation fully completed
+                self.status = AnimationStatus::Completed;
+                self.progress_signal.set(if self.is_reversing { 0.0 } else { 1.0 });
+                if let Some(ref callback) = self.callbacks.on_complete {
+                    callback();
+                }
+            }
+        } else {
+            // Single animation completed
+            self.status = AnimationStatus::Completed;
+            self.progress_signal.set(if self.is_reversing { 0.0 } else { 1.0 });
+            if let Some(ref callback) = self.callbacks.on_complete {
+                callback();
+            }
+        }
+    }
+
+    pub fn status(&self) -> AnimationStatus {
+        self.status
+    }
+
+    pub fn progress(&self) -> f32 {
+        self.progress_signal.get()
+    }
+
+    pub fn progress_signal(&self) -> &Signal<f32> {
+        &self.progress_signal
+    }
+
+    pub fn is_completed(&self) -> bool {
+        self.status == AnimationStatus::Completed
+    }
+
+    pub fn is_running(&self) -> bool {
+        self.status == AnimationStatus::Running
+    }
+
+    pub fn is_paused(&self) -> bool {
+        self.status == AnimationStatus::Paused
+    }
+
+    pub fn current_repeat(&self) -> u32 {
+        self.current_repeat
+    }
+
+/// Animation that can be sequenced or run in parallel
+pub trait Animation {
+    fn update(&mut self) -> f32;
+    fn is_completed(&self) -> bool;
+    fn reset(&mut self);
+}
+
+/// Sequence of animations that play one after another
+pub struct AnimationSequence {
+    animations: Vec<Box<dyn Animation>>,
+    current_index: usize,
+    is_completed: bool,
+}
+
+impl AnimationSequence {
+    pub fn new() -> Self {
+        Self {
+            animations: Vec::new(),
+            current_index: 0,
+            is_completed: false,
+        }
+    }
+
+    pub fn add_animation(mut self, animation: Box<dyn Animation>) -> Self {
+        self.animations.push(animation);
+        self
+    }
+}
+
+impl Animation for AnimationSequence {
+    fn update(&mut self) -> f32 {
+        if self.is_completed || self.animations.is_empty() {
+            return 1.0;
+        }
+
+        let current_anim = &mut self.animations[self.current_index];
+        let progress = current_anim.update();
+
+        if current_anim.is_completed() {
+            self.current_index += 1;
+            if self.current_index >= self.animations.len() {
+                self.is_completed = true;
+                return 1.0;
+            }
+        }
+
+        // Return overall progress
+        (self.current_index as f32 + progress) / self.animations.len() as f32
+    }
+
+    fn is_completed(&self) -> bool {
+        self.is_completed
+    }
+
+    fn reset(&mut self) {
+        self.current_index = 0;
+        self.is_completed = false;
+        for anim in &mut self.animations {
+            anim.reset();
+        }
+    }
+}
+
+/// Animations that run in parallel
+pub struct AnimationParallel {
+    animations: Vec<Box<dyn Animation>>,
+    is_completed: bool,
+}
+
+impl AnimationParallel {
+    pub fn new() -> Self {
+        Self {
+            animations: Vec::new(),
+            is_completed: false,
+        }
+    }
+
+    pub fn add_animation(mut self, animation: Box<dyn Animation>) -> Self {
+        self.animations.push(animation);
+        self
+    }
+}
+
+impl Animation for AnimationParallel {
+    fn update(&mut self) -> f32 {
+        if self.is_completed || self.animations.is_empty() {
+            return 1.0;
+        }
+
+        let mut total_progress = 0.0;
+        let mut all_completed = true;
+
+        for anim in &mut self.animations {
+            let progress = anim.update();
+            total_progress += progress;
+            if !anim.is_completed() {
+                all_completed = false;
+            }
+        }
+
+        if all_completed {
+            self.is_completed = true;
+            return 1.0;
+        }
+
+        total_progress / self.animations.len() as f32
+    }
+
+    fn is_completed(&self) -> bool {
+        self.is_completed
+    }
+
+    fn reset(&mut self) {
+        self.is_completed = false;
+        for anim in &mut self.animations {
+            anim.reset();
+        }
+    }
+}
+
+// Wrapper to make AnimationController implement Animation trait
+pub struct AnimationControllerWrapper {
+    pub controller: AnimationController,
+}
+
+impl Animation for AnimationControllerWrapper {
+    fn update(&mut self) -> f32 {
+        self.controller.update()
+    }
+
+    fn is_completed(&self) -> bool {
+        self.controller.is_completed()
+    }
+
+    fn reset(&mut self) {
+        self.controller.reset()
+    }
+}
+
+// Wrapper for AdvancedAnimationController
+pub struct AdvancedAnimationControllerWrapper {
+    pub controller: AdvancedAnimationController,
+}
+
+impl Animation for AdvancedAnimationControllerWrapper {
+    fn update(&mut self) -> f32 {
+        self.controller.update()
+    }
+
+    fn is_completed(&self) -> bool {
+        self.controller.is_completed()
+    }
+
+    fn reset(&mut self) {
+        self.controller.reset()
+    }
 }
 
 impl AnimationController {

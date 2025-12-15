@@ -4,4 +4,9 @@
 
 pub mod animated;
 
-pub use animated::{Animated, AnimationController, Curve, Tween, AnimatedBuilder, Widget};
+pub use animated::{
+    Animated, AnimationController, Curve, Tween, AnimatedBuilder, Widget,
+    AnimationStatus, AnimationCallbacks, AdvancedAnimationController,
+    Animation, AnimationSequence, AnimationParallel,
+    AnimationControllerWrapper, AdvancedAnimationControllerWrapper
+};
