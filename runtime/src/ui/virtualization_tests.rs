@@ -254,4 +254,146 @@ mod tests {
         let visible_count = list_view.get_visible_item_count();
         assert!(visible_count <= 6); // 2-3 visible + overscan
     }
+
+    #[test]
+    fn test_grid_viewport_manager_basic() {
+        let config = GridVirtualizationConfig {
+            item_width: 100.0,
+            item_height: 100.0,
+            columns: 3,
+            overscan_count: 1,
+            max_pool_size: 20,
+        };
+
+        let manager = GridViewportManager::new(&config, 300.0, 200.0, 100);
+
+        // Test initial visible range
+        let range = manager.get_visible_range();
+        assert_eq!(range.start_item, 0);
+        assert_eq!(range.end_item, 12); // 2 rows * 3 cols + overscan
+
+        // Test total size
+        let (width, height) = manager.get_total_size();
+        assert_eq!(width, 300.0); // 3 columns * 100
+        assert_eq!(height, 3400.0); // ~34 rows * 100
+    }
+
+    #[test]
+    fn test_grid_viewport_manager_scrolling() {
+        let config = GridVirtualizationConfig {
+            item_width: 100.0,
+            item_height: 100.0,
+            columns: 4,
+            overscan_count: 1,
+            max_pool_size: 20,
+        };
+
+        let mut manager = GridViewportManager::new(&config, 400.0, 200.0, 100);
+
+        // Scroll down and right
+        manager.set_scroll_position(100.0, 200.0);
+        let range = manager.get_visible_range();
+
+        // Should show items from row 2-4, cols 1-4
+        assert!(range.start_item >= 8); // Row 2 * 4 cols
+        assert!(range.end_item <= 24); // Row 4 * 4 cols
+    }
+
+    #[test]
+    fn test_grid_viewport_manager_item_position() {
+        let config = GridVirtualizationConfig {
+            item_width: 50.0,
+            item_height: 50.0,
+            columns: 5,
+            overscan_count: 1,
+            max_pool_size: 20,
+        };
+
+        let manager = GridViewportManager::new(&config, 250.0, 100.0, 100);
+
+        // Item at index 7 (row 1, col 2)
+        let (x, y) = manager.get_item_position(7);
+        assert_eq!(x, 100.0); // col 2 * 50
+        assert_eq!(y, 50.0);  // row 1 * 50
+
+        // Item at index 15 (row 3, col 0)
+        let (x, y) = manager.get_item_position(15);
+        assert_eq!(x, 0.0);   // col 0 * 50
+        assert_eq!(y, 150.0); // row 3 * 50
+    }
+
+    #[test]
+    fn test_virtualized_grid_view_initialization() {
+        let config = GridVirtualizationConfig {
+            item_width: 100.0,
+            item_height: 100.0,
+            columns: 3,
+            overscan_count: 2,
+            max_pool_size: 20,
+        };
+
+        let items = (0..50).collect::<Vec<_>>();
+        let grid_view = VirtualizedGridView::new(config, &items, |&item| {
+            Box::new(TestWidget::new(item))
+        });
+
+        let (width, height) = grid_view.get_total_size();
+        assert_eq!(width, 300.0); // 3 columns * 100
+        assert_eq!(height, 1700.0); // ~17 rows * 100
+    }
+
+    #[test]
+    fn test_virtualized_grid_view_scrolling() {
+        let config = GridVirtualizationConfig {
+            item_width: 100.0,
+            item_height: 100.0,
+            columns: 4,
+            overscan_count: 1,
+            max_pool_size: 30,
+        };
+
+        let items = (0..100).collect::<Vec<_>>();
+        let mut grid_view = VirtualizedGridView::new(config, &items, |&item| {
+            Box::new(TestWidget::new(item))
+        });
+
+        // Initially should have some rendered items
+        grid_view.update_visible_items();
+        let initial_count = grid_view.rendered_items.len();
+        assert!(initial_count > 0);
+
+        // Scroll to different position
+        grid_view.set_scroll_position(200.0, 300.0);
+        let scrolled_count = grid_view.rendered_items.len();
+        assert!(scrolled_count > 0);
+
+        // Should have different items rendered
+        // (This is a basic check - in real implementation we'd verify specific indices)
+    }
+
+    #[test]
+    fn test_grid_view_memory_efficiency() {
+        let config = GridVirtualizationConfig {
+            item_width: 50.0,
+            item_height: 50.0,
+            columns: 10,
+            overscan_count: 2,
+            max_pool_size: 50,
+        };
+
+        // Large grid: 1000 items in 10x10 layout
+        let items = (0..1000).collect::<Vec<_>>();
+        let mut grid_view = VirtualizedGridView::new(config, &items, |&item| {
+            Box::new(TestWidget::new(item))
+        });
+
+        grid_view.update_visible_items();
+
+        // With viewport of 800x600, should only render visible portion
+        // 800/50 = 16 cols, 600/50 = 12 rows = ~192 items visible
+        // With overscan: ~300 items max
+        let rendered_count = grid_view.rendered_items.len();
+        assert!(rendered_count <= 400); // Much less than 1000 total
+        assert!(rendered_count > 0);
+    }
 }

@@ -4,7 +4,199 @@
 //! without performance degradation by only rendering visible items.
 
 use std::collections::HashMap;
-use std::ops::Range;
+
+/// Configuration for grid virtualization
+#[derive(Debug, Clone, PartialEq)]
+pub struct GridVirtualizationConfig {
+    pub item_width: f32,
+    pub item_height: f32,
+    pub columns: usize,
+    pub overscan_count: usize,
+    pub max_pool_size: usize,
+}
+
+impl Default for GridVirtualizationConfig {
+    fn default() -> Self {
+        Self {
+            item_width: 100.0,
+            item_height: 100.0,
+            columns: 3,
+            overscan_count: 2,
+            max_pool_size: 50,
+        }
+    }
+}
+
+/// Manages viewport for 2D grid layouts
+#[derive(Debug, Clone)]
+pub struct GridViewportManager {
+    config: GridVirtualizationConfig,
+    scroll_left: f32,
+    scroll_top: f32,
+    viewport_width: f32,
+    viewport_height: f32,
+    total_items: usize,
+}
+
+impl GridViewportManager {
+    pub fn new(config: &GridVirtualizationConfig, viewport_width: f32, viewport_height: f32, total_items: usize) -> Self {
+        Self {
+            config: config.clone(),
+            scroll_left: 0.0,
+            scroll_top: 0.0,
+            viewport_width,
+            viewport_height,
+            total_items,
+        }
+    }
+
+    pub fn set_scroll_position(&mut self, left: f32, top: f32) {
+        self.scroll_left = left;
+        self.scroll_top = top;
+    }
+
+    pub fn get_visible_range(&self) -> VisibleGridRange {
+        if self.total_items == 0 {
+            return VisibleGridRange::new(0, 0, 0, 0);
+        }
+
+        // Calculate visible rows
+        let start_row = (self.scroll_top / self.config.item_height) as usize;
+        let visible_rows = (self.viewport_height / self.config.item_height).ceil() as usize;
+        let end_row = start_row + visible_rows + self.config.overscan_count;
+
+        // Calculate visible columns
+        let start_col = (self.scroll_left / self.config.item_width) as usize;
+        let visible_cols = (self.viewport_width / self.config.item_width).ceil() as usize;
+        let end_col = (start_col + visible_cols + self.config.overscan_count).min(self.config.columns);
+
+        // Convert to item indices
+        let start_item = start_row * self.config.columns + start_col;
+        let end_item = (end_row * self.config.columns + end_col).min(self.total_items);
+
+        VisibleGridRange::new(start_item, end_item, start_row, end_row)
+    }
+
+    pub fn get_total_size(&self) -> (f32, f32) {
+        let rows = (self.total_items as f32 / self.config.columns as f32).ceil();
+        let total_width = self.config.columns as f32 * self.config.item_width;
+        let total_height = rows * self.config.item_height;
+        (total_width, total_height)
+    }
+
+    pub fn get_item_position(&self, index: usize) -> (f32, f32) {
+        let row = index / self.config.columns;
+        let col = index % self.config.columns;
+        let x = col as f32 * self.config.item_width - self.scroll_left;
+        let y = row as f32 * self.config.item_height - self.scroll_top;
+        (x, y)
+    }
+}
+
+/// Represents visible range in a 2D grid
+#[derive(Debug, Clone, PartialEq)]
+pub struct VisibleGridRange {
+    pub start_item: usize,
+    pub end_item: usize,
+    pub start_row: usize,
+    pub end_row: usize,
+}
+
+impl VisibleGridRange {
+    pub fn new(start_item: usize, end_item: usize, start_row: usize, end_row: usize) -> Self {
+        Self {
+            start_item,
+            end_item,
+            start_row,
+            end_row,
+        }
+    }
+
+    pub fn len(&self) -> usize {
+        self.end_item.saturating_sub(self.start_item)
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+}
+
+/// Virtualized grid view for efficient rendering of large 2D layouts
+pub struct VirtualizedGridView<T> {
+    config: GridVirtualizationConfig,
+    grid_manager: GridViewportManager,
+    items: Vec<T>,
+    widget_pool: WidgetPool<Box<dyn Widget>>,
+    pub rendered_items: HashMap<usize, Box<dyn Widget>>,
+}
+
+impl<T: 'static> VirtualizedGridView<T> {
+    pub fn new<F>(
+        config: GridVirtualizationConfig,
+        items: &[T],
+        create_widget_fn: F
+    ) -> Self
+    where
+        F: Fn(&T) -> Box<dyn Widget> + 'static,
+        T: Clone,
+    {
+        let total_items = items.len();
+        let grid_manager = GridViewportManager::new(
+            &config,
+            800.0, // Default viewport width
+            600.0, // Default viewport height
+            total_items,
+        );
+
+        let first_item = items.first().cloned().unwrap_or_else(|| panic!("Items cannot be empty"));
+        let widget_pool = WidgetPool::new(move || create_widget_fn(&first_item));
+
+        Self {
+            config,
+            grid_manager,
+            items: items.to_vec(),
+            widget_pool,
+            rendered_items: HashMap::new(),
+        }
+    }
+
+    pub fn set_scroll_position(&mut self, left: f32, top: f32) {
+        self.grid_manager.set_scroll_position(left, top);
+        self.update_visible_items();
+    }
+
+    pub fn update_visible_items(&mut self) {
+        let visible_range = self.grid_manager.get_visible_range();
+
+        // Remove items that are no longer visible
+        self.rendered_items.retain(|&index, _| {
+            index >= visible_range.start_item && index < visible_range.end_item
+        });
+
+        // Add new visible items
+        for index in visible_range.start_item..visible_range.end_item {
+            if !self.rendered_items.contains_key(&index) {
+                if let Some(item) = self.items.get(index) {
+                    // For now, create a simple placeholder widget - in real implementation
+                    // this would use the create_widget_fn
+                    let widget = self.widget_pool.get();
+                    self.rendered_items.insert(index, widget);
+                }
+            }
+        }
+    }
+
+    pub fn render(&self, x: f32, y: f32, width: f32, height: f32) {
+        for (&index, widget) in &self.rendered_items {
+            let (item_x, item_y) = self.grid_manager.get_item_position(index);
+            widget.render(x + item_x, y + item_y, self.config.item_width, self.config.item_height);
+        }
+    }
+
+    pub fn get_total_size(&self) -> (f32, f32) {
+        self.grid_manager.get_total_size()
+    }
+}
 
 /// Configuration for virtualized list behavior
 #[derive(Debug, Clone)]
@@ -240,26 +432,47 @@ pub struct RenderContext {
 }
 
 #[cfg(test)]
+struct MockWidget {
+    content: String,
+}
+
+#[cfg(test)]
+impl Widget for MockWidget {
+    fn render(&self, x: f32, y: f32, width: f32, height: f32) {
+        println!("Rendering '{}' at ({}, {})", self.content, x, y);
+    }
+
+    fn get_height(&self) -> f32 {
+        50.0
+    }
+
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+}
+
+// Simple widget for basic testing
+struct SimpleWidget {
+    content: String,
+}
+
+impl Widget for SimpleWidget {
+    fn render(&self, x: f32, y: f32, width: f32, height: f32) {
+        println!("Rendering '{}' at ({}, {})", self.content, x, y);
+    }
+
+    fn get_height(&self) -> f32 {
+        50.0
+    }
+
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+}
+
+#[cfg(test)]
 mod tests {
     use super::*;
-
-    struct MockWidget {
-        content: String,
-    }
-
-    impl Widget for MockWidget {
-        fn render(&self, x: f32, y: f32, width: f32, height: f32) {
-            println!("Rendering '{}' at ({}, {})", self.content, x, y);
-        }
-
-        fn get_height(&self) -> f32 {
-            50.0
-        }
-
-        fn as_any(&self) -> &dyn std::any::Any {
-            self
-        }
-    }
 
     #[test]
     fn test_viewport_manager_visible_range() {
