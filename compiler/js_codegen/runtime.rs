@@ -1071,10 +1071,10 @@ mod tests {
         let runtime = VELA_RUNTIME_JS;
 
         // Check that reactive API methods are present
-        assert!(runtime.contains("vela.state"));
-        assert!(runtime.contains("vela.computed"));
-        assert!(runtime.contains("vela.effect"));
-        assert!(runtime.contains("vela.batch"));
-        assert!(runtime.contains("vela.readonly"));
+        assert!(runtime.contains("state:"));
+        assert!(runtime.contains("computed:"));
+        assert!(runtime.contains("effect:"));
+        assert!(runtime.contains("batch:"));
+        assert!(runtime.contains("readonly:"));
     }
 }

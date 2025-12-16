@@ -1,6 +1,6 @@
 //! Tests for DOM Renderer functionality
 
-use super::runtime::VELA_RUNTIME_JS;
+use vela_compiler::js_codegen::runtime::VELA_RUNTIME_JS;
 
 /// Test that DOM renderer classes are present
 #[test]

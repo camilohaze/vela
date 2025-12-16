@@ -353,6 +353,7 @@ mod tests {
             locals: vec![],
             body: vec![],
             position: None,
+            is_async: false,
         };
 
         let module = IRModule {
@@ -383,6 +384,7 @@ mod tests {
             locals: vec![],
             body: vec![],
             position: None,
+            is_async: false,
         };
 
         let module = IRModule {

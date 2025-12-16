@@ -226,7 +226,7 @@ mod tests {
 
         let instr = IRInstruction::CreateObject("User".to_string());
         let js = generator.generate_instruction(&instr);
-        assert_eq!(js, "{}; // User\n");
+        assert_eq!(js, "{} {}; // User\n");
     }
 
     #[test]

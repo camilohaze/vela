@@ -11,8 +11,8 @@ desde IR hasta código ejecutable.
 
 #[cfg(test)]
 mod tests {
-    use crate::ir::{IRModule, IRFunction, IRType, IRInstruction, Value, BinaryOp};
-    use crate::js_codegen::codegen::JSCodegen;
+    use vela_compiler::ir::{IRModule, IRFunction, IRType, IRInstruction, Value, BinaryOp};
+    use vela_compiler::js_codegen::codegen::JSCodegen;
 
     #[test]
     fn test_complete_program_compilation() {

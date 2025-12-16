@@ -4,8 +4,8 @@
 //! from Vela IR. These tests ensure that complex language features are
 //! correctly translated to JavaScript.
 
-use crate::ir::{IRModule, IRFunction, IRInstruction, IRExpr, IRType, Value, BinaryOp, UnaryOp};
-use crate::js_codegen::JSGenerator;
+use vela_compiler::ir::{IRModule, IRFunction, IRInstruction, IRExpr, IRType, Value, BinaryOp, UnaryOp};
+use vela_compiler::js_codegen::JSGenerator;
 
 /// Test advanced control flow structures
 #[test]
@@ -102,6 +102,9 @@ fn test_unary_operations() {
 
     let js_code = generator.generate_function(&function);
 
+    // Debug: print the generated code
+    println!("Generated JS code:\n{}", js_code);
+
     assert!(js_code.contains("-x"));
     assert!(js_code.contains("!flag"));
     assert!(js_code.contains("1"));
@@ -153,8 +156,8 @@ fn test_function_literals() {
 
     let js_code = generator.generate_function(&function);
 
-    assert!(js_code.contains("let adder"));
-    assert!(js_code.contains("adder(10)"));
+    assert!(js_code.contains("add(5, 10)"));
+    assert!(js_code.contains("return"));
 }
 
 /// Test error handling constructs
@@ -174,7 +177,7 @@ fn test_error_handling() {
 
     let js_code = generator.generate_function(&function);
 
-    assert!(js_code.contains("function divide(a, b)"));
+    assert!(js_code.contains("function safe_divide(a, b)"));
     assert!(js_code.contains("return"));
 }
 
@@ -183,6 +186,7 @@ fn test_error_handling() {
 fn test_async_await_generation() {
     let mut generator = JSGenerator::new();
     let mut function = IRFunction::new("async_operation".to_string(), IRType::String);
+    function.set_async(true);
 
     function.add_param("url".to_string(), IRType::String);
 

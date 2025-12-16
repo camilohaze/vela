@@ -285,7 +285,10 @@ impl Parser {
         let mut parameters = Vec::new();
 
         while !self.check(TokenKind::RightParen) {
-            let pattern = self.parse_pattern()?;
+            // For function parameters, parse the parameter name directly as an identifier
+            let param_name = self.consume_identifier()?;
+            let param_start = self.tokens[self.current - param_name.len() - 1].range.start.clone();
+
             let type_annotation = if self.check(TokenKind::Colon) {
                 self.advance();
                 Some(self.parse_type_annotation()?)
@@ -299,12 +302,12 @@ impl Parser {
                 None
             };
 
-            let range = Range::new(
-                pattern.range().start.clone(),
-                self.previous_token().range.end.clone(),
-            );
+            // Create an identifier pattern for the parameter
+            let param_end = self.previous_token().range.end.clone();
+            let param_range = Range::new(param_start, param_end);
+            let pattern = Pattern::Identifier(IdentifierPattern::new(param_range.clone(), param_name));
 
-            parameters.push(Parameter::new(pattern, type_annotation, default_value, range));
+            parameters.push(Parameter::new(pattern, type_annotation, default_value, param_range));
 
             if !self.check(TokenKind::RightParen) {
                 self.consume(TokenKind::Comma)?;

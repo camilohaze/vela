@@ -1,6 +1,6 @@
 //! Tests for Vela Reactive Runtime (JavaScript signals implementation)
 
-use crate::js_codegen::runtime::VELA_RUNTIME_JS;
+use vela_compiler::js_codegen::runtime::VELA_RUNTIME_JS;
 
 /// Test that the reactive runtime contains all expected reactive functionality
 #[test]

@@ -236,5 +236,5 @@ fn test_function_with_multiple_instructions() {
     assert!(js_code.contains("let doubled: number;"));
     assert!(js_code.contains("doubled = (input * 2);"));
     assert!(js_code.contains("println();"));
-    assert!(js_code.contains("return;"));
+    assert!(js_code.contains("return _temp0;"));
 }

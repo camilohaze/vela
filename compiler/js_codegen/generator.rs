@@ -25,7 +25,9 @@ impl JSGenerator {
 
     /// Generate JavaScript code from a single function
     pub fn generate_function(&mut self, function: &IRFunction) -> String {
-        self.codegen.generate_function(function)
+        let result = self.codegen.generate_function(function);
+        println!("DEBUG: Generated JavaScript:\n{}", result);
+        result
     }
 
     /// Generate JavaScript code from an expression

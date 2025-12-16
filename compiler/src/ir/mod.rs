@@ -138,6 +138,7 @@ pub struct IRFunction {
     pub locals: Vec<IRLocal>,
     pub body: Vec<IRInstruction>,
     pub position: Option<Position>,
+    pub is_async: bool,
 }
 
 /// Parámetro de función
@@ -199,6 +200,7 @@ impl IRFunction {
             locals: Vec::new(),
             body: Vec::new(),
             position: None,
+            is_async: false,
         }
     }
 
@@ -212,5 +214,9 @@ impl IRFunction {
 
     pub fn add_instruction(&mut self, instruction: IRInstruction) {
         self.body.push(instruction);
+    }
+
+    pub fn set_async(&mut self, is_async: bool) {
+        self.is_async = is_async;
     }
 }

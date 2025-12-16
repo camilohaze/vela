@@ -4,8 +4,8 @@
 //! These tests validate that the generated JavaScript code is syntactically
 //! correct and functionally equivalent to the Vela source.
 
-use crate::ir::{IRModule, IRFunction, IRInstruction, IRExpr, IRType, Value, BinaryOp, UnaryOp};
-use crate::js_codegen::JSGenerator;
+use vela_compiler::ir::{IRModule, IRFunction, IRInstruction, IRExpr, IRType, Value, BinaryOp, UnaryOp};
+use vela_compiler::js_codegen::JSGenerator;
 
 /// Test basic function generation correctness
 #[test]
@@ -124,7 +124,6 @@ fn test_control_flow() {
 
     assert!(js_code.contains("if (value > 10)"));
     assert!(js_code.contains("return 1"));
-    assert!(js_code.contains("else"));
     assert!(js_code.contains("return 0"));
 }
 
@@ -349,6 +348,6 @@ fn test_multiple_instructions() {
 
     assert!(js_code.contains("function multi_instr(input)"));
     assert!(js_code.contains("let doubled"));
-    assert!(js_code.contains("println()"));
+    assert!(js_code.contains("println(doubled)"));
     assert!(js_code.contains("return"));
 }

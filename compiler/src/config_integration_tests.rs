@@ -410,9 +410,13 @@ mod integration_tests {
             }
         }"#;
 
-        fs::write("config.json", nested_config).unwrap();
+        let temp_file = NamedTempFile::new().unwrap();
+        let config_path = temp_file.path().to_str().unwrap();
+        fs::write(config_path, nested_config).unwrap();
 
-        let mut loader = ConfigLoader::new();
+        let mut loader = ConfigLoader::new()
+            .clear_sources()
+            .add_source(ConfigSource::File(config_path.to_string()));
         loader.load().unwrap();
 
         // Verify flattened keys
@@ -423,8 +427,8 @@ mod integration_tests {
         assert_eq!(loader.get_string("database.primary.host"), Some("db1.example.com".to_string()));
         assert_eq!(loader.get_string("database.primary.replicas[0]"), Some("db2.example.com".to_string()));
 
-        // Clean up
-        fs::remove_file("config.json").unwrap();
+        // Keep temp file alive until here
+        drop(temp_file);
     }
 
     #[tokio::test]
